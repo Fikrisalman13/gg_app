@@ -1,0 +1,374 @@
+═══════════════════════════════════════════════════════════════════════════════
+                   QUICK REFERENCE - ADD USER MIKROTIK
+═══════════════════════════════════════════════════════════════════════════════
+
+📍 FORM SECTIONS QUICK MAP
+─────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        FORM ADD USER INTERFACE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────────┐    ┌────────────────────────────────┐    │
+│  │   SECTION 1: ARP LIST        │    │   SECTION 5: EMPLOYEE DATA     │    │
+│  ├──────────────────────────────┤    ├────────────────────────────────┤    │
+│  │ Dropdown: IP - MAC           │    │ Dropdown: [Search Karyawan]    │    │
+│  │ Search: IP/MAC/Hostname      │    │ Filter: Aktif saja             │    │
+│  │ [Make Static ARP]            │    │                                │    │
+│  │ Comment auto-set             │    │ Format: "Departemen - Nama"    │    │
+│  └──────────────────────────────┘    └────────────────────────────────┘    │
+│                                                                              │
+│  ┌──────────────────────────────┐    ┌────────────────────────────────┐    │
+│  │   SECTION 2: DHCP LEASE      │    │   SECTION 6: DEVICE TYPE       │    │
+│  ├──────────────────────────────┤    ├────────────────────────────────┤    │
+│  │ Dropdown: IP - Hostname      │    │ Dropdown: PC ▼                 │    │
+│  │ Auto-populate saat IP dipilih│    │ Options:                       │    │
+│  │ [Make Static DHCP]           │    │ • PC                           │    │
+│  │ Comment auto-set             │    │ • Laptop                       │    │
+│  │                              │    │ • Tab                          │    │
+│  │                              │    │ • HP                           │    │
+│  │                              │    │ • Printer                      │    │
+│  │                              │    │ • Server                       │    │
+│  │                              │    │ • CCTV                         │    │
+│  └──────────────────────────────┘    └────────────────────────────────┘    │
+│                                                                              │
+│  ┌──────────────────────────────┐    ┌────────────────────────────────┐    │
+│  │   SECTION 3: FIREWALL LIST   │    │   PREVIEW COMMENT              │    │
+│  ├──────────────────────────────┤    ├────────────────────────────────┤    │
+│  │ Dropdown: [Firewall Lists]   │    │ Comment Format (live update):  │    │
+│  │ • Allow-Internet             │    │                                │    │
+│  │ • Block-Torrent              │    │ Marketing - Lidiya (Laptop)    │    │
+│  │ • Block-Adult                │    │                                │    │
+│  │ [OK] Add to Firewall         │    │                                │    │
+│  │ Comment auto-set             │    │                                │    │
+│  └──────────────────────────────┘    └────────────────────────────────┘    │
+│                                                                              │
+│  ┌──────────────────────────────┐                                          │
+│  │   SECTION 4: QUEUE BANDWIDTH │                                          │
+│  ├──────────────────────────────┤                                          │
+│  │ Upload: [Unlimited ▼]        │                                          │
+│  │ Download: [10M ▼]            │                                          │
+│  │                              │                                          │
+│  │ Queue Name Preview:          │                                          │
+│  │ Marketing - Lidiya (Laptop)  │                                          │
+│  └──────────────────────────────┘                                          │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ [Submit & Tambahkan User]  [Batal]                                  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+💾 MIKROTIK OPERATIONS FLOWCHART
+─────────────────────────────────────────────────────────────────────────────
+
+OPERATION 1: ARP Entry
+┌─────────────────────────────┐
+│ /ip/arp/print (filter IP)   │ ← Get ARP data
+└──────────────┬──────────────┘
+               ↓
+┌─────────────────────────────┐
+│ /ip/arp/make-static         │ ← Make static
+└──────────────┬──────────────┘
+               ↓
+┌─────────────────────────────┐
+│ /ip/arp/set (comment)       │ ← Set comment
+└─────────────────────────────┘
+
+OPERATION 2: DHCP Lease
+┌─────────────────────────────┐
+│ /ip/dhcp-server/lease/print │ ← Get lease
+└──────────────┬──────────────┘
+               ↓
+        ┌──────┴──────┐
+        ↓             ↓
+   [Exists]      [Not Exists]
+        │             │
+        ↓             ↓
+   [Skip Add]  [Create lease]
+        │             │
+        └──────┬──────┘
+               ↓
+┌─────────────────────────────┐
+│ /ip/dhcp-server/lease/      │
+│   make-static               │ ← Make static
+└──────────────┬──────────────┘
+               ↓
+┌─────────────────────────────┐
+│ /ip/dhcp-server/lease/set   │
+│ (comment)                   │ ← Set comment
+└─────────────────────────────┘
+
+OPERATION 3: Simple Queue
+┌─────────────────────────────┐
+│ /queue/simple/print         │
+│ (check duplicate)           │ ← Verify not exists
+└──────────────┬──────────────┘
+               ↓
+        ┌──────┴──────┐
+        ↓             ↓
+   [Exists]      [Not Exists]
+        │             │
+        ↓             ↓
+     [Error]     [Proceed]
+                      │
+                      ↓
+        ┌─────────────────────────────┐
+        │ /queue/simple/add           │
+        │ name: Comment format        │
+        │ target: IP/32               │
+        │ max-limit: up/down          │ ← Create queue
+        └─────────────────────────────┘
+
+OPERATION 4: Firewall Address
+┌─────────────────────────────┐
+│ /ip/firewall/address-list/  │
+│ print (check exists)        │ ← Verify existence
+└──────────────┬──────────────┘
+               ↓
+        ┌──────┴──────┐
+        ↓             ↓
+   [Exists]      [Not Exists]
+        │             │
+        ↓             ↓
+   [Update]      [Create]
+   comment       entry
+        │             │
+        └──────┬──────┘
+               ↓
+        ✓ Done
+═══════════════════════════════════════════════════════════════════════════════
+
+📱 AJAX ENDPOINTS REFERENCE
+─────────────────────────────────────────────────────────────────────────────
+
+┌─ get_dhcp_leases.php ──────────────────────────────────────────────────────┐
+│                                                                              │
+│ Purpose: Get DHCP Leases by IP                                             │
+│ Method: GET                                                                │
+│ Input: ?ip=192.168.1.100                                                   │
+│ Output: { "leases": [{ id, address, hostname, comment }] }               │
+│ Trigger: onChange #arp_id                                                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ make_static_arp.php ──────────────────────────────────────────────────────┐
+│                                                                              │
+│ Purpose: Make ARP Entry Static + Set Comment                              │
+│ Method: POST                                                               │
+│ Input: { arp_id, comment }                                                 │
+│ Output: { "success": true/false, "message": "..." }                        │
+│ Trigger: click #btnMakeStaticARP                                           │
+│ Action: /ip/arp/make-static, /ip/arp/set                                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ make_static_dhcp.php ────────────────────────────────────────────────────┐
+│                                                                              │
+│ Purpose: Make DHCP Lease Static + Set Comment                             │
+│ Method: POST                                                               │
+│ Input: { lease_id, comment }                                               │
+│ Output: { "success": true/false, "message": "..." }                        │
+│ Trigger: click #btnMakeStaticDHCP                                          │
+│ Action: /ip/dhcp-server/lease/make-static, /set                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ add_firewall.php ────────────────────────────────────────────────────────┐
+│                                                                              │
+│ Purpose: Add IP to Firewall Address List                                   │
+│ Method: POST                                                               │
+│ Input: { ip, fw_list, comment }                                            │
+│ Output: { "success": true/false, "message": "..." }                        │
+│ Trigger: click #btnAddFirewall                                             │
+│ Action: /ip/firewall/address-list/add or /set                             │
+│ Note: Handle duplicate (update comment if exists)                         │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔄 DATA FLOW DIAGRAM
+─────────────────────────────────────────────────────────────────────────────
+
+USER SELECT IP
+     │
+     ↓
+[SELECT #arp_id]
+     │
+     ↓
+[TRIGGER: onChange]
+     │
+     ├─→ $.ajax(get_dhcp_leases.php)
+     │     │
+     │     ↓
+     │  [POPULATE #dhcp_lease_id]
+     │
+     ├─→ UPDATE PREVIEW (optional)
+     │
+     └─→ ENABLE BUTTONS
+          • #btnMakeStaticARP
+          • #btnMakeStaticDHCP
+          • #btnAddFirewall
+
+USER SELECT EMPLOYEE
+     │
+     ↓
+[SELECT #employee_select]
+     │
+     ↓
+[TRIGGER: onChange]
+     │
+     └─→ [UPDATE #commentPreview]
+         └─→ [UPDATE #queueNamePreview]
+
+USER SELECT DEVICE TYPE
+     │
+     ↓
+[SELECT #device_type]
+     │
+     ↓
+[TRIGGER: onChange]
+     │
+     └─→ [UPDATE #commentPreview]
+         └─→ [UPDATE #queueNamePreview]
+
+USER CLICK "Make Static ARP"
+     │
+     ↓
+$.ajax(make_static_arp.php)
+     │
+     ├─ Params: { arp_id, comment }
+     ├─ Method: POST
+     │
+     ↓
+[Mikrotik API]
+     │
+     ├─ /ip/arp/make-static
+     ├─ /ip/arp/set (comment)
+     │
+     ↓
+[Return Success]
+     │
+     └─→ [DISABLE #btnMakeStaticARP]
+         └─→ [SHOW SUCCESS MESSAGE]
+
+USER CLICK "Make Static DHCP"
+     │
+     ↓
+$.ajax(make_static_dhcp.php)
+     │
+     ├─ Params: { lease_id, comment }
+     ├─ Method: POST
+     │
+     ↓
+[Mikrotik API]
+     │
+     ├─ /ip/dhcp-server/lease/make-static
+     ├─ /ip/dhcp-server/lease/set (comment)
+     │
+     ↓
+[Return Success]
+     │
+     └─→ [DISABLE #btnMakeStaticDHCP]
+         └─→ [SHOW SUCCESS MESSAGE]
+
+USER CLICK "OK (Add Firewall)"
+     │
+     ↓
+$.ajax(add_firewall.php)
+     │
+     ├─ Params: { ip, fw_list, comment }
+     ├─ Method: POST
+     │
+     ↓
+[Mikrotik API]
+     │
+     ├─ Check exists
+     │   ├─ [Exists] → Update comment
+     │   └─ [Not] → Create new
+     │
+     ├─ /ip/firewall/address-list/add
+     ├─ /ip/firewall/address-list/set (comment)
+     │
+     ↓
+[Return Success]
+     │
+     └─→ [DISABLE #btnAddFirewall]
+         └─→ [SHOW SUCCESS MESSAGE]
+
+USER SUBMIT FORM
+     │
+     ↓
+[VALIDATION: Client-side]
+     │
+     ├─ Check #arp_id ✓
+     ├─ Check #employee_select ✓
+     ├─ Check #device_type ✓
+     ├─ Check #bw_up ✓
+     ├─ Check #bw_down ✓
+     │
+     ↓
+POST proses_add_user.php
+     │
+     ├─ Params: { arp_id, employee_select, device_type, bw_up, bw_down, fw_rule }
+     │
+     ↓
+[VALIDATION: Server-side]
+     │
+     ├─ Bandwidth whitelist ✓
+     ├─ Queue duplicate check ✓
+     │
+     ↓
+[MIKROTIK OPERATIONS]
+     │
+     ├─ Fetch ARP data
+     ├─ Handle ARP (make-static + comment)
+     ├─ Handle DHCP Lease (create/update + static + comment)
+     ├─ Create Simple Queue (name + target + max-limit)
+     ├─ Add Firewall (if selected)
+     │
+     ↓
+[SUCCESS or ERROR]
+     │
+     ├─ Success → Set $_SESSION['success'] → Redirect to add_user.php
+     └─ Error → Set $_SESSION['error'] → Redirect to add_user.php
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 CRITICAL VARIABLES & VALUES
+─────────────────────────────────────────────────────────────────────────────
+
+COMMENT FORMAT:
+  Template: "{dept} - {nama} ({device})"
+  Example: "Marketing - Lidiya Nurhalimah (Laptop)"
+  Applied to: ARP comment, DHCP comment, Queue name, Firewall comment
+
+BANDWIDTH LIMITS:
+  Values: unlimited, 64k, 128k, 256k, 384k, 512k, 768k, 1M, 2M, 4M, 5M, 10M,
+          20M, 50M, 100M
+  Format in Queue: "{bw_up}/{bw_down}" e.g. "512k/2M"
+
+DEVICE TYPES:
+  Values: PC, Laptop, Tab, HP, Printer, Server, CCTV
+
+MIKROTIK PATHS:
+  ARP: /ip/arp
+  DHCP: /ip/dhcp-server/lease
+  Queue: /queue/simple
+  Firewall: /ip/firewall/address-list
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ READY TO DEPLOY
+─────────────────────────────────────────────────────────────────────────────
+
+Location: /pages/monitoring_jaringan/add_user/
+Files: 8 files (4 PHP + 2 Documentation + 2 Config)
+Database: m_emp, m_dept, m_bag (read-only)
+Mikrotik: Full read/write API access required
+Browser: Modern browser with JavaScript support
+
+═══════════════════════════════════════════════════════════════════════════════

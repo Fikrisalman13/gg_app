@@ -1,0 +1,42 @@
+-- SQL Script Form Pengajuan Rekaman CCTV
+-- 1. Tambah kolom kategori pada tabel Form_Pengajuan_Barang (jika belum ada)
+ALTER TABLE Form_Pengajuan_Barang ADD kategori VARCHAR(50) NULL;
+GO
+
+-- (Opsional) Update nilai kategori existing rows
+UPDATE Form_Pengajuan_Barang SET kategori = 'Perangkat IT' WHERE kategori IS NULL;
+GO
+
+-- 2. Buat tabel baru Form_Pengajuan_CCTV
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Form_Pengajuan_CCTV')
+BEGIN
+    CREATE TABLE Form_Pengajuan_CCTV (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        ticket VARCHAR(50) NOT NULL UNIQUE,
+        nama_pemohon NVARCHAR(150) NOT NULL,
+        jabatan NVARCHAR(100) NULL,
+        departemen NVARCHAR(100) NULL,
+        area NVARCHAR(100) NULL,
+        tgl_pengajuan DATE NULL,
+        tanggal_1 DATE NULL,
+        jam_mulai_1 VARCHAR(5) NULL,  -- Format HH:MM
+        jam_selesai_1 VARCHAR(5) NULL,
+        tanggal_2 DATE NULL,
+        jam_mulai_2 VARCHAR(5) NULL,
+        jam_selesai_2 VARCHAR(5) NULL,
+        keterangan NVARCHAR(500) NULL,
+        status_ticket VARCHAR(30) NOT NULL DEFAULT 'Pending',
+        kategori VARCHAR(50) NOT NULL DEFAULT 'CCTV',
+        created_at DATETIME NOT NULL DEFAULT GETDATE(),
+        created_by NVARCHAR(150) NULL
+    );
+END
+GO
+
+-- 3. (Opsional) Index tambahan untuk pencarian cepat
+CREATE INDEX IX_Form_Pengajuan_CCTV_Tgl ON Form_Pengajuan_CCTV (tgl_pengajuan);
+GO
+
+-- 4. Hak akses / trustee (sesuaikan jika ada mekanisme permission)
+-- INSERT INTO SMGroupTrustee (GroupId, MenuId, CanView, CanAdd, CanEdit, CanDelete) VALUES (...)
+-- Pastikan MenuId baru dibuat di tabel menu (jika diperlukan) untuk form CCTV.

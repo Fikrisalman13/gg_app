@@ -1,0 +1,7 @@
+{
+    "print_mode": "barcode",
+    "transport": "windows",
+    "printer_name": "EPSON TM-U220 Receipt 2",
+    "ip": "",
+    "port": 9100
+}

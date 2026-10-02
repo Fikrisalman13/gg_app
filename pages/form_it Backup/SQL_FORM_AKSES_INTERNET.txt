@@ -1,0 +1,33 @@
+-- ================================================
+-- Form Pengajuan Akses Internet - Database Schema
+-- ================================================
+
+-- Table: Form_Pengajuan_Akses_Internet
+-- Stores internet access request data
+CREATE TABLE Form_Pengajuan_Akses_Internet (
+    ticket NVARCHAR(50) PRIMARY KEY,
+    nama_pemohon NVARCHAR(100),
+    jabatan NVARCHAR(100),
+    departemen NVARCHAR(100),
+    area NVARCHAR(100),
+    tgl_pengajuan DATE,
+    akses_type NVARCHAR(20), -- 'Temporary' or 'Permanent'
+    durasi_temporary NVARCHAR(50), -- e.g., "s/d 31-12-2025" (only for Temporary)
+    keterangan NVARCHAR(MAX),
+    status_ticket NVARCHAR(50) DEFAULT 'Pending',
+    kategori NVARCHAR(50) DEFAULT 'Akses Internet',
+    created_at DATETIME DEFAULT GETDATE(),
+    created_by NVARCHAR(100),
+    updated_at DATETIME,
+    updated_by INT,
+    rejected_by INT,
+    rejection_reason NVARCHAR(MAX),
+    rejection_date DATETIME
+);
+
+-- NOTE: Signatures will be stored in the existing Form_Pengajuan_Barang_TTD table
+-- No need to create a separate signature table
+
+-- Create indexes for better performance
+CREATE INDEX IX_Akses_Internet_Status ON Form_Pengajuan_Akses_Internet(status_ticket);
+CREATE INDEX IX_Akses_Internet_Created ON Form_Pengajuan_Akses_Internet(created_at DESC);

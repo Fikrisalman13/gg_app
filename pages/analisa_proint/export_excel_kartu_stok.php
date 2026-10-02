@@ -1,0 +1,333 @@
+<?php
+session_start();
+date_default_timezone_set('Asia/Jakarta'); // ✅ Pastikan waktu mengikuti WIB
+include '../../koneksi.php';
+include '../../koneksi3.php';
+
+if (!isset($_SESSION['UserName'])) {
+    die("Silakan login terlebih dahulu!");
+}
+
+$prodcode = isset($_GET['prodcode']) ? trim($_GET['prodcode']) : '';
+$startdate = isset($_GET['startdate']) ? trim($_GET['startdate']) : '';
+$enddate = isset($_GET['enddate']) ? trim($_GET['enddate']) : '';
+$wrhsid = isset($_GET['wrhsid']) && ctype_digit($_GET['wrhsid']) ? trim($_GET['wrhsid']) : '';
+$warehouseFilterSql = $wrhsid !== '' ? " AND WHTransHd.TransDestWrhsId = " . (int) $wrhsid : '';
+
+if ($prodcode === '') {
+    die("Kode produk tidak ditemukan!");
+}
+
+header("Content-Type: application/vnd.ms-excel");
+header("Content-Disposition: attachment; filename=Kartu_Stok_" . $prodcode . "_" . date('Ymd') . ".xls");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+try {
+    // Eksekusi DO block terlebih dahulu
+    $doQuery = "
+    DO $$
+    DECLARE
+    vStartTransDate TimeStamp;
+    vEndTransDate TimeStamp;
+    vProdCode Varchar(25);
+    vProdId Int;
+    vSaldoStartDate TimeStamp;
+    vSaldoEndDate TimeStamp;
+    vLastProcdate TimeStamp;
+
+    Begin
+    vProdCode = '$prodcode';
+    vStartTransDate = '$startdate';
+    vEndTransDate = '$enddate';
+
+    vProdId = (Select ProdId From SMProduct Where ProdCode = vProdCode);
+    
+    DROP TABLE If Exists TmpDisplay;
+    CREATE Temp TABLE TmpDisplay(
+        Seq Int,
+        ProdId Int,
+        ProdCode  Varchar(25),	
+        ProdName  Varchar(100),
+        WrhsCode Varchar(25),
+        WrhsName Varchar(80),
+        TransNo Varchar(25),	
+        TransDate TimeStamp,
+        TransType Varchar(2),
+        TransTypeName Varchar(30),
+        FgINOut Varchar(1),
+        INQty Numeric(19,4),
+        INPrice Numeric(19,4),
+        INQtyPrice Numeric(19,4),
+        OutQty Numeric(19,4),
+        OutPrice Numeric(19,4),
+        OutQtyPrice Numeric(19,4),
+        BalanceQty Numeric(19,4) default 0,
+        BalancePrice Numeric(19,4) default 0,
+        BalanceQtyPrice Numeric(19,4) default 0
+    );
+
+    DROP TABLE If exists TmpSaldoAwal;
+    CREATE Temp TABLE TmpSaldoAwal(
+        Seq Int,	
+        ProdId Int,
+        ProdCode Varchar(25),
+        StartDate TimeStamp, 
+        EndDate TimeStamp, 
+        BalanceQty Numeric(19,4), 
+        BalAdjPrice Numeric(19,4), 
+        BalAdjQtyPrice Numeric(19,4)
+    );
+
+        IF ('$wrhsid' <> '') THEN
+            Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjPrice, BalAdjQtyPrice)
+            Select 1, vProdId, vStartTransDate, vSaldoEndDate,
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0),
+                    Case When Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0) <> 0
+                        Then Round(Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransQtyPrice,0)
+                            Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                    End),0) /
+                        Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0), 4)
+                        Else 0
+                    End,
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransQtyPrice,0)
+                            Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                    End),0)
+            From WHTransHd
+            Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+            Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransdestType
+            Where WHTransDt.TransProdId = vProdId
+              And WHTransHd.TransdestDate < vStartTransDate
+              And WHTransHd.TransDestWrhsId = NULLIF('$wrhsid', '')::Int;
+        ELSE
+            Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjPrice, BalAdjQtyPrice)
+            Select 1, WHAverageAll.ProdId, whprocessdateAll.StartDate, whprocessdateAll.EndDate, WHAverageAll.BalanceQty, WHAverageAll.BalAdjPrice, WHAverageAll.BalAdjQtyPrice
+            From WHAverageAll
+            Inner Join whprocessdateAll on whprocessdateAll.ProcessDateAllId = WHAverageAll.ProcessDateAllId
+            Where WHAverageAll.ProdId = vProdId
+              And whprocessdateAll.EndDate < vStartTransDate
+            Order By whprocessdateAll.StartDate Desc, whprocessdateAll.EndDate Desc
+            Limit 1;
+        END IF;
+    vLastProcdate = (Select EndDate From TmpSaldoAwal);
+    vSaldoEndDate = cast(vStartTransDate + Cast('-1 Day' as Interval) as TimeStamp);
+
+    IF (vLastProcdate is Not Null) THEN
+        IF(vLastProcdate <> vSaldoEndDate) THEN
+            vSaldoStartDate = cast(vLastProcdate + Cast('1 Day' as Interval) as TimeStamp);
+
+            Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjQtyPrice)
+            Select 2, vProdId, vSaldoStartDate, vSaldoEndDate, 
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0),
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransQtyPrice,0)
+                            Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                    End),0)
+            From WHTransHd
+            Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+            Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransdestType
+            Where WHTransDt.TransProdId = vProdId
+              And WHTransHd.TransdestDate Between vSaldoStartDate And vSaldoEndDate;
+        END IF;
+    END IF;
+
+    IF Exists (Select 1 From TmpSaldoAwal Where Seq = 2) Then
+        Insert Into TmpDisplay (Seq, ProdId, TransTypeName, FgINOut,
+                    INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+        Select 1, TmpSaldoAwal.ProdId, 'Saldo Awal', 'I',
+                SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)), 
+                case When SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)) <> 0 
+                    Then Round(SUM(Coalesce(TmpSaldoAwal.BalAdjQtyPrice,0)) / SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)), 4)
+                    Else 0
+                End, 
+                SUM(Coalesce(TmpSaldoAwal.BalAdjQtyPrice,0)), 0, 0, 0
+        From TmpSaldoAwal	
+        Inner Join SMProduct on SMProduct.ProdId = TmpSaldoAwal.ProdId
+        Group By TmpSaldoAwal.ProdId;
+     ELSE 
+        Insert Into TmpDisplay (Seq, ProdId, TransTypeName, FgINOut,
+                    INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+        Select 1, TmpSaldoAwal.ProdId, 'Saldo Awal', 'I',
+                TmpSaldoAwal.BalanceQty, TmpSaldoAwal.BalAdjPrice, TmpSaldoAwal.BalAdjQtyPrice, 0, 0, 0
+        From TmpSaldoAwal	
+        Inner Join SMProduct on SMProduct.ProdId = TmpSaldoAwal.ProdId;
+    END IF;
+
+    Insert Into TmpDisplay (Seq, ProdId, wrhsCode, wrhsName, TransNo, TransDate, TransType, TransTypeName, FgINOut,
+        INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+    Select ROW_NUMBER() Over(Order By WHTransHd.TransDestDate, WHTransDt.UpdDate, WHTransHd.TransDestNmbr) + 1 Seq,
+        WHTransDt.TransProdId, WHWrhs.WrhsCode,WHWrhs.WrhsName,
+        WHTransHd.TransDestNmbr, WHTransHd.TransDestDate, WHTransHd.TransDestType, WHTransMs.TransName, WHTransMs.FgStatus,
+        Coalesce(WHTransDt.TransInStdQty,0), Case When WHTransMs.FgStatus = 'I' Then Coalesce(WHTransDt.TransPrice,0) Else 0 End, Case When WHTransMs.FgStatus = 'I' Then Coalesce(WHTransDt.TransQtyPrice,0) Else 0 End,
+        Coalesce(WHTransDt.TransOutStdQty,0),  Case When WHTransMs.FgStatus = 'I' Then 0 Else Coalesce(WHTransDt.TransPrice,0) End, Case When WHTransMs.FgStatus = 'I' Then 0 Else Coalesce(WHTransDt.TransQtyPrice,0)  End
+    From WHTransHd
+    Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+    Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransDestType
+    Inner Join SMProduct on SMProduct.ProdId = WHTransDt.TransProdId
+    Inner Join WHWrhs on WHWrhs.WrhsId = WHTransHd.TransDestWrhsId
+    Where WHTransDt.TransProdId = vProdId
+      And WHTransHd.TransdestDate Between vStartTransDate And vEndTransDate$warehouseFilterSql
+    Order By WHTransHd.TransDestDate, WHTransDt.UpdDate, WHTransHd.TransDestNmbr;
+
+    Update TmpDisplay
+    Set Seq = case TransType			
+                When '20' Then 2
+                When '70' Then 2
+                When '08' Then 3
+                When '56' Then 3
+                When '24' Then 4
+                When '74' Then 4									
+             End
+    Where TransType in ('08', '20', '24', '56','70', '74');
+
+    Update TmpDisplay
+    Set Seq = (select Max(A.Seq) from TmpDisplay A) + (Seq - 1)
+    Where TransType in ('08', '20', '24', '56','70', '74');
+
+    Update TmpDisplay
+    Set BalanceQty = Coalesce(INQty,0),
+        BalancePrice = Coalesce(INPrice,0),
+        BalanceQtyPrice = Coalesce(INQtyPrice,0)
+    Where Seq = 1;
+
+    Update TmpDisplay
+    Set BalanceQty = Coalesce(INQty,0) - Coalesce(OutQty,0) + Coalesce((Select SUM(Coalesce(A.INQty,0) - Coalesce(A.OutQty,0)) From TmpDisplay A Where A.Seq <= TmpDisplay.Seq - 1),0),
+        BalanceQtyPrice = Coalesce(INQtyPrice,0) - Coalesce(OutQtyPrice,0) + Coalesce((Select SUM(Coalesce(B.INQtyPrice,0) - Coalesce(B.OutQtyPrice,0)) From TmpDisplay B Where B.Seq <= TmpDisplay.Seq - 1),0)
+    Where Seq > 1;
+
+    Update TmpDisplay
+    Set BalancePrice = case When BalanceQty = 0 
+                                Then 0
+                            Else Round(BalanceQtyPrice/ BalanceQty,4)
+                        End  
+    Where Seq > 1;
+
+    Update TmpDisplay
+    Set ProdCode = SMproduct.ProdCode,
+        ProdName = SMProduct.ProdName
+    From SMProduct
+    Where SMProduct.ProdId = TmpDisplay.ProdId;
+
+    END $$;
+    ";
+
+    // Eksekusi DO block
+    $doStmt = $conn3->prepare($doQuery);
+    $doStmt->execute();
+    
+    // Sekarang eksekusi SELECT query terpisah
+    $selectQuery = "
+    SELECT ProdCode as \"Product Code\", ProdName as \"Product Name\",
+        WrhsCode as \"Warehouse Code\", WrhsName as \"Warehouse Name\",
+        TransNo as \"No Bukti\", TransDate as \"Tanggal\", TransTypeName as \"Jenis Transaksi\", 
+        INQty as \"Kuantitas Terima\", INPrice as \"Harga Satuan Terima\", INQtyPrice as \"Total Terima\", 
+        OutQty as \"Kuantitas Keluar\", OutPrice as \"Harga Satuan Keluar\", OutQtyPrice as \"Total Keluar\", 
+        BalanceQty as \"Kuantitas Saldo\", BalancePrice as \"Harga Satuan Saldo\", BalanceQtyPrice as \"Total Saldo\"
+    FROM TmpDisplay 
+    ORDER BY Seq
+    ";
+    
+    $selectStmt = $conn3->prepare($selectQuery);
+    $selectStmt->execute();
+    $results = $selectStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+} catch (PDOException $e) {
+    die("Error executing query: " . $e->getMessage());
+}
+
+// Buat tabel HTML untuk diekspor
+echo "<table border='1'>";
+echo "<tr>
+        <th colspan='14' style='background-color: #d9edf7; font-size: 16px; font-weight: bold;'>
+            KARTU STOK - " . htmlspecialchars($prodcode) . "
+        </th>
+      </tr>";
+echo "<tr>
+        <th colspan='14' style='background-color: #f5f5f5;'>
+            Periode: " . htmlspecialchars($startdate) . " s/d " . htmlspecialchars($enddate) . "
+        </th>
+      </tr>";
+
+echo "<tr style='background-color: #f8f9fa; font-weight: bold;'>
+        <th>No</th>
+        <th>Tanggal</th>
+        <th>No Bukti</th>
+        <th>Jenis Transaksi</th>
+        <th>Warehouse Code</th>
+        <th>Warehouse Name</th>
+        <th>Product Code</th>
+        <th>Product Name</th>
+        <th>Qty In</th>
+        <th>Harga In</th>
+        <th>Total In</th>
+        <th>Qty Out</th>
+        <th>Harga Out</th>
+        <th>Total Out</th>
+        <th>Saldo Qty</th>
+        <th>Harga Saldo</th>
+        <th>Total Saldo</th>
+      </tr>";
+
+$no = 1;
+foreach ($results as $row) {
+    $tanggal = $row['Tanggal'] ? date("d/m/Y", strtotime($row['Tanggal'])) : '';
+    
+    echo "<tr>
+            <td style='text-align: center;'>".$no++."</td>
+            <td style='text-align: center;'>".$tanggal."</td>
+            <td>".htmlspecialchars($row['No Bukti'])."</td>
+            <td>".htmlspecialchars($row['Jenis Transaksi'])."</td>
+            <td>".htmlspecialchars($row['Warehouse Code'])."</td>
+            <td>".htmlspecialchars($row['Warehouse Name'])."</td>
+            <td>".htmlspecialchars($row['Product Code'])."</td>
+            <td>".htmlspecialchars($row['Product Name'])."</td>
+            <td style='text-align: right;'>".number_format($row['Kuantitas Terima'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Harga Satuan Terima'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Total Terima'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Kuantitas Keluar'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Harga Satuan Keluar'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Total Keluar'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Kuantitas Saldo'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Harga Satuan Saldo'], 2)."</td>
+            <td style='text-align: right;'>".number_format($row['Total Saldo'], 2)."</td>
+          </tr>";
+}
+
+// Hitung total
+$totalInQty = array_sum(array_column($results, 'Kuantitas Terima'));
+$totalInPrice = array_sum(array_column($results, 'Total Terima'));
+$totalOutQty = array_sum(array_column($results, 'Kuantitas Keluar'));
+$totalOutPrice = array_sum(array_column($results, 'Total Keluar'));
+
+echo "<tr style='background-color: #e9ecef; font-weight: bold;'>
+        <td colspan='8' style='text-align: center;'>TOTAL</td>
+        <td style='text-align: right;'>".number_format($totalInQty, 2)."</td>
+        <td></td>
+        <td style='text-align: right;'>".number_format($totalInPrice, 2)."</td>
+        <td style='text-align: right;'>".number_format($totalOutQty, 2)."</td>
+        <td></td>
+        <td style='text-align: right;'>".number_format($totalOutPrice, 2)."</td>
+        <td colspan='3'></td>
+      </tr>";
+
+echo "</table>";
+
+// Tambahkan informasi footer
+echo "<div style='margin-top: 20px; font-size: 12px; color: #6c757d;'>
+        <p>Dicetak pada: " . date('d/m/Y H:i:s') . "</p>
+        <p>Oleh: " . htmlspecialchars($_SESSION['UserName']) . "</p>
+      </div>";

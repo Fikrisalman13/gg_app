@@ -1,0 +1,45 @@
+/* public/assets/css/app.css */
+body{background:#f4f6f9}
+.container-max{max-width:1400px;margin:12px auto}
+.route-list { border:1px solid #e2e8f0; padding:0; border-radius:6px; background:#fff }
+.shadow-soft { box-shadow: 0 6px 20px rgba(16,24,40,0.06) }
+.activity-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+.list-item {border:1px solid #eef2f6; padding:12px; border-radius:8px; margin-bottom:10px; background:#fff}
+.pagination-centered{display:flex;justify-content:center;align-items:center;margin-top:10px}
+.status-badge.open{background:#e9f5ff;color:#0366d6;border-radius:6px;padding:4px 8px;font-weight:600}
+.status-badge.inprog{background:#fff7e6;color:#b36b00;border-radius:6px;padding:4px 8px;font-weight:600}
+.status-badge.done{background:#eef7ee;color:#197a2f;border-radius:6px;padding:4px 8px;font-weight:600}
+.small-muted{color:#6b7280}
+
+.col-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.col-card-header .meta{font-size:12px;color:#6b7280}
+
+.row.equal-height { display:flex; flex-wrap:nowrap; gap:16px; align-items:stretch; }
+.row.equal-height > .col-lg-6 { flex:0 0 50%; max-width:50%; display:flex; flex-direction:column; }
+.row.equal-height .card { display:flex; flex-direction:column; height:100%; }
+.row.equal-height .card .card-body { flex:1 1 auto; display:flex; flex-direction:column; gap:12px; overflow:hidden; padding:18px; }
+.route-list { flex:1 1 auto; overflow:hidden; border-radius:6px; }
+
+.route-list .table { margin-bottom:0; table-layout:fixed; }
+.route-list .table tbody { display:block; max-height:220px; overflow-y:auto; width:100%; }
+.route-list .table thead, .route-list .table tbody tr { display:table; width:100%; table-layout:fixed; }
+.route-list .table thead { width:calc(100% - 1em); }
+.route-list .table td, .route-list .table th { padding:.6rem .75rem; vertical-align:middle; white-space:normal; word-wrap:break-word; }
+
+/* select2 clear (×) di kanan */
+.select2-container--bootstrap4 .select2-selection--single{height:31px; position:relative;}
+.select2-container--bootstrap4 .select2-selection__rendered{line-height:31px; padding-right:24px;}
+.select2-container--bootstrap4 .select2-selection__arrow{height:31px}
+.select2-container--bootstrap4 .select2-selection__clear{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%); margin-right:0;
+}
+
+/* aktivitas panel */
+#activityList{max-height:290px; overflow:auto}
+
+@media (max-width:991px){
+  .row.equal-height { flex-wrap:wrap; }
+  .row.equal-height > .col-lg-6 { flex:0 0 100%; max-width:100%; }
+  .route-list .table tbody { max-height:140px; }
+  #activityList{max-height:220px;}
+}

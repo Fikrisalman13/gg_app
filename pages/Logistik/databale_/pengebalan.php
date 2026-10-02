@@ -1,0 +1,1807 @@
+<?php
+session_start();
+ob_start();
+include '../../../koneksi.php';
+include '../../../koneksi3.php';
+require_once __DIR__ . '/databale_helpers.php';
+
+$isAjaxSearchBales = isset($_GET['ajax_search_bales']);
+
+if (!isset($_SESSION['UserName'])) {
+    if ($isAjaxSearchBales) {
+        if (ob_get_length()) { ob_clean(); }
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['status' => 'error', 'message' => 'Session habis. Silakan login kembali.', 'rows' => []]);
+        exit;
+    }
+    $_SESSION['error'] = 'Silakan login terlebih dahulu!';
+    header('Location: /gg_app/login.php');
+    exit;
+}
+if (!$conn || !$conn3) {
+    if ($isAjaxSearchBales) {
+        if (ob_get_length()) { ob_clean(); }
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Koneksi database gagal.', 'rows' => [], 'errors' => sqlsrv_errors()]);
+        exit;
+    }
+    die('Koneksi ke database gagal: ' . print_r(sqlsrv_errors(), true));
+}
+
+
+// AJAX pencarian bale untuk modal New.
+// Default hanya ambil 10 data agar halaman/modal tidak berat.
+if ($isAjaxSearchBales) {
+    if (ob_get_length()) { ob_clean(); }
+    header('Content-Type: application/json; charset=utf-8');
+
+    $ajaxWrhsid = trim((string)($_GET['wrhsid'] ?? ''));
+    $ajaxSearch = trim((string)($_GET['q'] ?? ''));
+
+    if ($ajaxWrhsid === '' || !ctype_digit($ajaxWrhsid)) {
+        echo json_encode(['status' => 'error', 'message' => 'wrhsid tidak valid', 'rows' => []]);
+        exit;
+    }
+
+    $sql = "
+        SELECT DISTINCT TOP (10)
+            whbalehd.balehdid,
+            whbalehd.balenmbr,
+            whbalehd.baledate,
+            whbalehd.refnmbr,
+            whbaleprod.wrhsid
+        FROM whbalehd
+        INNER JOIN whbaleprod
+            ON whbalehd.balehdid = whbaleprod.balehdid
+        WHERE whbaleprod.wrhsid = ?
+    ";
+
+    $params = [(int)$ajaxWrhsid];
+
+    if ($ajaxSearch !== '') {
+        $sql .= " AND (whbalehd.balenmbr LIKE ? OR whbalehd.refnmbr LIKE ?)";
+        $like = '%' . $ajaxSearch . '%';
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    $sql .= " ORDER BY whbalehd.baledate DESC, whbalehd.balenmbr DESC";
+
+    $stmt = sqlsrv_query($conn3, $sql, $params);
+    if ($stmt === false) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Query gagal',
+            'rows' => [],
+            'errors' => sqlsrv_errors(),
+        ]);
+        exit;
+    }
+
+    $rows = [];
+    while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        $baledate = $row['baledate'] ?? null;
+        if ($baledate instanceof DateTimeInterface) {
+            $baledate = $baledate->format('d/m/Y');
+        } elseif (!empty($baledate)) {
+            $ts = strtotime((string)$baledate);
+            $baledate = $ts ? date('d/m/Y', $ts) : (string)$baledate;
+        } else {
+            $baledate = '-';
+        }
+
+        $rows[] = [
+            'balehdid' => (string)($row['balehdid'] ?? ''),
+            'balenmbr' => (string)($row['balenmbr'] ?? ''),
+            'refnmbr' => (string)($row['refnmbr'] ?? ''),
+            'baledate' => $baledate,
+            'wrhsid' => (string)($row['wrhsid'] ?? ''),
+        ];
+    }
+    sqlsrv_free_stmt($stmt);
+
+    echo json_encode(['status' => 'success', 'rows' => $rows]);
+    exit;
+}
+
+include '../../../includes/header.php';
+include '../../../includes/sidebar.php';
+
+date_default_timezone_set('Asia/Jakarta');
+$userName = $_SESSION['UserName'];
+$today = date('Y-m-d');
+if (empty($_SESSION['pengebalan_csrf'])) {
+    $_SESSION['pengebalan_csrf'] = bin2hex(random_bytes(32));
+}
+$pengebalanCsrf = (string)$_SESSION['pengebalan_csrf'];
+
+$warehouseList = dbale_load_warehouses($conn3);
+$lockedWarehouseName = 'GUDANG JADI B GRADE';
+$selectedWrhsid = '';
+$selectedWrhsname = $lockedWarehouseName;
+foreach ($warehouseList as $warehouse) {
+    if (dbale_normalize_key($warehouse['wrhsname'] ?? '') === dbale_normalize_key($lockedWarehouseName)) {
+        $selectedWrhsid = (string)($warehouse['wrhsid'] ?? '');
+        $selectedWrhsname = (string)($warehouse['wrhsname'] ?? $lockedWarehouseName);
+        break;
+    }
+}
+if ($selectedWrhsid === '') {
+    $selectedWrhsid = trim((string)($_GET['wrhsid'] ?? ($warehouseList[0]['wrhsid'] ?? '')));
+}
+if ($selectedWrhsid === '' && !empty($warehouseList)) {
+    $selectedWrhsid = (string)($warehouseList[0]['wrhsid'] ?? '');
+}
+
+$startDate = $_GET['start_date'] ?? $today;
+$endDate = $_GET['end_date'] ?? $today;
+$listSearch = trim((string)($_GET['list_search'] ?? ''));
+if (DateTime::createFromFormat('Y-m-d', $startDate) === false) {
+    $startDate = $today;
+}
+if (DateTime::createFromFormat('Y-m-d', $endDate) === false) {
+    $endDate = $today;
+}
+if ($endDate < $startDate) {
+    $endDate = $startDate;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $selectedWrhsid = trim((string)($_POST['wrhsid'] ?? $selectedWrhsid));
+    $startDate = trim((string)($_POST['start_date'] ?? $startDate));
+    $endDate = trim((string)($_POST['end_date'] ?? $endDate));
+    $listSearch = trim((string)($_POST['list_search'] ?? $listSearch));
+
+}
+
+foreach ($warehouseList as $warehouse) {
+    if ((string)($warehouse['wrhsid'] ?? '') === $selectedWrhsid) {
+        $selectedWrhsname = (string)($warehouse['wrhsname'] ?? $selectedWrhsname);
+        break;
+    }
+}
+
+if (empty($warehouseList)) {
+    $selectedWrhsid = '';
+}
+
+$newBaleRows = [];
+$newBaleIndex = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['delete_bale_upload']) || isset($_POST['delete_selected_uploads']))) {
+    $deleteBalehdids = isset($_POST['delete_selected_uploads'])
+        ? (array)($_POST['delete_balehdids'] ?? [])
+        : [$_POST['delete_balehdid'] ?? ''];
+    $deleteBalehdids = array_values(array_unique(array_filter(array_map('trim', $deleteBalehdids))));
+    $transactionStarted = false;
+    $deletedPhotoNames = [];
+
+    try {
+        $postedCsrf = (string)($_POST['csrf_token'] ?? '');
+        if ($postedCsrf === '' || !hash_equals($pengebalanCsrf, $postedCsrf)) {
+            throw new RuntimeException('Token keamanan tidak valid. Silakan refresh halaman.');
+        }
+        if (empty($deleteBalehdids)) {
+            throw new RuntimeException('Pilih minimal satu data bale yang akan dihapus.');
+        }
+
+        if (!sqlsrv_begin_transaction($conn)) {
+            throw new RuntimeException('Gagal mulai transaksi hapus: ' . print_r(sqlsrv_errors(), true));
+        }
+        $transactionStarted = true;
+
+        foreach ($deleteBalehdids as $deleteBalehdid) {
+            foreach (dbale_delete_single_bale_upload($conn, $deleteBalehdid, $userName) as $deletedPhotoName) {
+                $deletedPhotoNames[$deletedPhotoName] = $deletedPhotoName;
+            }
+        }
+
+        if (!sqlsrv_commit($conn)) {
+            throw new RuntimeException('Gagal commit penghapusan: ' . print_r(sqlsrv_errors(), true));
+        }
+        $transactionStarted = false;
+
+        $uploadDir = dbale_ensure_upload_dir();
+        foreach (array_values($deletedPhotoNames) as $deletedPhotoName) {
+            if (basename($deletedPhotoName) !== $deletedPhotoName || dbale_upload_file_is_referenced($conn, $deletedPhotoName)) {
+                continue;
+            }
+            $deletedPhotoPath = $uploadDir . DIRECTORY_SEPARATOR . $deletedPhotoName;
+            if (is_file($deletedPhotoPath)) {
+                @unlink($deletedPhotoPath);
+            }
+        }
+        $_SESSION['success'] = count($deleteBalehdids) . ' data bale berhasil dihapus.';
+    } catch (Throwable $e) {
+        if ($transactionStarted) {
+            @sqlsrv_rollback($conn);
+        }
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: pengebalan.php?' . http_build_query([
+        'wrhsid' => $selectedWrhsid,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'list_search' => $listSearch,
+        'tab' => 'list',
+    ]));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_pengebalan'])) {
+    $selectedBalehdids = array_values(array_unique(array_filter(array_map('trim', (array)($_POST['selected_balehdids'] ?? [])))));
+
+    try {
+        if ($selectedWrhsid === '') {
+            throw new RuntimeException('Gudang tidak valid.');
+        }
+        if (empty($selectedBalehdids)) {
+            throw new RuntimeException('Pilih minimal 1 balenmbr.');
+        }
+
+        $uploadedBalenmbrSet = dbale_load_uploaded_balenmbr_set($conn);
+        $uploadedBaleGroupMap = dbale_load_upload_group_map($conn);
+        foreach (dbale_load_pengebalan_bales_by_ids($conn3, $selectedWrhsid, $selectedBalehdids) as $candidateBaleRow) {
+            $balenmbrKey = dbale_normalize_key($candidateBaleRow['balenmbr'] ?? '');
+            $balehdidKey = trim((string)($candidateBaleRow['balehdid'] ?? ''));
+            if ($balenmbrKey !== '' && $balehdidKey !== '' && !isset($uploadedBalenmbrSet[$balenmbrKey]) && !isset($uploadedBaleGroupMap[$balehdidKey])) {
+                $newBaleIndex[$balehdidKey] = $candidateBaleRow;
+            }
+        }
+
+        foreach ($selectedBalehdids as $selectedBalehdid) {
+            if (!isset($newBaleIndex[$selectedBalehdid])) {
+                throw new RuntimeException('Balenmbr sudah upload atau tidak valid.');
+            }
+
+            $pickedBale = $newBaleIndex[$selectedBalehdid];
+            $sourceDetails = dbale_load_uploadpengebalan_source_details($conn3, $selectedBalehdid, $selectedWrhsid);
+            if (empty($sourceDetails)) {
+                throw new RuntimeException('Detail source kosong untuk balenmbr ' . (string)($pickedBale['balenmbr'] ?? '') . '.');
+            }
+        }
+
+        $_SESSION['pengebalan_draft'] = [
+            'wrhsid' => $selectedWrhsid,
+            'wrhsname' => $selectedWrhsname,
+            'balehdids' => $selectedBalehdids,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+        $_SESSION['success'] = 'Draft siap. Upload Photo Barang dan Photo Packinglist, lalu klik Save untuk menyimpan.';
+        header('Location: pengebalan.php?' . http_build_query([
+            'wrhsid' => $selectedWrhsid,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'tab' => 'detail',
+            'draft' => 1,
+        ]));
+        exit;
+    } catch (Throwable $e) {
+        $_SESSION['error'] = $e->getMessage();
+        header('Location: pengebalan.php?' . http_build_query([
+            'wrhsid' => $selectedWrhsid,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'tab' => 'list',
+        ]));
+        exit;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_upload']) && ($_POST['upload_mode'] ?? '') === 'draft') {
+    $draft = $_SESSION['pengebalan_draft'] ?? null;
+    $transactionStarted = false;
+    $headerId = 0;
+    $savedFiles = [];
+    $saveSucceeded = false;
+
+    try {
+        if (!is_array($draft) || empty($draft['balehdids'])) {
+            throw new RuntimeException('Draft pengebalan tidak ditemukan. Silakan pilih balenmbr melalui menu New lagi.');
+        }
+        if ((string)($draft['wrhsid'] ?? '') !== $selectedWrhsid) {
+            throw new RuntimeException('Gudang draft tidak sesuai.');
+        }
+        if (empty($_FILES['photo_barang']['name']) || empty($_FILES['photo_packinglist']['name'])) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        $draftBalehdids = array_values(array_unique(array_filter(array_map('trim', (array)$draft['balehdids']))));
+        $uploadedBalenmbrSet = dbale_load_uploaded_balenmbr_set($conn);
+        $uploadedBaleGroupMap = dbale_load_upload_group_map($conn);
+        $candidateIndex = [];
+        foreach (dbale_load_pengebalan_bales_by_ids($conn3, $selectedWrhsid, $draftBalehdids) as $candidateRow) {
+            $candidateIndex[(string)($candidateRow['balehdid'] ?? '')] = $candidateRow;
+        }
+
+        if (!sqlsrv_begin_transaction($conn)) {
+            throw new RuntimeException('Gagal mulai transaksi: ' . print_r(sqlsrv_errors(), true));
+        }
+        $transactionStarted = true;
+        $headerId = dbale_create_uploadpengebalan_header($conn, $selectedWrhsid, (string)($draft['wrhsname'] ?? $selectedWrhsname), $userName);
+        $seq = 1;
+        $totalPcs = 0;
+        $totalM = 0.0;
+        $totalYard = 0.0;
+
+        foreach ($draftBalehdids as $draftBalehdid) {
+            $candidateRow = $candidateIndex[$draftBalehdid] ?? null;
+            $balenmbrKey = dbale_normalize_key($candidateRow['balenmbr'] ?? '');
+            if (!$candidateRow || $balenmbrKey === '' || isset($uploadedBalenmbrSet[$balenmbrKey]) || isset($uploadedBaleGroupMap[$draftBalehdid])) {
+                throw new RuntimeException('Balenmbr sudah upload atau tidak valid.');
+            }
+
+            $sourceDetails = dbale_load_uploadpengebalan_source_details($conn3, $draftBalehdid, $selectedWrhsid);
+            if (empty($sourceDetails)) {
+                throw new RuntimeException('Detail source kosong untuk balenmbr ' . (string)($candidateRow['balenmbr'] ?? '') . '.');
+            }
+
+            $totalPcs++;
+            foreach ($sourceDetails as $sourceDetail) {
+                $detailRow = [
+                    'source_balehdid' => (string)($sourceDetail['source_balehdid'] ?? ''),
+                    'source_baleprodid' => (string)($sourceDetail['source_baleprodid'] ?? ''),
+                    'batchno' => (string)($sourceDetail['batchno'] ?? ''),
+                    'qtym' => (float)($sourceDetail['qtym'] ?? 0),
+                    'qtyyard' => (float)($sourceDetail['qtyyard'] ?? 0),
+                    'qtykg' => (float)($sourceDetail['qtykg'] ?? 0),
+                    'balenmbr' => (string)($sourceDetail['balenmbr'] ?? ''),
+                    'baledesc' => (string)($sourceDetail['baledesc'] ?? ''),
+                    'baledate' => dbale_db_date($sourceDetail['baledate'] ?? null),
+                    'prodcode' => (string)($sourceDetail['prodcode'] ?? ''),
+                    'prodname' => (string)($sourceDetail['prodname'] ?? ''),
+                ];
+                dbale_insert_uploadpengebalan_detail($conn, $headerId, $seq++, $detailRow, $userName);
+                $totalM += $detailRow['qtym'];
+                $totalYard += $detailRow['qtyyard'];
+            }
+        }
+
+        $uploadDir = dbale_ensure_upload_dir();
+        $savedBarang = dbale_store_upload_file($_FILES['photo_barang'], $uploadDir . DIRECTORY_SEPARATOR . 'uploadpengebalan_' . $headerId . '_barang.jpg');
+        if ($savedBarang) {
+            $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedBarang;
+        }
+        $savedPacking = dbale_store_upload_file($_FILES['photo_packinglist'], $uploadDir . DIRECTORY_SEPARATOR . 'uploadpengebalan_' . $headerId . '_packinglist.jpg');
+        if ($savedPacking) {
+            $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedPacking;
+        }
+        if (!$savedBarang || !$savedPacking) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        dbale_update_uploadpengebalan_summary($conn, $headerId, $totalPcs, $totalM, $totalYard, $userName);
+        dbale_upsert_uploadpengebalan_photos($conn, $headerId, $savedBarang, $savedPacking, $userName);
+        foreach ($draftBalehdids as $draftBalehdid) {
+            dbale_upsert_upload($conn, $draftBalehdid, $savedBarang, $savedPacking, $userName);
+        }
+
+        if (!sqlsrv_commit($conn)) {
+            throw new RuntimeException('Gagal commit transaksi: ' . print_r(sqlsrv_errors(), true));
+        }
+        $transactionStarted = false;
+        unset($_SESSION['pengebalan_draft']);
+        $saveSucceeded = true;
+        $_SESSION['success'] = 'Pengebalan dan kedua photo berhasil disimpan.';
+    } catch (Throwable $e) {
+        if ($transactionStarted) {
+            @sqlsrv_rollback($conn);
+        }
+        foreach ($savedFiles as $savedFile) {
+            if (is_file($savedFile)) {
+                @unlink($savedFile);
+            }
+        }
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    $redirectParams = [
+        'wrhsid' => $selectedWrhsid,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'tab' => 'detail',
+    ];
+    $redirectParams[$saveSucceeded ? 'hdid' : 'draft'] = $saveSucceeded ? $headerId : 1;
+    header('Location: pengebalan.php?' . http_build_query($redirectParams));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_upload']) && ($_POST['upload_mode'] ?? '') === 'group') {
+    $groupBalehdids = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)($_POST['upload_balehdids'] ?? ''))))));
+    $savedFiles = [];
+
+    try {
+        if (empty($groupBalehdids)) {
+            throw new RuntimeException('Grup bale tidak valid.');
+        }
+        if (empty($_FILES['photo_barang']['name']) || empty($_FILES['photo_packinglist']['name'])) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        $uploadDir = dbale_ensure_upload_dir();
+        $safeGroupId = preg_replace('/[^A-Za-z0-9_-]/', '_', (string)$groupBalehdids[0]) . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
+        $savedBarang = dbale_store_upload_file($_FILES['photo_barang'], $uploadDir . DIRECTORY_SEPARATOR . 'balegroup_' . $safeGroupId . '_barang.jpg');
+        if ($savedBarang) {
+            $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedBarang;
+        }
+        $savedPacking = dbale_store_upload_file($_FILES['photo_packinglist'], $uploadDir . DIRECTORY_SEPARATOR . 'balegroup_' . $safeGroupId . '_packinglist.jpg');
+        if ($savedPacking) {
+            $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedPacking;
+        }
+        if (!$savedBarang || !$savedPacking) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        if (!sqlsrv_begin_transaction($conn)) {
+            throw new RuntimeException('Gagal mulai transaksi: ' . print_r(sqlsrv_errors(), true));
+        }
+        try {
+            foreach ($groupBalehdids as $groupBalehdid) {
+                dbale_upsert_upload($conn, $groupBalehdid, $savedBarang, $savedPacking, $userName);
+            }
+            if (!sqlsrv_commit($conn)) {
+                throw new RuntimeException('Gagal commit bukti upload.');
+            }
+        } catch (Throwable $transactionError) {
+            @sqlsrv_rollback($conn);
+            throw $transactionError;
+        }
+        $_SESSION['success'] = 'Bukti upload seluruh bale dalam grup berhasil disimpan.';
+    } catch (Throwable $e) {
+        foreach ($savedFiles as $savedFile) {
+            if (is_file($savedFile)) {
+                @unlink($savedFile);
+            }
+        }
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: pengebalan.php?' . http_build_query([
+        'wrhsid' => $selectedWrhsid,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'tab' => 'detail',
+        'selected_balehdids' => implode(',', $groupBalehdids),
+    ]));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_upload']) && ($_POST['upload_mode'] ?? 'bale') === 'sheet') {
+    $uploadHdId = (int)($_POST['upload_hdid'] ?? 0);
+    $savedBarang = null;
+    $savedPacking = null;
+    $savedFiles = [];
+
+    try {
+        if ($uploadHdId <= 0 || !dbale_load_uploadpengebalan_header($conn, $uploadHdId)) {
+            throw new RuntimeException('Header upload tidak valid.');
+        }
+        if (empty($_FILES['photo_barang']['name']) || empty($_FILES['photo_packinglist']['name'])) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        $uploadDir = dbale_ensure_upload_dir();
+        if (!empty($_FILES['photo_barang']['name'])) {
+            $targetPath = $uploadDir . DIRECTORY_SEPARATOR . 'uploadpengebalan_' . $uploadHdId . '_barang.jpg';
+            $savedBarang = dbale_store_upload_file($_FILES['photo_barang'], $targetPath);
+            if ($savedBarang) {
+                $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedBarang;
+            }
+        }
+        if (!empty($_FILES['photo_packinglist']['name'])) {
+            $targetPath = $uploadDir . DIRECTORY_SEPARATOR . 'uploadpengebalan_' . $uploadHdId . '_packinglist.jpg';
+            $savedPacking = dbale_store_upload_file($_FILES['photo_packinglist'], $targetPath);
+            if ($savedPacking) {
+                $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedPacking;
+            }
+        }
+        if ($savedBarang === null || $savedPacking === null) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        dbale_upsert_uploadpengebalan_photos($conn, $uploadHdId, $savedBarang, $savedPacking, $userName);
+        foreach (dbale_load_uploadpengebalan_source_balehdids($conn, $uploadHdId) as $sourceBalehdid) {
+            dbale_upsert_upload($conn, $sourceBalehdid, $savedBarang, $savedPacking, $userName);
+        }
+        $_SESSION['success'] = 'Photo pengebalan tersimpan.';
+    } catch (Throwable $e) {
+        foreach ($savedFiles as $filePath) {
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: pengebalan.php?' . http_build_query([
+        'wrhsid' => $selectedWrhsid,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'tab' => 'detail',
+        'hdid' => $uploadHdId,
+    ]));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_upload'])) {
+    $balehdid = trim((string)($_POST['upload_balehdid'] ?? ''));
+    $baleprodid = trim((string)($_POST['upload_baleprodid'] ?? ''));
+    $selectedWrhsid = trim((string)($_POST['wrhsid'] ?? $selectedWrhsid));
+    $startDate = trim((string)($_POST['start_date'] ?? $startDate));
+    $endDate = trim((string)($_POST['end_date'] ?? $endDate));
+    $returnTab = trim((string)($_POST['return_tab'] ?? 'detail'));
+    $returnSelectedBalehdid = trim((string)($_POST['return_selected_balehdid'] ?? $balehdid));
+    $returnSelectedBaleprodid = trim((string)($_POST['return_selected_baleprodid'] ?? $baleprodid));
+
+    $savedBarang = null;
+    $savedPacking = null;
+    $savedFiles = [];
+    try {
+        if ($balehdid === '') {
+            throw new RuntimeException('Data bale tidak valid.');
+        }
+        if (empty($_FILES['photo_barang']['name']) || empty($_FILES['photo_packinglist']['name'])) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        $uploadDir = dbale_ensure_upload_dir();
+        if (!empty($_FILES['photo_barang']['name'])) {
+            $targetPath = $uploadDir . DIRECTORY_SEPARATOR . 'bale_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $balehdid) . '_barang.jpg';
+            $savedBarang = dbale_store_upload_file($_FILES['photo_barang'], $targetPath);
+            if ($savedBarang) {
+                $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedBarang;
+            }
+        }
+        if (!empty($_FILES['photo_packinglist']['name'])) {
+            $targetPath = $uploadDir . DIRECTORY_SEPARATOR . 'bale_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $balehdid) . '_packinglist.jpg';
+            $savedPacking = dbale_store_upload_file($_FILES['photo_packinglist'], $targetPath);
+            if ($savedPacking) {
+                $savedFiles[] = $uploadDir . DIRECTORY_SEPARATOR . $savedPacking;
+            }
+        }
+
+        if ($savedBarang === null || $savedPacking === null) {
+            throw new RuntimeException('Photo Barang dan Photo Packinglist wajib diisi.');
+        }
+
+        dbale_upsert_upload($conn, $balehdid, $savedBarang, $savedPacking, $userName);
+        $_SESSION['success'] = 'Photo bale tersimpan.';
+    } catch (Throwable $e) {
+        foreach ($savedFiles as $filePath) {
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: pengebalan.php?' . http_build_query([
+        'wrhsid' => $selectedWrhsid,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'tab' => $returnTab,
+        'selected_balehdid' => $returnSelectedBalehdid,
+        'selected_baleprodid' => $returnSelectedBaleprodid,
+    ]));
+    exit;
+}
+
+$uploadedListBalehdids = dbale_load_uploaded_balehdids($conn, $startDate, $endDate);
+$listRows = $selectedWrhsid !== ''
+    ? dbale_load_rows_by_balehdids($conn3, $uploadedListBalehdids, $selectedWrhsid)
+    : [];
+if ($listSearch !== '') {
+    $searchFields = ['balenmbr', 'prodcode', 'prodname', 'refnmbr', 'baledesc'];
+    $listRows = array_values(array_filter($listRows, static function (array $row) use ($listSearch, $searchFields): bool {
+        foreach ($searchFields as $searchField) {
+            if (stripos((string)($row[$searchField] ?? ''), $listSearch) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }));
+}
+$uploadGroupMap = dbale_load_upload_group_map($conn);
+$selectedBalehdid = trim((string)($_GET['selected_balehdid'] ?? ''));
+$selectedBaleprodid = trim((string)($_GET['selected_baleprodid'] ?? ''));
+$selectedGroupBalehdids = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)($_GET['selected_balehdids'] ?? ''))))));
+if (empty($selectedGroupBalehdids) && $selectedBalehdid !== '') {
+    $selectedGroupBalehdids = (array)($uploadGroupMap[$selectedBalehdid]['balehdids'] ?? [$selectedBalehdid]);
+}
+
+$selectedRow = null;
+foreach ($listRows as $row) {
+    if (in_array((string)($row['balehdid'] ?? ''), $selectedGroupBalehdids, true)
+        && ($selectedBaleprodid === '' || (string)($row['baleprodid'] ?? '') === $selectedBaleprodid)) {
+        $selectedRow = $row;
+        break;
+    }
+}
+
+$detailBatchRows = [];
+$detailTotals = ['qtym' => 0.0, 'qtyyard' => 0.0, 'qtykg' => 0.0];
+$uploadRow = null;
+$selectedHdId = (int)($_GET['hdid'] ?? 0);
+$sheetHeaderRow = $selectedHdId > 0 ? dbale_load_uploadpengebalan_header($conn, $selectedHdId) : null;
+$sheetDetailRows = $sheetHeaderRow ? dbale_load_uploadpengebalan_details($conn, (int)$sheetHeaderRow['hdid']) : [];
+$isDraftSheet = false;
+$isUploadGroupSheet = false;
+
+if (!$sheetHeaderRow && isset($_GET['draft'])) {
+    $draft = $_SESSION['pengebalan_draft'] ?? null;
+    if (is_array($draft) && (string)($draft['wrhsid'] ?? '') === $selectedWrhsid && !empty($draft['balehdids'])) {
+        $isDraftSheet = true;
+        $selectedGroupBalehdids = array_values(array_unique(array_filter(array_map('trim', (array)$draft['balehdids']))));
+        $sheetHeaderRow = [
+            'hdid' => 0,
+            'wrhsname' => (string)($draft['wrhsname'] ?? $selectedWrhsname),
+            'created_at' => (string)($draft['created_at'] ?? ''),
+            'photo_barang' => '',
+            'photo_packinglist' => '',
+        ];
+        foreach ($selectedGroupBalehdids as $draftBalehdid) {
+            foreach (dbale_load_uploadpengebalan_source_details($conn3, $draftBalehdid, $selectedWrhsid) as $sourceDetail) {
+                $sheetDetailRows[] = $sourceDetail;
+            }
+        }
+    }
+}
+
+if (!$sheetHeaderRow && !empty($selectedGroupBalehdids)) {
+    $firstGroupBalehdid = (string)$selectedGroupBalehdids[0];
+    $groupUpload = $uploadGroupMap[$firstGroupBalehdid]['upload'] ?? dbale_load_upload($conn, $firstGroupBalehdid);
+    if ($groupUpload) {
+        $isUploadGroupSheet = true;
+        $sheetHeaderRow = [
+            'hdid' => 0,
+            'wrhsname' => $selectedWrhsname,
+            'created_at' => $groupUpload['created_at'] ?? null,
+            'photo_barang' => $groupUpload['photo_barang'] ?? '',
+            'photo_packinglist' => $groupUpload['photo_packinglist'] ?? '',
+        ];
+        foreach ($selectedGroupBalehdids as $groupBalehdid) {
+            foreach (dbale_load_uploadpengebalan_source_details($conn3, $groupBalehdid, $selectedWrhsid) as $sourceDetail) {
+                $sheetDetailRows[] = $sourceDetail;
+            }
+        }
+    }
+}
+
+$sheetTotals = ['qtym' => 0.0, 'qtyyard' => 0.0, 'qtykg' => 0.0];
+$sheetBalenmbrSet = [];
+$sheetBaleSubtotals = [];
+foreach ($sheetDetailRows as $sheetDetailRow) {
+    $sheetTotals['qtym'] += (float)($sheetDetailRow['qtym'] ?? 0);
+    $sheetTotals['qtyyard'] += (float)($sheetDetailRow['qtyyard'] ?? 0);
+    $sheetTotals['qtykg'] += (float)($sheetDetailRow['qtykg'] ?? 0);
+    $sheetBalenmbrKey = dbale_normalize_key($sheetDetailRow['balenmbr'] ?? '');
+    if ($sheetBalenmbrKey !== '') {
+        $sheetBalenmbrSet[$sheetBalenmbrKey] = true;
+        if (!isset($sheetBaleSubtotals[$sheetBalenmbrKey])) {
+            $sheetBaleSubtotals[$sheetBalenmbrKey] = [
+                'balehdid' => (string)($sheetDetailRow['source_balehdid'] ?? ''),
+                'balenmbr' => (string)($sheetDetailRow['balenmbr'] ?? ''),
+                'qtym' => 0.0,
+                'qtyyard' => 0.0,
+                'qtykg' => 0.0,
+                'rows' => 0,
+            ];
+        }
+        $sheetBaleSubtotals[$sheetBalenmbrKey]['qtym'] += (float)($sheetDetailRow['qtym'] ?? 0);
+        $sheetBaleSubtotals[$sheetBalenmbrKey]['qtyyard'] += (float)($sheetDetailRow['qtyyard'] ?? 0);
+        $sheetBaleSubtotals[$sheetBalenmbrKey]['qtykg'] += (float)($sheetDetailRow['qtykg'] ?? 0);
+        $sheetBaleSubtotals[$sheetBalenmbrKey]['rows']++;
+    }
+}
+if ($selectedRow) {
+    $detailBatchRows = dbale_load_detail_rows($conn3, (string)$selectedRow['balehdid'], (string)$selectedRow['baleprodid']);
+    foreach ($detailBatchRows as $batchRow) {
+        $detailTotals['qtym'] += (float)($batchRow['qtym'] ?? 0);
+        $detailTotals['qtyyard'] += (float)($batchRow['qtyyard'] ?? 0);
+        $detailTotals['qtykg'] += (float)($batchRow['qtykg'] ?? 0);
+    }
+    $uploadRow = dbale_load_upload($conn, (string)$selectedRow['balehdid']);
+}
+
+$activeTab = trim((string)($_GET['tab'] ?? 'list'));
+if ($sheetHeaderRow) {
+    $activeTab = 'detail';
+}
+if ($selectedRow && $activeTab !== 'list') {
+    $activeTab = 'detail';
+}
+if (!$selectedRow && !$sheetHeaderRow) {
+    $activeTab = 'list';
+}
+
+function dbale_public_upload_url(?string $fileName): string
+{
+    if (!$fileName) {
+        return '';
+    }
+    return '/gg_app/uploads/databale/' . rawurlencode($fileName);
+}
+
+function dbale_value($row, string $key): string
+{
+    return htmlspecialchars((string)($row[$key] ?? ''));
+}
+
+function dbale_date_value($value, string $format = 'd/m/Y'): string
+{
+    if ($value instanceof DateTimeInterface) {
+        return htmlspecialchars($value->format($format));
+    }
+    if (empty($value)) {
+        return '-';
+    }
+    $time = strtotime((string)$value);
+    return $time ? htmlspecialchars(date($format, $time)) : '-';
+}
+
+$sheetUploadButtonClass = $isDraftSheet ? 'btn-upload-draft' : ($isUploadGroupSheet ? 'btn-upload-group' : 'btn-upload-sheet');
+$sheetUploadButtonLabel = $isDraftSheet ? 'Upload & Save' : 'Edit / Upload';
+$sheetGroupBalehdidsValue = implode(',', $selectedGroupBalehdids);
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Databale</title>
+  <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/fontawesome-free/css/all.min.css">
+  <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/dist/css/adminlte.min.css">
+  <style>
+    .bale-photo-card img {
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      background: #f8f9fa;
+    }
+    .bale-photo-placeholder {
+      min-height: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8f9fa;
+      border: 1px dashed #ced4da;
+      color: #6c757d;
+      border-radius: .25rem;
+    }
+    .new-modal-table td,
+    .new-modal-table th {
+      white-space: nowrap;
+    }
+    .data-loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, .78);
+      backdrop-filter: blur(1px);
+    }
+    .data-loading-overlay.is-visible {
+      display: flex;
+    }
+    .data-loading-box {
+      width: min(420px, calc(100vw - 40px));
+      padding: 20px;
+      background: #fff;
+      border-radius: .5rem;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .2);
+      text-align: center;
+    }
+    .loading-progress-bar {
+      width: 35%;
+      animation: databale-progress 1.15s ease-in-out infinite;
+    }
+    @keyframes databale-progress {
+      0% { margin-left: 0; width: 20%; }
+      50% { margin-left: 35%; width: 45%; }
+      100% { margin-left: 80%; width: 20%; }
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="data-loading-overlay" id="dataLoadingOverlay" role="status" aria-live="polite" aria-hidden="true">
+  <div class="data-loading-box">
+    <div class="font-weight-bold mb-2"><i class="fas fa-spinner fa-spin mr-1"></i> Sedang memproses data...</div>
+    <div class="progress" style="height:10px;">
+      <div class="progress-bar progress-bar-striped progress-bar-animated loading-progress-bar"></div>
+    </div>
+    <small class="text-muted d-block mt-2">Mohon tunggu, jangan tutup halaman.</small>
+  </div>
+</div>
+<div class="wrapper">
+  <div class="content-wrapper p-3">
+    <div class="content-header p-0 mb-3">
+      <div class="container-fluid px-0">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h4 class="mb-0">Databale</h4>
+            <div class="text-muted small">Sheet list, sheet detail, dan upload photo barang/packinglist.</div>
+          </div>
+          <a href="pengebalan.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-redo"></i> Reset</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-fluid px-0">
+      <?php if (!empty($_SESSION['success'])) : ?>
+        <div class="alert alert-success"><?= htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div>
+      <?php endif; ?>
+      <?php if (!empty($_SESSION['error'])) : ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div>
+      <?php endif; ?>
+
+      <div class="card card-outline card-primary mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <span>Filter</span>
+          <div class="btn-group btn-group-sm ml-auto">
+            <button type="button" class="btn btn-success" id="openNewModalBtn" data-toggle="modal" data-target="#newModal"><i class="fas fa-plus"></i> New</button>
+            <button type="button" class="btn btn-danger" id="deleteSelectedBtn" disabled><i class="fas fa-trash"></i> Hapus Dipilih</button>
+          </div>
+        </div>
+        <form method="post" id="deleteSelectedForm" class="d-none">
+          <input type="hidden" name="delete_selected_uploads" value="1">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($pengebalanCsrf, ENT_QUOTES) ?>">
+          <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid, ENT_QUOTES) ?>">
+          <input type="hidden" name="start_date" value="<?= htmlspecialchars($startDate, ENT_QUOTES) ?>">
+          <input type="hidden" name="end_date" value="<?= htmlspecialchars($endDate, ENT_QUOTES) ?>">
+          <input type="hidden" name="list_search" value="<?= htmlspecialchars($listSearch, ENT_QUOTES) ?>">
+          <div id="deleteSelectedInputs"></div>
+        </form>
+        <div class="card-body">
+          <form method="get" class="row align-items-end">
+            <div class="col-md-3 mb-2">
+              <label class="form-label">Gudang</label>
+              <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid) ?>">
+              <select class="form-control bg-light" disabled>
+                <option value="<?= htmlspecialchars($selectedWrhsid) ?>" selected>
+                  <?= htmlspecialchars($lockedWarehouseName) ?>
+                </option>
+              </select>
+            </div>
+            <div class="col-md-2 mb-2">
+              <label class="form-label">Tanggal Dari</label>
+              <input type="date" name="start_date" class="form-control" value="<?= htmlspecialchars($startDate) ?>">
+            </div>
+            <div class="col-md-2 mb-2">
+              <label class="form-label">Tanggal Sampai</label>
+              <input type="date" name="end_date" class="form-control" value="<?= htmlspecialchars($endDate) ?>">
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="form-label">Search</label>
+              <input type="text" name="list_search" class="form-control" value="<?= htmlspecialchars($listSearch, ENT_QUOTES) ?>" placeholder="Balenmbr / Prodcode / Prodname / Refnmbr / Baledesc">
+            </div>
+            <div class="col-md-1 mb-2">
+              <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-search"></i></button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <ul class="nav nav-tabs" id="baleTab" role="tablist">
+        <li class="nav-item">
+          <a class="nav-link <?= $activeTab === 'list' ? 'active' : '' ?>" id="list-tab" data-toggle="tab" href="#sheet-list" role="tab">Sheet List</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link <?= $activeTab === 'detail' ? 'active' : '' ?>" id="detail-tab" data-toggle="tab" href="#sheet-detail" role="tab">Sheet Detail</a>
+        </li>
+      </ul>
+
+      <div class="tab-content border-left border-right border-bottom p-3 bg-white">
+        <div class="tab-pane fade <?= $activeTab === 'list' ? 'show active' : '' ?>" id="sheet-list" role="tabpanel">
+          <div class="table-responsive">
+            <table class="table table-bordered table-hover table-sm mb-0">
+              <thead class="thead-light text-center">
+                <tr>
+                  <th style="width:40px;">#</th>
+                  <th>Balenmbr</th>
+                  <th>Baledate</th>
+                  <th>Prodcode</th>
+                  <th>Prodname</th>
+                  <th>Total Batch</th>
+                  <th>TotQtyM</th>
+                  <th>TotQtyYard</th>
+                  <th>TotQtyKg</th>
+                  <th>Refnmbr</th>
+                  <th>Baledesc</th>
+                  <th style="width:140px;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php if (empty($listRows)) : ?>
+                  <tr><td colspan="12" class="text-center text-muted">Data kosong</td></tr>
+                <?php else : ?>
+                  <?php foreach ($listRows as $index => $row) : ?>
+                    <?php
+                      $rowBalehdid = (string)($row['balehdid'] ?? '');
+                      $rowBaleprodid = (string)($row['baleprodid'] ?? '');
+                      $rowGroupBalehdids = (array)($uploadGroupMap[$rowBalehdid]['balehdids'] ?? [$rowBalehdid]);
+                      $isSelected = in_array($rowBalehdid, $selectedGroupBalehdids, true);
+                    ?>
+                    <tr class="bale-row <?= $isSelected ? 'table-primary' : '' ?>">
+                      <td class="text-center align-middle">
+                        <input type="checkbox" class="bale-check" data-balehdid="<?= htmlspecialchars($rowBalehdid, ENT_QUOTES) ?>" data-baleprodid="<?= htmlspecialchars($rowBaleprodid, ENT_QUOTES) ?>" data-group-balehdids="<?= htmlspecialchars(json_encode(array_values($rowGroupBalehdids)), ENT_QUOTES) ?>" <?= $isSelected ? 'checked' : '' ?>>
+                      </td>
+                      <td><?= dbale_value($row, 'balenmbr') ?></td>
+                      <td><?= !empty($row['baledate']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$row['baledate']))) : '-' ?></td>
+                      <td><?= dbale_value($row, 'prodcode') ?></td>
+                      <td><?= dbale_value($row, 'prodname') ?></td>
+                      <td class="text-center"><?= (int)($row['total_batch'] ?? 0) ?></td>
+                      <td class="text-end"><?= htmlspecialchars((string)($row['totqtym'] ?? '0')) ?></td>
+                      <td class="text-end"><?= htmlspecialchars((string)($row['totqtyyard'] ?? '0')) ?></td>
+                      <td class="text-end"><?= htmlspecialchars((string)($row['totqtykg'] ?? '0')) ?></td>
+                      <td><?= dbale_value($row, 'refnmbr') ?></td>
+                      <td><?= dbale_value($row, 'baledesc') ?></td>
+                      <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary btn-upload-group" data-balehdids="<?= htmlspecialchars(implode(',', array_values($rowGroupBalehdids)), ENT_QUOTES) ?>" data-return-tab="list">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Hapus hanya bale ini? Bale lain dengan bukti upload yang sama tidak akan dihapus.');">
+                          <input type="hidden" name="delete_bale_upload" value="1">
+                          <input type="hidden" name="delete_balehdid" value="<?= htmlspecialchars($rowBalehdid, ENT_QUOTES) ?>">
+                          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($pengebalanCsrf, ENT_QUOTES) ?>">
+                          <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid, ENT_QUOTES) ?>">
+                          <input type="hidden" name="start_date" value="<?= htmlspecialchars($startDate, ENT_QUOTES) ?>">
+                          <input type="hidden" name="end_date" value="<?= htmlspecialchars($endDate, ENT_QUOTES) ?>">
+                          <input type="hidden" name="list_search" value="<?= htmlspecialchars($listSearch, ENT_QUOTES) ?>">
+                          <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus bale ini">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tab-pane fade <?= $activeTab === 'detail' ? 'show active' : '' ?>" id="sheet-detail" role="tabpanel">
+          <?php if ($sheetHeaderRow) : ?>
+            <div class="mb-3">
+              <div>
+                <h5 class="mb-1"><?= $isDraftSheet ? 'Draft' : 'Detail' ?> Sheet Pengebalan<?= (int)($sheetHeaderRow['hdid'] ?? 0) > 0 ? ' #' . htmlspecialchars((string)$sheetHeaderRow['hdid']) : '' ?></h5>
+                <div class="text-muted small">
+                  Gudang: <b><?= htmlspecialchars((string)($sheetHeaderRow['wrhsname'] ?? $selectedWrhsname)) ?></b> |
+                  Bale: <b><?= count($sheetBalenmbrSet) ?></b> |
+                  Dibuat: <b><?= dbale_date_value($sheetHeaderRow['created_at'] ?? null, 'd/m/Y H:i') ?></b>
+                </div>
+              </div>
+            </div>
+
+            <?php if ($isDraftSheet) : ?>
+              <div class="alert alert-warning py-2">
+                Data ini masih <b>draft</b> dan belum tersimpan ke database. Upload <b>Photo Barang</b> serta <b>Photo Packinglist</b>, kemudian klik <b>Save</b>.
+              </div>
+            <?php endif; ?>
+
+            <div class="card mb-3">
+              <div class="card-body py-2">
+                <div class="row">
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Total Bale</small><strong><?= count($sheetBalenmbrSet) ?></strong></div>
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Total M</small><strong><?= number_format($sheetTotals['qtym'], 2, ',', '.') ?></strong></div>
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Total Yard</small><strong><?= number_format($sheetTotals['qtyyard'], 2, ',', '.') ?></strong></div>
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Total Kg</small><strong><?= number_format($sheetTotals['qtykg'], 2, ',', '.') ?></strong></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive mb-3">
+              <table class="table table-bordered table-sm mb-0">
+                <thead class="thead-light text-center">
+                  <tr>
+                    <th style="width:45px;">No</th>
+                    <th>Balenmbr</th>
+                    <th>Baledate</th>
+                    <th>Prodcode</th>
+                    <th>Prodname</th>
+                    <th>Batch No</th>
+                    <th>Qty M</th>
+                    <th>Qty Yard</th>
+                    <th>Qty Kg</th>
+                    <th style="width:70px;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php if (empty($sheetDetailRows)) : ?>
+                    <tr><td colspan="10" class="text-center text-muted">Batch kosong</td></tr>
+                  <?php else : ?>
+                    <?php $sheetBaleRemainingRows = array_map(static function (array $subtotal): int { return (int)$subtotal['rows']; }, $sheetBaleSubtotals); ?>
+                    <?php foreach ($sheetDetailRows as $sheetDetailIndex => $sheetDetailRow) : ?>
+                      <?php $detailBalenmbrKey = dbale_normalize_key($sheetDetailRow['balenmbr'] ?? ''); ?>
+                      <tr>
+                        <td class="text-center"><?= $sheetDetailIndex + 1 ?></td>
+                        <td><?= dbale_value($sheetDetailRow, 'balenmbr') ?></td>
+                        <td><?= dbale_date_value($sheetDetailRow['baledate'] ?? null) ?></td>
+                        <td><?= dbale_value($sheetDetailRow, 'prodcode') ?></td>
+                        <td><?= dbale_value($sheetDetailRow, 'prodname') ?></td>
+                        <td><?= dbale_value($sheetDetailRow, 'batchno') ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($sheetDetailRow['qtym'] ?? '0')) ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($sheetDetailRow['qtyyard'] ?? '0')) ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($sheetDetailRow['qtykg'] ?? '0')) ?></td>
+                        <td></td>
+                      </tr>
+                      <?php if ($detailBalenmbrKey !== '' && isset($sheetBaleRemainingRows[$detailBalenmbrKey])) : ?>
+                        <?php $sheetBaleRemainingRows[$detailBalenmbrKey]--; ?>
+                        <?php if ($sheetBaleRemainingRows[$detailBalenmbrKey] === 0) : ?>
+                          <?php $baleSubtotal = $sheetBaleSubtotals[$detailBalenmbrKey]; ?>
+                          <tr class="font-weight-bold table-info">
+                            <td colspan="6">Subtotal Balenmbr <?= htmlspecialchars((string)$baleSubtotal['balenmbr']) ?></td>
+                            <td class="text-end"><?= number_format((float)$baleSubtotal['qtym'], 2, ',', '.') ?></td>
+                            <td class="text-end"><?= number_format((float)$baleSubtotal['qtyyard'], 2, ',', '.') ?></td>
+                            <td class="text-end"><?= number_format((float)$baleSubtotal['qtykg'], 2, ',', '.') ?></td>
+                            <td class="text-center">
+                              <?php if (!$isDraftSheet && (string)$baleSubtotal['balehdid'] !== '') : ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Hapus Balenmbr ini beserta seluruh batch-nya?');">
+                                  <input type="hidden" name="delete_bale_upload" value="1">
+                                  <input type="hidden" name="delete_balehdid" value="<?= htmlspecialchars((string)$baleSubtotal['balehdid'], ENT_QUOTES) ?>">
+                                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($pengebalanCsrf, ENT_QUOTES) ?>">
+                                  <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid, ENT_QUOTES) ?>">
+                                  <input type="hidden" name="start_date" value="<?= htmlspecialchars($startDate, ENT_QUOTES) ?>">
+                                  <input type="hidden" name="end_date" value="<?= htmlspecialchars($endDate, ENT_QUOTES) ?>">
+                                  <input type="hidden" name="list_search" value="<?= htmlspecialchars($listSearch, ENT_QUOTES) ?>">
+                                  <button type="submit" class="btn btn-sm btn-danger" title="Hapus Balenmbr ini"><i class="fas fa-trash"></i></button>
+                                </form>
+                              <?php endif; ?>
+                            </td>
+                          </tr>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
+                </tbody>
+                <tfoot>
+                  <tr class="font-weight-bold bg-light">
+                    <td colspan="6">Total</td>
+                    <td class="text-end"><?= number_format($sheetTotals['qtym'], 2, ',', '.') ?></td>
+                    <td class="text-end"><?= number_format($sheetTotals['qtyyard'], 2, ',', '.') ?></td>
+                    <td class="text-end"><?= number_format($sheetTotals['qtykg'], 2, ',', '.') ?></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6 mb-3">
+                <div class="card bale-photo-card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Foto Barang</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary <?= htmlspecialchars($sheetUploadButtonClass, ENT_QUOTES) ?>" data-hdid="<?= htmlspecialchars((string)$sheetHeaderRow['hdid'], ENT_QUOTES) ?>" data-balehdids="<?= htmlspecialchars($sheetGroupBalehdidsValue, ENT_QUOTES) ?>">Upload</button>
+                  </div>
+                  <div class="card-body">
+                    <?php $sheetPhotoBarangUrl = dbale_public_upload_url((string)($sheetHeaderRow['photo_barang'] ?? '')); ?>
+                    <?php if ($sheetPhotoBarangUrl !== '' && is_file(__DIR__ . '/../../../uploads/databale/' . (string)($sheetHeaderRow['photo_barang'] ?? ''))) : ?>
+                      <img src="<?= htmlspecialchars($sheetPhotoBarangUrl) ?>" alt="Foto Barang" class="img-fluid rounded border">
+                    <?php else : ?>
+                      <div class="bale-photo-placeholder">Belum ada foto barang</div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6 mb-3">
+                <div class="card bale-photo-card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Foto Packinglist</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary <?= htmlspecialchars($sheetUploadButtonClass, ENT_QUOTES) ?>" data-hdid="<?= htmlspecialchars((string)$sheetHeaderRow['hdid'], ENT_QUOTES) ?>" data-balehdids="<?= htmlspecialchars($sheetGroupBalehdidsValue, ENT_QUOTES) ?>">Upload</button>
+                  </div>
+                  <div class="card-body">
+                    <?php $sheetPhotoPackingUrl = dbale_public_upload_url((string)($sheetHeaderRow['photo_packinglist'] ?? '')); ?>
+                    <?php if ($sheetPhotoPackingUrl !== '' && is_file(__DIR__ . '/../../../uploads/databale/' . (string)($sheetHeaderRow['photo_packinglist'] ?? ''))) : ?>
+                      <img src="<?= htmlspecialchars($sheetPhotoPackingUrl) ?>" alt="Foto Packinglist" class="img-fluid rounded border">
+                    <?php else : ?>
+                      <div class="bale-photo-placeholder">Belum ada foto packinglist</div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <?php elseif (!$selectedRow) : ?>
+            <div class="alert alert-info mb-0">Pilih 1 data di sheet list lalu klik <b>Sheet Detail</b>.</div>
+          <?php else : ?>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+              <div>
+                <h5 class="mb-1">Detail Bale</h5>
+                <div class="text-muted small">
+                  Bale: <b><?= dbale_value($selectedRow, 'balenmbr') ?></b> |
+                  Tanggal: <b><?= !empty($selectedRow['baledate']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$selectedRow['baledate']))) : '-' ?></b> |
+                  Gudang: <b><?= dbale_value($selectedRow, 'wrhsname') ?></b>
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline-primary btn-sm btn-upload" data-balehdid="<?= htmlspecialchars((string)$selectedRow['balehdid'], ENT_QUOTES) ?>" data-baleprodid="<?= htmlspecialchars((string)$selectedRow['baleprodid'], ENT_QUOTES) ?>" data-return-tab="detail">
+                <i class="fas fa-edit"></i> Edit / Upload
+              </button>
+            </div>
+
+            <div class="card mb-3">
+              <div class="card-body py-2">
+                <div class="row">
+                  <div class="col-md-2 mb-2"><small class="text-muted d-block">Balenmbr</small><strong><?= dbale_value($selectedRow, 'balenmbr') ?></strong></div>
+                  <div class="col-md-2 mb-2"><small class="text-muted d-block">Baledate</small><strong><?= !empty($selectedRow['baledate']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$selectedRow['baledate']))) : '-' ?></strong></div>
+                  <div class="col-md-2 mb-2"><small class="text-muted d-block">Prodcode</small><strong><?= dbale_value($selectedRow, 'prodcode') ?></strong></div>
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Prodname</small><strong><?= dbale_value($selectedRow, 'prodname') ?></strong></div>
+                  <div class="col-md-3 mb-2"><small class="text-muted d-block">Baledesc</small><strong><?= dbale_value($selectedRow, 'baledesc') ?></strong></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive mb-3">
+              <table class="table table-bordered table-sm mb-0">
+                <thead class="thead-light text-center">
+                  <tr>
+                    <th>Batch No</th>
+                    <th>Qty M</th>
+                    <th>Qty Yard</th>
+                    <th>Qty Kg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php if (empty($detailBatchRows)) : ?>
+                    <tr><td colspan="4" class="text-center text-muted">Batch kosong</td></tr>
+                  <?php else : ?>
+                    <?php foreach ($detailBatchRows as $batchRow) : ?>
+                      <tr>
+                        <td><?= dbale_value($batchRow, 'batchno') ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($batchRow['qtym'] ?? '0')) ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($batchRow['qtyyard'] ?? '0')) ?></td>
+                        <td class="text-end"><?= htmlspecialchars((string)($batchRow['qtykg'] ?? '0')) ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
+                </tbody>
+                <tfoot>
+                  <tr class="font-weight-bold bg-light">
+                    <td>Total</td>
+                    <td class="text-end"><?= number_format($detailTotals['qtym'], 2, ',', '.') ?></td>
+                    <td class="text-end"><?= number_format($detailTotals['qtyyard'], 2, ',', '.') ?></td>
+                    <td class="text-end"><?= number_format($detailTotals['qtykg'], 2, ',', '.') ?></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6 mb-3">
+                <div class="card bale-photo-card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Foto Barang</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-upload" data-balehdid="<?= htmlspecialchars((string)$selectedRow['balehdid'], ENT_QUOTES) ?>" data-baleprodid="<?= htmlspecialchars((string)$selectedRow['baleprodid'], ENT_QUOTES) ?>" data-return-tab="detail">Upload</button>
+                  </div>
+                  <div class="card-body">
+                    <?php $photoBarangUrl = dbale_public_upload_url((string)($uploadRow['photo_barang'] ?? '')); ?>
+                    <?php if ($photoBarangUrl !== '' && is_file(__DIR__ . '/../../../uploads/databale/' . (string)($uploadRow['photo_barang'] ?? ''))) : ?>
+                      <img src="<?= htmlspecialchars($photoBarangUrl) ?>" alt="Foto Barang" class="img-fluid rounded border">
+                    <?php else : ?>
+                      <div class="bale-photo-placeholder">Belum ada foto barang</div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6 mb-3">
+                <div class="card bale-photo-card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Foto Packinglist</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-upload" data-balehdid="<?= htmlspecialchars((string)$selectedRow['balehdid'], ENT_QUOTES) ?>" data-baleprodid="<?= htmlspecialchars((string)$selectedRow['baleprodid'], ENT_QUOTES) ?>" data-return-tab="detail">Upload</button>
+                  </div>
+                  <div class="card-body">
+                    <?php $photoPackingUrl = dbale_public_upload_url((string)($uploadRow['photo_packinglist'] ?? '')); ?>
+                    <?php if ($photoPackingUrl !== '' && is_file(__DIR__ . '/../../../uploads/databale/' . (string)($uploadRow['photo_packinglist'] ?? ''))) : ?>
+                      <img src="<?= htmlspecialchars($photoPackingUrl) ?>" alt="Foto Packinglist" class="img-fluid rounded border">
+                    <?php else : ?>
+                      <div class="bale-photo-placeholder">Belum ada foto packinglist</div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        <div class="modal-header">
+          <h5 class="modal-title">New Pengebalan</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="create_pengebalan" value="1">
+          <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid) ?>">
+          <input type="hidden" name="start_date" value="<?= htmlspecialchars($startDate) ?>">
+          <input type="hidden" name="end_date" value="<?= htmlspecialchars($endDate) ?>">
+          <div class="alert alert-info py-2 mb-3">Pilih beberapa <b>balenmbr</b> dari gudang <?= htmlspecialchars($selectedWrhsname) ?>. Bale yang sudah upload tidak muncul lagi.</div>
+          <div class="form-group mb-2">
+            <input type="text" class="form-control" id="newBaleSearch" placeholder="Search balenmbr / refnmbr...">
+            <small class="text-muted">Default tampil 10 data. Ketik balenmbr/refnmbr lalu tekan Enter untuk mencari.</small>
+          </div>
+          <div id="selectedBaleInputs"></div>
+          <div class="table-responsive" style="max-height: 60vh; overflow: auto;">
+            <table class="table table-bordered table-hover table-sm mb-0 new-modal-table">
+              <thead class="thead-light text-center">
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="checkAllNewBales"></th>
+                  <th>Balenmbr</th>
+                  <th>Refnmbr</th>
+                  <th>Baledate</th>
+                </tr>
+              </thead>
+              <tbody id="newBaleRows">
+                <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Lanjut ke Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post" enctype="multipart/form-data" id="uploadPhotoForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Upload Photo Bale</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="save_upload" value="1">
+          <input type="hidden" name="upload_mode" id="uploadMode" value="bale">
+          <input type="hidden" name="upload_hdid" id="uploadHdid" value="">
+          <input type="hidden" name="upload_balehdid" id="uploadBalehdid" value="">
+          <input type="hidden" name="upload_baleprodid" id="uploadBaleprodid" value="">
+          <input type="hidden" name="upload_balehdids" id="uploadBalehdids" value="">
+          <input type="hidden" name="wrhsid" value="<?= htmlspecialchars($selectedWrhsid) ?>">
+          <input type="hidden" name="start_date" value="<?= htmlspecialchars($startDate) ?>">
+          <input type="hidden" name="end_date" value="<?= htmlspecialchars($endDate) ?>">
+          <input type="hidden" name="return_tab" id="returnTab" value="detail">
+          <input type="hidden" name="return_selected_balehdid" id="returnSelectedBalehdid" value="<?= htmlspecialchars($selectedBalehdid) ?>">
+          <input type="hidden" name="return_selected_baleprodid" id="returnSelectedBaleprodid" value="<?= htmlspecialchars($selectedBaleprodid) ?>">
+          <div class="form-group">
+            <label>Photo Barang <span class="text-danger">*</span></label>
+            <input type="file" name="photo_barang" id="photoBarangInput" class="form-control" accept="image/*">
+          </div>
+          <div class="form-group">
+            <label>Photo Packinglist <span class="text-danger">*</span></label>
+            <input type="file" name="photo_packinglist" id="photoPackingInput" class="form-control" accept="image/*">
+          </div>
+          <div class="alert alert-info py-2 mb-0"><i class="fas fa-camera mr-1"></i> Di HP pilih kamera atau galeri dari menu bawaan. Kedua foto otomatis dikompres maksimal 1 MB.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+          <button type="submit" class="btn btn-primary" id="savePhotoButton" disabled><i class="fas fa-save"></i> Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var openDetailBtn = document.getElementById('openDetailBtn');
+  var detailTabLink = document.getElementById('detail-tab');
+  var selectedWrhsid = <?= json_encode($selectedWrhsid) ?>;
+  var startDate = <?= json_encode($startDate) ?>;
+  var endDate = <?= json_encode($endDate) ?>;
+  var selectedHdId = <?= json_encode((int)($sheetHeaderRow['hdid'] ?? 0)) ?>;
+  var dataLoadingOverlay = document.getElementById('dataLoadingOverlay');
+
+  function showPageLoading(message) {
+    if (!dataLoadingOverlay) {
+      return;
+    }
+    var label = dataLoadingOverlay.querySelector('.font-weight-bold');
+    if (label && message) {
+      label.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> ' + message;
+    }
+    dataLoadingOverlay.classList.add('is-visible');
+    dataLoadingOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  function hidePageLoading() {
+    if (!dataLoadingOverlay) {
+      return;
+    }
+    dataLoadingOverlay.classList.remove('is-visible');
+    dataLoadingOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  window.addEventListener('pageshow', hidePageLoading);
+  window.addEventListener('beforeunload', function () {
+    if (!dataLoadingOverlay || !dataLoadingOverlay.classList.contains('is-visible')) {
+      showPageLoading('Sedang memuat data...');
+    }
+  });
+
+  var uploadPhotoForm = document.getElementById('uploadPhotoForm');
+  var savePhotoButton = document.getElementById('savePhotoButton');
+  var photoInputPairs = [
+    {
+      label: 'Photo Barang',
+      input: document.getElementById('photoBarangInput')
+    },
+    {
+      label: 'Photo Packinglist',
+      input: document.getElementById('photoPackingInput')
+    }
+  ];
+
+  function selectedPhotoFile(pair) {
+    return pair.input.files[0] || null;
+  }
+
+  function updateSavePhotoButton() {
+    if (!savePhotoButton) {
+      return;
+    }
+    savePhotoButton.disabled = !photoInputPairs.every(function (pair) {
+      return Boolean(selectedPhotoFile(pair));
+    }) || (uploadPhotoForm && uploadPhotoForm.dataset.compressing === '1');
+  }
+
+  photoInputPairs.forEach(function (pair) {
+    pair.input.addEventListener('change', updateSavePhotoButton);
+  });
+
+  function resetPhotoInputs() {
+    photoInputPairs.forEach(function (pair) {
+      pair.input.value = '';
+    });
+    if (uploadPhotoForm) {
+      delete uploadPhotoForm.dataset.compressionReady;
+      delete uploadPhotoForm.dataset.compressing;
+    }
+    updateSavePhotoButton();
+  }
+
+  function loadBrowserImage(file) {
+    return new Promise(function (resolve, reject) {
+      var imageUrl = URL.createObjectURL(file);
+      var imageElement = new Image();
+      imageElement.onload = function () {
+        URL.revokeObjectURL(imageUrl);
+        resolve(imageElement);
+      };
+      imageElement.onerror = function () {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error('File ' + file.name + ' tidak dapat dibaca sebagai gambar.'));
+      };
+      imageElement.src = imageUrl;
+    });
+  }
+
+  function canvasToJpeg(canvas, quality) {
+    return new Promise(function (resolve, reject) {
+      canvas.toBlob(function (blob) {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Browser gagal mengompres gambar.'));
+        }
+      }, 'image/jpeg', quality);
+    });
+  }
+
+  async function compressPhotoFile(file, maxBytes) {
+    if (file.size <= maxBytes) {
+      return file;
+    }
+
+    var imageElement = await loadBrowserImage(file);
+    var maxDimension = 2200;
+    var baseScale = Math.min(1, maxDimension / Math.max(imageElement.naturalWidth, imageElement.naturalHeight));
+    var resizeScale = 1;
+    var quality = .88;
+    var lastBlob = null;
+
+    for (var attempt = 0; attempt < 14; attempt++) {
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(imageElement.naturalWidth * baseScale * resizeScale));
+      canvas.height = Math.max(1, Math.round(imageElement.naturalHeight * baseScale * resizeScale));
+      var context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      lastBlob = await canvasToJpeg(canvas, quality);
+      if (lastBlob.size <= maxBytes) {
+        var baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
+        return new File([lastBlob], baseName + '.jpg', {type: 'image/jpeg', lastModified: Date.now()});
+      }
+
+      if (quality > .48) {
+        quality -= .1;
+      } else {
+        resizeScale *= .8;
+        quality = .82;
+      }
+    }
+
+    throw new Error('Foto ' + file.name + ' tidak dapat dikompres di bawah 1 MB.');
+  }
+
+  function putFileInInput(input, file) {
+    var transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+  }
+
+  if (uploadPhotoForm) {
+    uploadPhotoForm.addEventListener('submit', async function (event) {
+      if (uploadPhotoForm.dataset.compressionReady === '1') {
+        return;
+      }
+
+      var missingPair = photoInputPairs.find(function (pair) {
+        return !selectedPhotoFile(pair);
+      });
+      if (missingPair) {
+        event.preventDefault();
+        alert(missingPair.label + ' wajib diisi melalui kamera atau galeri/file.');
+        return;
+      }
+
+      event.preventDefault();
+      if (uploadPhotoForm.dataset.compressing === '1') {
+        return;
+      }
+      uploadPhotoForm.dataset.compressing = '1';
+      updateSavePhotoButton();
+      showPageLoading('Sedang mengompres foto maksimal 1 MB...');
+
+      try {
+        if (typeof DataTransfer !== 'undefined') {
+          var compressedFiles = await Promise.all(photoInputPairs.map(function (pair) {
+            return compressPhotoFile(selectedPhotoFile(pair), 1024 * 1024);
+          }));
+          photoInputPairs.forEach(function (pair, index) {
+            putFileInInput(pair.input, compressedFiles[index]);
+          });
+        }
+        uploadPhotoForm.dataset.compressionReady = '1';
+        uploadPhotoForm.dataset.compressing = '0';
+        showPageLoading('Sedang mengunggah dan menyimpan foto...');
+        uploadPhotoForm.requestSubmit();
+      } catch (error) {
+        uploadPhotoForm.dataset.compressing = '0';
+        updateSavePhotoButton();
+        hidePageLoading();
+        alert(error.message || 'Gagal mengompres foto.');
+      }
+    });
+  }
+
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      window.setTimeout(function () {
+        if (!event.defaultPrevented) {
+          var message = form.querySelector('[name="delete_bale_upload"], [name="delete_selected_uploads"]')
+            ? 'Sedang menghapus data...'
+            : 'Sedang memproses data...';
+          showPageLoading(message);
+        }
+      }, 0);
+    });
+  });
+
+  function goToDetail() {
+    if (selectedHdId > 0) {
+      showPageLoading('Sedang memuat Sheet Detail...');
+      window.location.href = 'pengebalan.php?wrhsid=' + encodeURIComponent(selectedWrhsid) + '&start_date=' + encodeURIComponent(startDate) + '&end_date=' + encodeURIComponent(endDate) + '&tab=detail&hdid=' + encodeURIComponent(selectedHdId);
+      return false;
+    }
+
+    var checkedBalehdids = [];
+    document.querySelectorAll('.bale-check:checked').forEach(function (checkbox) {
+      var checkboxGroup = [];
+      try {
+        checkboxGroup = JSON.parse(checkbox.getAttribute('data-group-balehdids') || '[]');
+      } catch (error) {
+        checkboxGroup = [];
+      }
+      if (!checkboxGroup.length) {
+        checkboxGroup = [checkbox.getAttribute('data-balehdid') || ''];
+      }
+      checkboxGroup.forEach(function (balehdid) {
+        if (balehdid && checkedBalehdids.indexOf(balehdid) === -1) {
+          checkedBalehdids.push(balehdid);
+        }
+      });
+    });
+    if (!checkedBalehdids.length) {
+      alert('Pilih 1 data dulu dari sheet list.');
+      return false;
+    }
+
+    var url = 'pengebalan.php?wrhsid=' + encodeURIComponent(selectedWrhsid) + '&start_date=' + encodeURIComponent(startDate) + '&end_date=' + encodeURIComponent(endDate) + '&tab=detail&selected_balehdids=' + encodeURIComponent(checkedBalehdids.join(','));
+    showPageLoading('Sedang memuat Sheet Detail...');
+    window.location.href = url;
+    return false;
+  }
+
+  if (openDetailBtn) {
+    openDetailBtn.addEventListener('click', goToDetail);
+  }
+
+  if (detailTabLink) {
+    detailTabLink.addEventListener('click', function (event) {
+      if (goToDetail() !== false) {
+        return;
+      }
+      event.preventDefault();
+    });
+  }
+
+  var deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+  var deleteSelectedForm = document.getElementById('deleteSelectedForm');
+  var deleteSelectedInputs = document.getElementById('deleteSelectedInputs');
+
+  function checkedRowBalehdids() {
+    var balehdids = [];
+    document.querySelectorAll('.bale-check:checked').forEach(function (checkbox) {
+      var balehdid = checkbox.getAttribute('data-balehdid') || '';
+      if (balehdid && balehdids.indexOf(balehdid) === -1) {
+        balehdids.push(balehdid);
+      }
+    });
+    return balehdids;
+  }
+
+  function updateDeleteSelectedButton() {
+    if (deleteSelectedBtn) {
+      deleteSelectedBtn.disabled = checkedRowBalehdids().length === 0;
+    }
+  }
+
+  if (deleteSelectedBtn && deleteSelectedForm && deleteSelectedInputs) {
+    deleteSelectedBtn.addEventListener('click', function () {
+      var balehdids = checkedRowBalehdids();
+      if (!balehdids.length) {
+        alert('Pilih minimal satu data bale.');
+        return;
+      }
+      if (!confirm('Hapus ' + balehdids.length + ' data bale yang dicentang?')) {
+        return;
+      }
+      deleteSelectedInputs.innerHTML = '';
+      balehdids.forEach(function (balehdid) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'delete_balehdids[]';
+        input.value = balehdid;
+        deleteSelectedInputs.appendChild(input);
+      });
+      deleteSelectedForm.requestSubmit();
+    });
+  }
+
+  document.querySelectorAll('.bale-check').forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+      var groupBalehdids = [];
+      try {
+        groupBalehdids = JSON.parse(checkbox.getAttribute('data-group-balehdids') || '[]');
+      } catch (error) {
+        groupBalehdids = [checkbox.getAttribute('data-balehdid') || ''];
+      }
+      document.querySelectorAll('.bale-check').forEach(function (groupCheckbox) {
+        if (groupBalehdids.indexOf(groupCheckbox.getAttribute('data-balehdid') || '') !== -1) {
+          groupCheckbox.checked = checkbox.checked;
+        }
+      });
+      updateDeleteSelectedButton();
+    });
+  });
+  updateDeleteSelectedButton();
+
+  document.querySelectorAll('.btn-upload').forEach(function (button) {
+    button.addEventListener('click', function () {
+      resetPhotoInputs();
+      var balehdid = button.getAttribute('data-balehdid') || '';
+      var baleprodid = button.getAttribute('data-baleprodid') || '';
+      var returnTab = button.getAttribute('data-return-tab') || 'detail';
+      document.getElementById('uploadMode').value = 'bale';
+      document.getElementById('uploadHdid').value = '';
+      document.getElementById('uploadBalehdid').value = balehdid;
+      document.getElementById('uploadBaleprodid').value = baleprodid;
+      document.getElementById('uploadBalehdids').value = balehdid;
+      document.getElementById('returnTab').value = returnTab;
+      document.getElementById('returnSelectedBalehdid').value = balehdid;
+      document.getElementById('returnSelectedBaleprodid').value = baleprodid;
+      showModal('uploadModal');
+    });
+  });
+
+  document.querySelectorAll('.btn-upload-sheet').forEach(function (button) {
+    button.addEventListener('click', function () {
+      resetPhotoInputs();
+      document.getElementById('uploadMode').value = 'sheet';
+      document.getElementById('uploadHdid').value = button.getAttribute('data-hdid') || '';
+      document.getElementById('uploadBalehdid').value = '';
+      document.getElementById('uploadBaleprodid').value = '';
+      document.getElementById('uploadBalehdids').value = '';
+      document.getElementById('returnTab').value = 'detail';
+      document.getElementById('returnSelectedBalehdid').value = '';
+      document.getElementById('returnSelectedBaleprodid').value = '';
+      showModal('uploadModal');
+    });
+  });
+
+  document.querySelectorAll('.btn-upload-draft, .btn-upload-group').forEach(function (button) {
+    button.addEventListener('click', function () {
+      resetPhotoInputs();
+      document.getElementById('uploadMode').value = button.classList.contains('btn-upload-draft') ? 'draft' : 'group';
+      document.getElementById('uploadHdid').value = '';
+      document.getElementById('uploadBalehdid').value = '';
+      document.getElementById('uploadBaleprodid').value = '';
+      document.getElementById('uploadBalehdids').value = button.getAttribute('data-balehdids') || '';
+      document.getElementById('returnTab').value = 'detail';
+      document.getElementById('returnSelectedBalehdid').value = '';
+      document.getElementById('returnSelectedBaleprodid').value = '';
+      showModal('uploadModal');
+    });
+  });
+
+  function showModal(modalId) {
+    // Bootstrap 4/AdminLTE memakai jQuery. Cek dulu agar tidak muncul "$ is not defined".
+    if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.modal === 'function') {
+      window.jQuery('#' + modalId).modal('show');
+      return;
+    }
+
+    console.error('Bootstrap/jQuery belum termuat. Pastikan jquery.min.js dan bootstrap.bundle.min.js dimuat sebelum script halaman.');
+    alert('Komponen modal belum siap. Cek pemanggilan jQuery/Bootstrap pada header/footer.');
+  }
+
+  var selectedBales = {};
+  var newBaleRows = document.getElementById('newBaleRows');
+  var newBaleSearch = document.getElementById('newBaleSearch');
+  var selectedBaleInputs = document.getElementById('selectedBaleInputs');
+  var checkAllNewBales = document.getElementById('checkAllNewBales');
+  var openNewModalBtn = document.getElementById('openNewModalBtn');
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"]/g, function (char) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[char];
+    });
+  }
+
+  function syncSelectedInputs() {
+    if (!selectedBaleInputs) {
+      return;
+    }
+    selectedBaleInputs.innerHTML = Object.keys(selectedBales).map(function (balehdid) {
+      return '<input type="hidden" name="selected_balehdids[]" value="' + escapeHtml(balehdid) + '">';
+    }).join('');
+  }
+
+  function renderNewBales(rows) {
+    if (!newBaleRows) {
+      return;
+    }
+    if (!rows.length) {
+      newBaleRows.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Data kosong</td></tr>';
+      return;
+    }
+
+    newBaleRows.innerHTML = rows.map(function (row) {
+      var balehdid = String(row.balehdid || '');
+      return '<tr>' +
+        '<td class="text-center align-middle"><input type="checkbox" class="new-bale-row" value="' + escapeHtml(balehdid) + '"' + (selectedBales[balehdid] ? ' checked' : '') + '></td>' +
+        '<td>' + escapeHtml(row.balenmbr) + '</td>' +
+        '<td>' + escapeHtml(row.refnmbr) + '</td>' +
+        '<td>' + escapeHtml(row.baledate) + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function loadNewBales(searchValue) {
+    if (!newBaleRows) {
+      return;
+    }
+
+    var q = typeof searchValue === 'string' ? searchValue.trim() : '';
+    newBaleRows.innerHTML = '<tr><td colspan="4" class="py-3"><div class="text-center text-muted mb-2"><i class="fas fa-spinner fa-spin mr-1"></i> Sedang memuat data bale...</div><div class="progress" style="height:8px;"><div class="progress-bar progress-bar-striped progress-bar-animated loading-progress-bar"></div></div></td></tr>';
+
+    var params = new URLSearchParams({
+      ajax_search_bales: '1',
+      wrhsid: selectedWrhsid,
+      q: q
+    });
+
+    fetch('search_pengebalan_bales.php?' + params.toString(), {
+      method: 'GET',
+      headers: {'Accept': 'application/json'},
+      cache: 'no-store'
+    })
+    .then(function (response) {
+      return response.json().catch(function () {
+        throw new Error('Respons server bukan JSON (HTTP ' + response.status + ')');
+      }).then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.message || ('HTTP ' + response.status));
+        }
+        return data;
+      });
+    })
+    .then(function (response) {
+      if (!response || response.status !== 'success') {
+        throw new Error((response && response.message) || 'Response tidak valid');
+      }
+      renderNewBales(response.rows || []);
+    })
+    .catch(function (error) {
+      console.error(error);
+      newBaleRows.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Gagal load data: ' + escapeHtml(error.message) + '</td></tr>';
+    });
+  }
+
+  // Saat klik New: hanya ambil TOP 10, tanpa search.
+  if (openNewModalBtn) {
+    openNewModalBtn.addEventListener('click', function () {
+      if (newBaleSearch) {
+        newBaleSearch.value = '';
+      }
+      loadNewBales('');
+    });
+  }
+
+  // Search TIDAK jalan setiap mengetik. Hanya saat Enter.
+  if (newBaleSearch) {
+    newBaleSearch.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      loadNewBales(newBaleSearch.value);
+    });
+  }
+
+  if (newBaleRows) {
+    newBaleRows.addEventListener('change', function (event) {
+      if (!event.target.classList.contains('new-bale-row')) {
+        return;
+      }
+      if (event.target.checked) {
+        selectedBales[event.target.value] = true;
+      } else {
+        delete selectedBales[event.target.value];
+      }
+      syncSelectedInputs();
+    });
+  }
+
+  if (checkAllNewBales) {
+    checkAllNewBales.addEventListener('change', function () {
+      document.querySelectorAll('.new-bale-row').forEach(function (checkbox) {
+        checkbox.checked = checkAllNewBales.checked;
+        if (checkbox.checked) {
+          selectedBales[checkbox.value] = true;
+        } else {
+          delete selectedBales[checkbox.value];
+        }
+      });
+      syncSelectedInputs();
+    });
+  }
+})();
+</script>
+<?php include '../../../includes/footer.php'; ?>
+</body>
+</html>

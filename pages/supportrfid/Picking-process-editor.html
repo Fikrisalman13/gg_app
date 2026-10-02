@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Editor Picking Process (test_update.picking_process)</title>
+  <style>
+    :root{font-family:system-ui,Segoe UI,Roboto,Arial}
+    body{margin:18px;background:#f5f7fb;color:#0b1724}
+    .card{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:10px;box-shadow:0 8px 30px rgba(11,23,36,0.06)}
+    h1{font-size:20px;margin:0 0 10px}
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+    input,select,button,textarea{padding:8px;border-radius:6px;border:1px solid #e2e8f0}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:8px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:middle}
+    th{background:#fbfdff;font-weight:600}
+    .small{font-size:13px}
+    .muted{color:#5b6b76}
+    .btn{cursor:pointer}
+    .ok{color:green}
+    .err{color:#b00020}
+    .actions button{margin-right:6px}
+    pre{background:#f7f9fb;padding:10px;border-radius:6px;overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Editor Picking Process — <span class="muted">test_update.picking_process</span></h1>
+    <p class="small muted">Halaman front-end untuk melihat, menambah, mengedit, dan menghapus dokumen pada koleksi <code>picking_process</code>. Butuh backend (Express) di <code>http://localhost:3000</code> — lihat catatan di bawah.</p>
+
+    <div class="controls">
+      <input id="q" placeholder="Filter (cari teks di field apa saja)" style="flex:1" />
+      <select id="limit"><option>10</option><option>25</option><option>50</option><option>100</option></select>
+      <button id="btnLoad" class="btn">Muat</button>
+      <div id="status" style="margin-left:auto" class="muted small">status: idle</div>
+    </div>
+
+    <div id="listWrap"></div>
+
+    <hr />
+    <h3>Tambah Dokumen Baru</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <textarea id="newJson" placeholder='Contoh: {"orderNo":"PO-001","status":"pending","items":[{"sku":"ABC","qty":2}]}' style="flex:1;min-height:80px"></textarea>
+      <div style="width:180px;display:flex;flex-direction:column;gap:8px">
+        <button id="btnAdd">Tambah</button>
+        <button id="btnClear">Kosongkan</button>
+      </div>
+    </div>
+
+    <hr />
+    <h3>Catatan & Backend</h3>
+    <ul class="small muted">
+      <li>Front-end ini <b>tidak</b> terhubung langsung ke MongoDB. Dibutuhkan backend (mis: Node.js + Express) yang mengekspos REST API.</li>
+      <li>Contoh endpoint yang dibutuhkan (asumsi base <code>http://localhost:3000</code>):
+        <pre>
+GET  /api/picking-process?limit=25&q=...      -> list dokumen (JSON)
+GET  /api/picking-process/:id                 -> ambil satu dokumen
+POST /api/picking-process                     -> tambah dokumen (body = JSON)
+PUT  /api/picking-process/:id                 -> update dokumen (body = JSON)
+DELETE /api/picking-process/:id               -> hapus dokumen
+        </pre>
+      </li>
+      <li>Pastikan backend melakukan konversi ObjectId dan mengembalikan/menerima JSON murni.</li>
+    </ul>
+
+  </div>
+
+  <script>
+    const base = 'http://localhost:3000/api/picking-process';
+    const statusEl = document.getElementById('status');
+    const listWrap = document.getElementById('listWrap');
+    const qEl = document.getElementById('q');
+    const limitEl = document.getElementById('limit');
+
+    document.getElementById('btnLoad').addEventListener('click', load);
+    document.getElementById('btnAdd').addEventListener('click', addDoc);
+    document.getElementById('btnClear').addEventListener('click', ()=> document.getElementById('newJson').value = '');
+
+    async function load(){
+      const q = qEl.value.trim();
+      const limit = limitEl.value || 25;
+      setStatus('memuat...');
+      try{
+        const url = base + '?limit='+encodeURIComponent(limit)+(q?('&q='+encodeURIComponent(q)):'');
+        const resp = await fetch(url);
+        if(!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        renderList(data);
+        setStatus('sukses: '+(data.length||0)+' dokumen');
+      }catch(e){
+        setStatus('error: '+e.message, true);
+      }
+    }
+
+    function renderList(items){
+      if(!items || !items.length){
+        listWrap.innerHTML = '<div class="muted">Tidak ada data.</div>';
+        return;
+      }
+      let html = '<table><thead><tr><th>_id</th><th>Preview (klik untuk edit)</th><th>Actions</th></tr></thead><tbody>';
+      items.forEach(it=>{
+        const id = it._id || it.id || '';
+        const preview = escapeHtml(JSON.stringify(it, null, 2));
+        html += `<tr data-id="${id}">`+
+                `<td style="font-family:monospace;max-width:220px;overflow:auto">${id}</td>`+
+                `<td><pre style="max-height:160px;overflow:auto">${preview}</pre></td>`+
+                `<td class="actions">`+
+                  `<button data-act="edit">Edit</button>`+
+                  `<button data-act="del">Hapus</button>`+
+                `</td>`+
+                `</tr>`;
+      });
+      html += '</tbody></table>';
+      listWrap.innerHTML = html;
+
+      listWrap.querySelectorAll('button[data-act]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const tr = e.target.closest('tr');
+          const id = tr.getAttribute('data-id');
+          const act = e.target.getAttribute('data-act');
+          if(act==='edit') return openEditor(id);
+          if(act==='del') return doDelete(id);
+        });
+      });
+    }
+
+    function openEditor(id){
+      // ambil dokumen lalu tampilkan editor modal sederhana
+      showModal('Memuat...');
+      fetch(base+'/'+encodeURIComponent(id)).then(r=>r.json()).then(doc=>{
+        const txt = JSON.stringify(doc, null, 2);
+        showModal('', `
+<textarea id="editJson" style="width:100%;height:260px">${escapeHtml(txt)}</textarea>
+<div style="display:flex;gap:8px;margin-top:8px"><button id="saveEdit">Simpan</button><button id="cancelEdit">Batal</button></div>
+        `);
+        document.getElementById('cancelEdit').addEventListener('click', hideModal);
+        document.getElementById('saveEdit').addEventListener('click', async ()=>{
+          try{
+            const val = document.getElementById('editJson').value;
+            const body = JSON.parse(val);
+            const resp = await fetch(base+'/'+encodeURIComponent(id), {
+              method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            if(!resp.ok) throw new Error(await resp.text());
+            hideModal(); load();
+            setStatus('update sukses');
+          }catch(e){
+            alert('Error: '+e.message);
+          }
+        });
+      }).catch(e=>{
+        hideModal(); alert('Gagal memuat dokumen: '+e.message);
+      });
+    }
+
+    async function doDelete(id){
+      if(!confirm('Hapus dokumen dengan _id='+id+' ?')) return;
+      try{
+        const resp = await fetch(base+'/'+encodeURIComponent(id), { method: 'DELETE' });
+        if(!resp.ok) throw new Error(await resp.text());
+        setStatus('hapus sukses');
+        load();
+      }catch(e){ setStatus('error: '+e.message, true); }
+    }
+
+    async function addDoc(){
+      const txt = document.getElementById('newJson').value.trim();
+      if(!txt){ alert('Isi JSON dulu'); return; }
+      try{
+        const obj = JSON.parse(txt);
+        const resp = await fetch(base, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+        if(!resp.ok) throw new Error(await resp.text());
+        document.getElementById('newJson').value='';
+        load();
+        setStatus('tambah sukses');
+      }catch(e){ alert('Error: '+e.message); }
+    }
+
+    function setStatus(t, isErr){ statusEl.textContent = 'status: '+t; statusEl.className = isErr? 'err small':'small'; }
+
+    // simple modal (no libs)
+    let modalEl;
+    function showModal(title='', html=''){
+      if(modalEl) modalEl.remove();
+      modalEl = document.createElement('div');
+      modalEl.style.position='fixed'; modalEl.style.inset='0'; modalEl.style.display='flex'; modalEl.style.alignItems='center'; modalEl.style.justifyContent='center';
+      modalEl.style.background='rgba(11,23,36,0.4)';
+      modalEl.innerHTML = `<div style="background:#fff;padding:14px;border-radius:8px;max-width:880px;width:90%"><h3 style="margin:0 0 8px">${escapeHtml(title)}</h3><div>${html}</div></div>`;
+      document.body.appendChild(modalEl);
+    }
+    function hideModal(){ if(modalEl) modalEl.remove(); modalEl=null; }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]; }); }
+
+    // load on start
+    load();
+  </script>
+</body>
+</html>

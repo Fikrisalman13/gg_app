@@ -1,0 +1,180 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login SUM Support App</title>
+  <link rel="icon" href="/gg_app/dist/img/sumlogo.png" type="image/x-icon">
+
+  <!-- Favicon & Homescreen Icon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/gg_app/dist/img/icons/icon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/gg_app/dist/img/icons/icon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/gg_app/dist/img/icons/icon-180x180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/gg_app/dist/img/icons/icon-152x152.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/gg_app/dist/img/icons/icon-120x120.png">
+  <link rel="manifest" href="/gg_app/manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Support App">
+  <meta name="msapplication-TileImage" content="/gg_app/dist/img/icons/icon-144x144.png">
+  <meta name="msapplication-TileColor" content="#007bff">
+
+  <!-- Bootstrap 4 via CDN -->
+  <link href="/gg_app/plugins/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Font Awesome (CDN) -->
+  <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/fontawesome-free/css/all.min.css">
+
+  <!-- Theme Overrides for custom colors (e.g. Navy, Indigo) -->
+  <link rel="stylesheet" href="/gg_app/pages/ticket/theme_overrides.css?v=1782118360">
+
+  <style>
+    body {
+      background-color: #f8f9fa;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background-color 0.4s ease; /* Smooth transition */
+    }
+    .btn-theme {
+      transition: all 0.4s ease !important; /* Smooth color transition */
+    }
+    .login-box {
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(131, 35, 35, 0.1);
+    }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .login-logo img {
+      width: 80px;
+    }
+    .input-group-text {
+      background-color: #f7f7f7;
+    }
+
+    /* Force Login Button Visibility for Light/White Themes */
+    body[data-theme='light'] .btn-theme,
+    body[data-theme='white'] .btn-theme {
+      background-color: #f8f9fa !important;
+      border: 2px solid #6c757d !important;
+      color: #000 !important;
+      font-weight: bold;
+    }
+    body[data-theme='light'] .btn-theme:hover,
+    body[data-theme='white'] .btn-theme:hover {
+      background-color: #e2e6ea !important;
+      border-color: #343a40 !important;
+    }
+  </style>
+</head>
+<body data-theme="danger">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="/gg_app/dist/img/sumlogo.png" alt="SUM Logo">
+    </div>
+    <h5 class="text-center mb-3">Silakan login untuk masuk</h5>
+    <form action="/gg_app/cek_login.php" method="POST" autocomplete="off">
+      <div class="form-group">
+        <label for="username">User ID</label>
+        <div class="input-group">
+          <div class="input-group-prepend">
+            <div class="input-group-text"><i class="fas fa-user"></i></div>
+          </div>
+          <input type="text" class="form-control" name="UserName" id="username" required autocomplete="username">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-group">
+          <div class="input-group-prepend">
+            <div class="input-group-text"><i class="fas fa-lock"></i></div>
+          </div>
+          <input type="password" class="form-control" name="UserPassword" id="password" required autocomplete="current-password">
+          <div class="input-group-append">
+            <button class="btn btn-outline-secondary" type="button" id="togglePassword" style="border-color: #ced4da;">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-theme btn-danger btn-block">Login</button>
+
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const togglePassword = document.querySelector('#togglePassword');
+      const password = document.querySelector('#password');
+      const usernameInput = document.querySelector('#username');
+      const body = document.body;
+      const loginBtn = document.querySelector('button[type="submit"]');
+
+      // Password Toggle
+      if (togglePassword && password) {
+        togglePassword.addEventListener('click', function() {
+          const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+          password.setAttribute('type', type);
+          const icon = this.querySelector('i');
+          icon.classList.toggle('fa-eye');
+          icon.classList.toggle('fa-eye-slash');
+        });
+      }
+
+      // AJAX Theme Switcher
+      if (usernameInput) {
+        let lastCheckedUser = "";
+        let themeTimeout = null;
+
+        const updateTheme = (username) => {
+          username = username.trim();
+          if (username && username !== lastCheckedUser) {
+            lastCheckedUser = username;
+            
+            // Clear previous timeout for debouncing
+            if (themeTimeout) clearTimeout(themeTimeout);
+            
+            themeTimeout = setTimeout(() => {
+              fetch('/gg_app/get_user_theme.php?username=' + encodeURIComponent(username))
+                .then(response => response.json())
+                .then(data => {
+                  if (data.status === 'success') {
+                    const newTheme = data.theme;
+                    body.setAttribute('data-theme', newTheme);
+                    
+                    // Update button class safely
+                    const classList = loginBtn.className.split(' ');
+                    const newClasses = classList.filter(c => !c.startsWith('btn-') || c === 'btn-block' || c === 'btn-theme');
+                    loginBtn.className = newClasses.join(' ') + ' btn-' + newTheme;
+                  }
+                })
+                .catch(err => console.error('Error fetching theme:', err));
+            }, 300); // 300ms debounce
+          }
+        };
+
+        // Listen to various events to catch autofill
+        usernameInput.addEventListener('blur', () => updateTheme(usernameInput.value));
+        usernameInput.addEventListener('input', () => updateTheme(usernameInput.value));
+        usernameInput.addEventListener('change', () => updateTheme(usernameInput.value));
+
+        // Initial check for pre-filled values (autofill on load)
+        setTimeout(() => {
+          if (usernameInput.value) {
+            updateTheme(usernameInput.value);
+          }
+        }, 500); // Wait a bit for browser autofill to kick in
+      }
+    });
+  </script>
+</body>
+</html>
+

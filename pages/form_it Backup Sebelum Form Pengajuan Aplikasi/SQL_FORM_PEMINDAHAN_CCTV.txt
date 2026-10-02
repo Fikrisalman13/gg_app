@@ -1,0 +1,70 @@
+-- SQL Script Form Pemindahan Kamera CCTV
+-- Buat tabel baru untuk simpan pengajuan pemindahan kamera CCTV
+
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Form_Pemindahan_CCTV')
+BEGIN
+    CREATE TABLE Form_Pemindahan_CCTV (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        ticket VARCHAR(50) NOT NULL UNIQUE,
+        nama_pemohon NVARCHAR(150) NOT NULL,
+        jabatan NVARCHAR(100) NULL,
+        departemen NVARCHAR(100) NULL,
+        area NVARCHAR(100) NULL,
+        tgl_pengajuan DATE NULL,
+        tanggal_pengerjaan DATE NULL,
+        lampiran_sebelum NVARCHAR(255) NULL,
+        lampiran_setelah NVARCHAR(255) NULL,
+        Opsi_deskripsi_solusi NVARCHAR(MAX) NULL,
+        status_ticket VARCHAR(30) NOT NULL DEFAULT 'Pending',
+        kategori VARCHAR(50) NOT NULL DEFAULT 'Pemindahan Kamera CCTV',
+        created_at DATETIME NOT NULL DEFAULT GETDATE(),
+        created_by NVARCHAR(150) NULL
+    );
+END
+GO
+
+CREATE INDEX IX_Form_Pemindahan_CCTV_Tgl ON Form_Pemindahan_CCTV (tgl_pengajuan);
+GO
+-- Tambah kolom deskripsi_user ke tabel Form_Pemindahan_CCTV
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'deskripsi_user') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV
+    ADD deskripsi_user NVARCHAR(MAX) NULL;
+END
+GO
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'updated_at') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV
+    ADD updated_at DATETIME NULL;
+END
+GO
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'updated_by') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV
+    ADD updated_by NVARCHAR(150) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'man_days') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV ADD man_days NVARCHAR(50) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'shortest_delivery_date') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV ADD shortest_delivery_date DATE NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'deskripsi_area') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV ADD deskripsi_area NVARCHAR(MAX) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Form_Pemindahan_CCTV', 'assigned_to') IS NULL
+BEGIN
+    ALTER TABLE dbo.Form_Pemindahan_CCTV ADD assigned_to NVARCHAR(150) NULL;
+END
+GO

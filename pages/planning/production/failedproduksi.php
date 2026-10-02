@@ -1,0 +1,881 @@
+<?php
+session_start();
+ob_start();
+date_default_timezone_set('Asia/Jakarta');
+
+$rootPath = dirname(__DIR__, 3);
+require_once $rootPath . '/koneksi3.php';
+require_once $rootPath . '/koneksi.php';
+
+function fpJsonExit(array $payload, int $statusCode = 200): void
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function fpRequireLogin(): void
+{
+    if (empty($_SESSION['UserName']) && empty($_SESSION['NamaLengkap'])) {
+        header('Location: /gg_app/login.php');
+        exit;
+    }
+}
+
+function fpText($value): string
+{
+    return trim((string)($value ?? ''));
+}
+
+function fpDateString($value): string
+{
+    if ($value instanceof DateTimeInterface) {
+        return $value->format('Y-m-d H:i:s');
+    }
+    $text = fpText($value);
+    if ($text === '') {
+        return '';
+    }
+    $timestamp = strtotime($text);
+    if ($timestamp === false) {
+        return $text;
+    }
+    return date('Y-m-d H:i:s', $timestamp);
+}
+
+function fpDateOnly($value): string
+{
+    if ($value instanceof DateTimeInterface) {
+        return $value->format('Y-m-d');
+    }
+    $text = fpText($value);
+    if ($text === '') {
+        return '';
+    }
+    $timestamp = strtotime($text);
+    if ($timestamp === false) {
+        return '';
+    }
+    return date('Y-m-d', $timestamp);
+}
+
+function fpKeepTime(string $newDate, $sourceValue): string
+{
+    $timePart = '00:00:00';
+    if ($sourceValue instanceof DateTimeInterface) {
+        $timePart = $sourceValue->format('H:i:s');
+    } else {
+        $text = fpText($sourceValue);
+        if ($text !== '') {
+            $timestamp = strtotime($text);
+            if ($timestamp !== false) {
+                $timePart = date('H:i:s', $timestamp);
+            }
+        }
+    }
+    return $newDate . ' ' . $timePart;
+}
+
+function fpResultDescShort(string $text): string
+{
+    $text = trim(preg_replace('/\s+/', ' ', $text) ?? $text);
+    if ($text === '') {
+        return '-';
+    }
+    return mb_strimwidth($text, 0, 80, '...');
+}
+
+function fpRtgHistoryInsert($conn, array $before, array $after, string $changedBy, string $changeType): void
+{
+    $sql = "INSERT INTO dbo.history_productionrtg
+        (productionrtgid, productionhdid, prdnmbr, prddate, rtgmsid, rtgmsname,
+         old_resultdesc, new_resultdesc,
+         old_startdate, old_starttime, old_enddate, old_endtime,
+         new_startdate, new_starttime, new_enddate, new_endtime,
+         change_type, changed_by, changed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
+
+    $params = [
+        $after['productionrtgid'] ?? $before['productionrtgid'] ?? null,
+        $after['productionhdid'] ?? $before['productionhdid'] ?? null,
+        $after['prdnmbr'] ?? $before['prdnmbr'] ?? null,
+        $after['prddate'] ?? $before['prddate'] ?? null,
+        $after['rtgmsid'] ?? $before['rtgmsid'] ?? null,
+        $after['rtgmsname'] ?? $before['rtgmsname'] ?? null,
+        $before['resultdesc'] ?? null,
+        $after['resultdesc'] ?? null,
+        $before['startdate'] ?? null,
+        $before['starttime'] ?? null,
+        $before['enddate'] ?? null,
+        $before['endtime'] ?? null,
+        $after['startdate'] ?? null,
+        $after['starttime'] ?? null,
+        $after['enddate'] ?? null,
+        $after['endtime'] ?? null,
+        $changeType,
+        $changedBy,
+    ];
+
+    $stmt = sqlsrv_query($conn, $sql, $params);
+    if ($stmt === false) {
+        throw new RuntimeException(print_r(sqlsrv_errors(), true));
+    }
+    sqlsrv_free_stmt($stmt);
+}
+function fpFetchLastUpdateHistory($conn, int $productionRtgId): array
+{
+    $sql = "SELECT TOP 1 old_startdate, old_starttime, old_enddate, old_endtime
+        FROM dbo.history_productionrtg
+        WHERE productionrtgid = ? AND change_type = 'updatedate'
+        ORDER BY changed_at DESC";
+    $stmt = sqlsrv_query($conn, $sql, [$productionRtgId]);
+    if ($stmt === false) {
+        throw new RuntimeException(print_r(sqlsrv_errors(), true));
+    }
+    $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+    sqlsrv_free_stmt($stmt);
+    return $row ?: [];
+}
+
+function fpFetchRow(PDO $conn3, int $productionRtgId): array
+{
+    $sql = "SELECT
+                r.productionrtgid,
+                r.productionhdid,
+                h.prdnmbr,
+                h.prddate,
+                r.rtgseq,
+                r.rtgmsid,
+                m.rtgname AS rtgmsname,
+                COALESCE(r.resultdesc, '') AS resultdesc,
+                r.startdate,
+                r.starttime,
+                r.enddate,
+                r.endtime,
+                r.upddate,
+                r.upduser
+            FROM pdproductionrtg r
+            INNER JOIN pdproductionhd h ON h.productionhdid = r.productionhdid
+            LEFT JOIN pdrtgms m ON m.rtgmsid = r.rtgmsid
+            WHERE r.productionrtgid = :id
+            LIMIT 1";
+    $stmt = $conn3->prepare($sql);
+    $stmt->execute([':id' => $productionRtgId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: [];
+}
+
+function fpSearchRows(PDO $conn3, string $prdnmbr, string $rtgmsname, int $page = 1, int $pageSize = 10): array
+{
+    $page = max(1, $page);
+    $pageSize = max(1, $pageSize);
+    $where = ["COALESCE(r.fgresult, '') = 'F'", "r.failmsid IS NOT NULL", "r.failmsid <> 0"];
+    $params = [];
+
+
+    if ($prdnmbr !== '') {
+        $where[] = "UPPER(TRIM(CAST(h.prdnmbr AS TEXT))) LIKE :prdnmbr";
+        $params[':prdnmbr'] = '%' . mb_strtoupper($prdnmbr) . '%';
+    }
+    if ($rtgmsname !== '') {
+        $where[] = "UPPER(TRIM(COALESCE(m.rtgname, ''))) LIKE :rtgmsname";
+        $params[':rtgmsname'] = '%' . mb_strtoupper($rtgmsname) . '%';
+    }
+
+    $baseSql = "FROM pdproductionrtg r
+            INNER JOIN pdproductionhd h ON h.productionhdid = r.productionhdid
+            LEFT JOIN pdrtgms m ON m.rtgmsid = r.rtgmsid
+            WHERE " . implode(' AND ', $where);
+
+    $countStmt = $conn3->prepare("SELECT COUNT(*) AS total_rows " . $baseSql);
+    $countStmt->execute($params);
+    $totalRows = (int)($countStmt->fetchColumn() ?: 0);
+    $totalPages = $totalRows > 0 ? (int)ceil($totalRows / $pageSize) : 0;
+    $offset = ($page - 1) * $pageSize;
+
+    $sql = "SELECT
+                r.productionrtgid,
+                r.productionhdid,
+                h.prdnmbr,
+                h.prddate,
+                r.rtgseq,
+                r.rtgmsid,
+                m.rtgname AS rtgmsname,
+                COALESCE(r.resultdesc, '') AS resultdesc,
+                r.startdate,
+                r.starttime,
+                r.enddate,
+                r.endtime,
+                r.upddate,
+                r.upduser
+            " . $baseSql . "
+            ORDER BY r.rtgseq DESC NULLS LAST, h.prddate DESC NULLS LAST, h.prdnmbr DESC, r.productionrtgid DESC
+            LIMIT " . (int)$pageSize . " OFFSET " . (int)$offset;
+
+    $stmt = $conn3->prepare($sql);
+    $stmt->execute($params);
+    return [
+        'rows' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
+        'totalRows' => $totalRows,
+        'page' => $page,
+        'pageSize' => $pageSize,
+        'totalPages' => $totalPages,
+    ];
+}
+
+function fpNormalizeDateForUpdate($value): string
+{
+    $text = fpText($value);
+    if ($text === '') {
+        return date('Y-m-d 00:00:00');
+    }
+    $timestamp = strtotime($text);
+    if ($timestamp === false) {
+        return date('Y-m-d 00:00:00');
+    }
+    return date('Y-m-d H:i:s', $timestamp);
+}
+
+function fpNullableDateForUpdate($value): ?string
+{
+    if ($value instanceof DateTimeInterface) {
+        return $value->format('Y-m-d H:i:s');
+    }
+    $text = fpText($value);
+    if ($text === '') {
+        return null;
+    }
+    $timestamp = strtotime($text);
+    if ($timestamp === false) {
+        return null;
+    }
+    return date('Y-m-d H:i:s', $timestamp);
+}
+
+fpRequireLogin();
+
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+if ($action !== '') {
+    try {
+        if ($action === 'search') {
+            $result = fpSearchRows(
+                $conn3,
+                fpText($_POST['prdnmbr'] ?? $_GET['prdnmbr'] ?? ''),
+                fpText($_POST['rtgmsname'] ?? $_GET['rtgmsname'] ?? ''),
+                (int)($_POST['page'] ?? $_GET['page'] ?? 1),
+                10
+            );
+
+            $data = [];
+            foreach ($result['rows'] as $row) {
+                $data[] = [
+                    'productionrtgid' => (int)($row['productionrtgid'] ?? 0),
+                    'productionhdid' => (int)($row['productionhdid'] ?? 0),
+                    'prdnmbr' => fpText($row['prdnmbr'] ?? ''),
+                    'prddate' => fpDateString($row['prddate'] ?? ''),
+                    'rtgseq' => (int)($row['rtgseq'] ?? 0),
+                    'rtgmsid' => (int)($row['rtgmsid'] ?? 0),
+                    'rtgmsname' => fpText($row['rtgmsname'] ?? ''),
+                    'resultdesc' => fpText($row['resultdesc'] ?? ''),
+                    'startdate' => fpDateString($row['startdate'] ?? ''),
+                    'starttime' => fpDateString($row['starttime'] ?? ''),
+                    'enddate' => fpDateString($row['enddate'] ?? ''),
+                    'endtime' => fpDateString($row['endtime'] ?? ''),
+                    'upddate' => fpDateString($row['upddate'] ?? ''),
+                    'upduser' => fpText($row['upduser'] ?? ''),
+                ];
+            }
+            fpJsonExit([
+                'success' => true,
+                'data' => $data,
+                'page' => (int)$result['page'],
+                'pageSize' => (int)$result['pageSize'],
+                'totalRows' => (int)$result['totalRows'],
+                'totalPages' => (int)$result['totalPages'],
+            ]);
+        }
+
+        if ($action === 'load') {
+            $productionRtgId = (int)($_GET['productionrtgid'] ?? $_POST['productionrtgid'] ?? 0);
+            if ($productionRtgId <= 0) {
+                fpJsonExit(['success' => false, 'message' => 'productionrtgid tidak valid.'], 400);
+            }
+            $row = fpFetchRow($conn3, $productionRtgId);
+            if (!$row) {
+                fpJsonExit(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);
+            }
+            fpJsonExit([
+                'success' => true,
+                'data' => [
+                    'productionrtgid' => (int)($row['productionrtgid'] ?? 0),
+                    'productionhdid' => (int)($row['productionhdid'] ?? 0),
+                    'prdnmbr' => fpText($row['prdnmbr'] ?? ''),
+                    'prddate' => fpDateString($row['prddate'] ?? ''),
+                    'rtgseq' => (int)($row['rtgseq'] ?? 0),
+                    'rtgmsid' => (int)($row['rtgmsid'] ?? 0),
+                    'rtgmsname' => fpText($row['rtgmsname'] ?? ''),
+                    'resultdesc' => fpText($row['resultdesc'] ?? ''),
+                    'startdate' => fpDateString($row['startdate'] ?? ''),
+                    'starttime' => fpDateString($row['starttime'] ?? ''),
+                    'enddate' => fpDateString($row['enddate'] ?? ''),
+                    'endtime' => fpDateString($row['endtime'] ?? ''),
+                ],
+            ]);
+        }
+
+        if ($action === 'save') {
+            $productionRtgId = (int)($_POST['productionrtgid'] ?? 0);
+            $resultDesc = trim((string)($_POST['resultdesc'] ?? ''));
+            $changedBy = $_SESSION['UserName'] ?? ($_SESSION['NamaLengkap'] ?? 'System');
+
+            if ($productionRtgId <= 0) {
+                fpJsonExit(['success' => false, 'message' => 'productionrtgid tidak valid.'], 400);
+            }
+
+            $before = fpFetchRow($conn3, $productionRtgId);
+            if (!$before) {
+                fpJsonExit(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);
+            }
+
+            $after = $before;
+            $after['resultdesc'] = $resultDesc;
+            $after['upddate'] = date('Y-m-d H:i:s');
+            $after['upduser'] = $changedBy;
+
+            sqlsrv_begin_transaction($conn);
+            $conn3->beginTransaction();
+            try {
+                fpRtgHistoryInsert($conn, $before, $after, $changedBy, 'resultdesc');
+
+                $stmt = $conn3->prepare("UPDATE pdproductionrtg SET resultdesc = :resultdesc, upddate = NOW(), upduser = :upduser WHERE productionrtgid = :id");
+                $stmt->execute([
+                    ':resultdesc' => $resultDesc,
+                    ':upduser' => $changedBy,
+                    ':id' => $productionRtgId,
+                ]);
+
+                $conn3->commit();
+                sqlsrv_commit($conn);
+                fpJsonExit(['success' => true, 'message' => 'Result desc berhasil disimpan.']);
+            } catch (Throwable $e) {
+                if ($conn3->inTransaction()) {
+                    $conn3->rollBack();
+                }
+                @sqlsrv_rollback($conn);
+                fpJsonExit(['success' => false, 'message' => 'Gagal simpan: ' . $e->getMessage()], 500);
+            }
+        }
+
+        if ($action === 'updatedate') {
+            $productionRtgId = (int)($_POST['productionrtgid'] ?? 0);
+            $changedBy = $_SESSION['UserName'] ?? ($_SESSION['NamaLengkap'] ?? 'System');
+            if ($productionRtgId <= 0) {
+                fpJsonExit(['success' => false, 'message' => 'productionrtgid tidak valid.'], 400);
+            }
+
+            $before = fpFetchRow($conn3, $productionRtgId);
+            if (!$before) {
+                fpJsonExit(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);
+            }
+
+            $today = date('Y-m-d');
+            $after = $before;
+            $after['startdate'] = fpKeepTime($today, $before['startdate'] ?? $before['starttime'] ?? null);
+            $after['starttime'] = fpKeepTime($today, $before['starttime'] ?? $before['startdate'] ?? null);
+            $after['enddate'] = fpKeepTime($today, $before['enddate'] ?? $before['endtime'] ?? null);
+            $after['endtime'] = fpKeepTime($today, $before['endtime'] ?? $before['enddate'] ?? null);
+            $after['upddate'] = date('Y-m-d H:i:s');
+            $after['upduser'] = $changedBy;
+
+            sqlsrv_begin_transaction($conn);
+            $conn3->beginTransaction();
+            try {
+                fpRtgHistoryInsert($conn, $before, $after, $changedBy, 'updatedate');
+
+                $stmt = $conn3->prepare("UPDATE pdproductionrtg SET startdate = :startdate, starttime = :starttime, enddate = :enddate, endtime = :endtime, upddate = NOW(), upduser = :upduser WHERE productionrtgid = :id");
+                $stmt->execute([
+                    ':startdate' => fpNormalizeDateForUpdate($after['startdate']),
+                    ':starttime' => fpNormalizeDateForUpdate($after['starttime']),
+                    ':enddate' => fpNormalizeDateForUpdate($after['enddate']),
+                    ':endtime' => fpNormalizeDateForUpdate($after['endtime']),
+                    ':upduser' => $changedBy,
+                    ':id' => $productionRtgId,
+                ]);
+
+                $conn3->commit();
+                sqlsrv_commit($conn);
+                fpJsonExit(['success' => true, 'message' => 'Tanggal berhasil diupdate.']);
+            } catch (Throwable $e) {
+                if ($conn3->inTransaction()) {
+                    $conn3->rollBack();
+                }
+                @sqlsrv_rollback($conn);
+                fpJsonExit(['success' => false, 'message' => 'Gagal update tanggal: ' . $e->getMessage()], 500);
+            }
+        }
+
+        if ($action === 'rollbackdate') {
+            $productionRtgId = (int)($_POST['productionrtgid'] ?? 0);
+            $changedBy = $_SESSION['UserName'] ?? ($_SESSION['NamaLengkap'] ?? 'System');
+            if ($productionRtgId <= 0) {
+                fpJsonExit(['success' => false, 'message' => 'productionrtgid tidak valid.'], 400);
+            }
+
+            $before = fpFetchRow($conn3, $productionRtgId);
+            if (!$before) {
+                fpJsonExit(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);
+            }
+
+            $history = fpFetchLastUpdateHistory($conn, $productionRtgId);
+            if (!$history) {
+                fpJsonExit(['success' => false, 'message' => 'History updatedate tidak ditemukan.'], 404);
+            }
+
+            $after = $before;
+            $after['startdate'] = $history['old_startdate'] ?? null;
+            $after['starttime'] = $history['old_starttime'] ?? null;
+            $after['enddate'] = $history['old_enddate'] ?? null;
+            $after['endtime'] = $history['old_endtime'] ?? null;
+            $after['upddate'] = date('Y-m-d H:i:s');
+            $after['upduser'] = $changedBy;
+
+            sqlsrv_begin_transaction($conn);
+            $conn3->beginTransaction();
+            try {
+                fpRtgHistoryInsert($conn, $before, $after, $changedBy, 'rollback');
+
+                $stmt = $conn3->prepare("UPDATE pdproductionrtg SET startdate = :startdate, starttime = :starttime, enddate = :enddate, endtime = :endtime, upddate = NOW(), upduser = :upduser WHERE productionrtgid = :id");
+                $stmt->execute([
+                    ':startdate' => fpNullableDateForUpdate($after['startdate']),
+                    ':starttime' => fpNullableDateForUpdate($after['starttime']),
+                    ':enddate' => fpNullableDateForUpdate($after['enddate']),
+                    ':endtime' => fpNullableDateForUpdate($after['endtime']),
+                    ':upduser' => $changedBy,
+                    ':id' => $productionRtgId,
+                ]);
+
+                $conn3->commit();
+                sqlsrv_commit($conn);
+                fpJsonExit(['success' => true, 'message' => 'Tanggal berhasil di-rollback.']);
+            } catch (Throwable $e) {
+                if ($conn3->inTransaction()) {
+                    $conn3->rollBack();
+                }
+                @sqlsrv_rollback($conn);
+                fpJsonExit(['success' => false, 'message' => 'Gagal rollback tanggal: ' . $e->getMessage()], 500);
+            }
+        }
+        fpJsonExit(['success' => false, 'message' => 'Action tidak dikenal.'], 400);
+    } catch (Throwable $e) {
+        fpJsonExit(['success' => false, 'message' => $e->getMessage()], 500);
+    }
+}
+
+include $rootPath . '/includes/header.php';
+include $rootPath . '/includes/sidebar.php';
+?>
+<style>
+    .fp-card {
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+    .fp-filter-label {
+        font-size: .82rem;
+        font-weight: 700;
+        color: #334155;
+        margin-bottom: .25rem;
+    }
+    .fp-table td, .fp-table th {
+        vertical-align: middle !important;
+        white-space: nowrap;
+    }
+    .fp-table td.wrap {
+        white-space: normal;
+        min-width: 220px;
+    }
+    .fp-badge {
+        font-size: .72rem;
+        padding: .35rem .55rem;
+        border-radius: 999px;
+    }
+    .fp-modal .modal-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #fff;
+    }
+    .fp-modal .modal-title {
+        font-weight: 700;
+    }
+</style>
+
+<div class="content-wrapper">
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0 text-dark">Failed Produksi</h1>
+                    <small class="text-muted">Search dan edit result fail produksi</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="content">
+        <div class="container-fluid">
+            <div class="card fp-card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label class="fp-filter-label">Search by CP No</label>
+                            <input type="text" id="searchPrdNmbr" class="form-control form-control-sm" placeholder="pdproductionhd.prdnmbr">
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="fp-filter-label">Search by RTG Name</label>
+                            <input type="text" id="searchRtgMsName" class="form-control form-control-sm" placeholder="rtgmsname">
+                        </div>
+                        <div class="col-md-4 mb-2 d-flex align-items-end gap-2">
+                            <button type="button" id="btnSearch" class="btn btn-primary btn-sm mr-2"><i class="fas fa-search"></i> Search</button>
+                            <button type="button" id="btnReset" class="btn btn-outline-secondary btn-sm"><i class="fas fa-undo"></i> Reset</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card fp-card">
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-bordered table-striped table-hover mb-0 fp-table" id="fpTable">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th style="width:60px;">No</th>
+                                <th>RTG Seq</th>
+                                <th>CP No</th>
+                                <th>CP Date</th>
+                                <th>RTG Name</th>
+                                <th>Result Desc</th>
+                                <th>Start Date</th>
+                                <th>Start Time</th>
+                                <th>End Date</th>
+                                <th>End Time</th>
+                                <th style="width:160px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fpTableBody">
+                            <tr><td colspan="11" class="text-center text-muted py-4">Gunakan Search.</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="px-3 pb-3 pt-2 d-flex justify-content-end">
+                        <nav aria-label="Failed produksi pagination">
+                            <ul class="pagination pagination-sm mb-0" id="fpPagination"></ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade fp-modal" id="editModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Failed Produksi</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editProductionRtgId">
+                <div class="row mb-2">
+                    <div class="col-md-4">
+                        <label class="fp-filter-label">CP No</label>
+                        <input type="text" id="editPrdnmbr" class="form-control form-control-sm" readonly>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="fp-filter-label">RTG Name</label>
+                        <input type="text" id="editRtgName" class="form-control form-control-sm" readonly>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="fp-filter-label">CP Date</label>
+                        <input type="text" id="editPrdDate" class="form-control form-control-sm" readonly>
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-6">
+                        <label class="fp-filter-label">Start Date</label>
+                        <input type="text" id="editStartDate" class="form-control form-control-sm" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fp-filter-label">End Date</label>
+                        <input type="text" id="editEndDate" class="form-control form-control-sm" readonly>
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-12">
+                        <label class="fp-filter-label">Result Desc</label>
+                        <textarea id="editResultDesc" class="form-control" rows="5" placeholder="Isi result desc"></textarea>
+                    </div>
+                </div>
+                <div class="alert alert-light border mb-0 small text-muted" id="editInfoText">-</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Tutup</button>
+                <button type="button" class="btn btn-danger" id="btnRollbackDate"><i class="fas fa-history"></i> Rollback</button>
+                <button type="button" class="btn btn-primary" id="btnSaveResultDesc"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php include $rootPath . '/includes/footer.php'; ?>
+<script>
+(function () {
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderPagination(page, totalPages) {
+        var html = '';
+        if (!totalPages || totalPages <= 1) {
+            $('#fpPagination').html('');
+            return;
+        }
+
+        var prevDisabled = page <= 1 ? ' disabled' : '';
+        var nextDisabled = page >= totalPages ? ' disabled' : '';
+        html += '<li class="page-item' + prevDisabled + '"><a class="page-link fp-page-link" href="#" data-page="' + (page - 1) + '">Previous</a></li>';
+
+        var startPage = Math.max(1, page - 2);
+        var endPage = Math.min(totalPages, page + 2);
+        if (startPage > 1) {
+            html += '<li class="page-item"><a class="page-link fp-page-link" href="#" data-page="1">1</a></li>';
+            if (startPage > 2) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+
+        for (var index = startPage; index <= endPage; index++) {
+            html += '<li class="page-item' + (index === page ? ' active' : '') + '"><a class="page-link fp-page-link" href="#" data-page="' + index + '">' + index + '</a></li>';
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+            html += '<li class="page-item"><a class="page-link fp-page-link" href="#" data-page="' + totalPages + '">' + totalPages + '</a></li>';
+        }
+
+        html += '<li class="page-item' + nextDisabled + '"><a class="page-link fp-page-link" href="#" data-page="' + (page + 1) + '">Next</a></li>';
+        $('#fpPagination').html(html);
+    }
+
+    function loadRows(page) {
+        currentPage = page || 1;
+        $('#fpTableBody').html('<tr><td colspan="11" class="text-center text-muted py-4">Loading...</td></tr>');
+        $.ajax({
+            url: 'failedproduksi.php?action=search',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                prdnmbr: $('#searchPrdNmbr').val(),
+                rtgmsname: $('#searchRtgMsName').val(),
+                page: currentPage
+            },
+            success: function (resp) {
+                if (!resp || !resp.success) {
+                    $('#fpTableBody').html('<tr><td colspan="11" class="text-center text-danger py-4">' + escapeHtml((resp && resp.message) ? resp.message : 'Gagal memuat data') + '</td></tr>');
+                    $('#fpPagination').html('');
+                    return;
+                }
+
+                var rows = resp.data || [];
+                var totalPages = parseInt(resp.totalPages || 0, 10);
+                currentPage = parseInt(resp.page || currentPage, 10);
+                pageSize = parseInt(resp.pageSize || pageSize, 10);
+
+                if (!rows.length) {
+                    $('#fpTableBody').html('<tr><td colspan="11" class="text-center text-muted py-4">Data tidak ditemukan.</td></tr>');
+                    $('#fpPagination').html('');
+                    return;
+                }
+
+                var html = '';
+                rows.forEach(function (row, index) {
+                    html += '<tr>' +
+                        '<td>' + (((currentPage - 1) * pageSize) + index + 1) + '</td>' +
+                        '<td>' + escapeHtml(row.rtgseq) + '</td>' +
+                        '<td>' + escapeHtml(row.prdnmbr) + '</td>' +
+                        '<td>' + escapeHtml(row.prddate) + '</td>' +
+                        '<td>' + escapeHtml(row.rtgmsname) + '</td>' +
+                        '<td class="wrap">' + escapeHtml(row.resultdesc) + '</td>' +
+                        '<td>' + escapeHtml(row.startdate) + '</td>' +
+                        '<td>' + escapeHtml(row.starttime) + '</td>' +
+                        '<td>' + escapeHtml(row.enddate) + '</td>' +
+                        '<td>' + escapeHtml(row.endtime) + '</td>' +
+                        '<td>' +
+                            '<button type="button" class="btn btn-sm btn-outline-primary btn-edit-row mr-1" data-id="' + row.productionrtgid + '"><i class="fas fa-edit"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-warning btn-update-date-row" data-id="' + row.productionrtgid + '"><i class="fas fa-calendar-day"></i></button>' +
+                        '</td>' +
+                    '</tr>';
+                });
+                $('#fpTableBody').html(html);
+                renderPagination(currentPage, totalPages);
+            },
+            error: function () {
+                $('#fpTableBody').html('<tr><td colspan="11" class="text-center text-danger py-4">Gagal memuat data.</td></tr>');
+                $('#fpPagination').html('');
+            }
+        });
+    }
+
+    function openEditModal(id) {
+        $.getJSON('failedproduksi.php?action=load&productionrtgid=' + encodeURIComponent(id), function (resp) {
+            if (!resp || !resp.success) {
+                alert((resp && resp.message) ? resp.message : 'Data tidak ditemukan');
+                return;
+            }
+            var data = resp.data || {};
+            $('#editProductionRtgId').val(data.productionrtgid || '');
+            $('#editPrdnmbr').val(data.prdnmbr || '');
+            $('#editRtgName').val(data.rtgmsname || '');
+            $('#editPrdDate').val(data.prddate || '');
+            $('#editStartDate').val(data.startdate || '');
+            $('#editEndDate').val(data.enddate || '');
+            $('#editResultDesc').val(data.resultdesc || '');
+            $('#editInfoText').text('Start/End time tetap nilai lama. Simpan untuk update result desc atau tekan Updatedate.');
+            $('#editModal').modal('show');
+        }).fail(function () {
+            alert('Gagal ambil data');
+        });
+    }
+
+    function saveResultDesc() {
+        var id = $('#editProductionRtgId').val();
+        if (!id) {
+            alert('Data belum dipilih');
+            return;
+        }
+        $.ajax({
+            url: 'failedproduksi.php?action=save',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                productionrtgid: id,
+                resultdesc: $('#editResultDesc').val()
+            },
+            success: function (resp) {
+                if (!resp || !resp.success) {
+                    alert((resp && resp.message) ? resp.message : 'Gagal simpan');
+                    return;
+                }
+                $('#editModal').modal('hide');
+                loadRows(currentPage);
+            },
+            error: function (xhr) {
+                alert('Gagal simpan: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : xhr.statusText));
+            }
+        });
+    }
+
+    function updateDateById(id) {
+        if (!id) {
+            alert('Data belum dipilih');
+            return;
+        }
+        if (!confirm('Update tanggal ke hari ini dan simpan histori?')) {
+            return;
+        }
+        $.ajax({
+            url: 'failedproduksi.php?action=updatedate',
+            type: 'POST',
+            dataType: 'json',
+            data: { productionrtgid: id },
+            success: function (resp) {
+                if (!resp || !resp.success) {
+                    alert((resp && resp.message) ? resp.message : 'Gagal update tanggal');
+                    return;
+                }
+                $('#editModal').modal('hide');
+                loadRows(currentPage);
+            },
+            error: function (xhr) {
+                alert('Gagal update tanggal: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : xhr.statusText));
+            }
+        });
+    }
+
+    function updateDate() {
+        updateDateById($("#editProductionRtgId").val());
+    }
+
+    function rollbackDate() {
+        var id = $('#editProductionRtgId').val();
+        if (!id) {
+            alert('Data belum dipilih');
+            return;
+        }
+        if (!confirm('Rollback tanggal ke old date/time dan simpan histori?')) {
+            return;
+        }
+        $.ajax({
+            url: 'failedproduksi.php?action=rollbackdate',
+            type: 'POST',
+            dataType: 'json',
+            data: { productionrtgid: id },
+            success: function (resp) {
+                if (!resp || !resp.success) {
+                    alert((resp && resp.message) ? resp.message : 'Gagal rollback tanggal');
+                    return;
+                }
+                $('#editModal').modal('hide');
+                loadRows(currentPage);
+            },
+            error: function (xhr) {
+                alert('Gagal rollback tanggal: ' + (xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : xhr.statusText));
+            }
+        });
+    }
+
+    $(document).on('click', '.btn-edit-row', function () {
+        openEditModal($(this).data('id'));
+    });
+
+    $(document).on('click', '.btn-update-date-row', function () {
+        updateDateById($(this).data('id'));
+    });
+
+    $(document).on('click', '.fp-page-link', function (e) {
+        e.preventDefault();
+        var nextPage = parseInt($(this).data('page'), 10);
+        if (!nextPage || nextPage < 1) {
+            return;
+        }
+        loadRows(nextPage);
+    });
+
+    $('#btnSearch').on('click', function () {
+        loadRows(1);
+    });
+    $('#btnReset').on('click', function () {
+        $('#searchPrdNmbr').val('');
+        $('#searchRtgMsName').val('');
+        currentPage = 1;
+        pageSize = 10;
+        $('#fpTableBody').html('<tr><td colspan="11" class="text-center text-muted py-4">Gunakan Search.</td></tr>');
+        $('#fpPagination').html('');
+    });
+    $('#btnSaveResultDesc').on('click', saveResultDesc);
+    $('#btnUpdateDate').on('click', updateDate);
+    $('#btnRollbackDate').on('click', rollbackDate);
+
+})();
+</script>
+

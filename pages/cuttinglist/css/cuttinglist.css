@@ -1,0 +1,50 @@
+/* ======================================================
+   CUTTING LIST STYLE - FINAL
+====================================================== */
+
+.table-sm th,
+.table-sm td {
+    padding: 4px 6px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+/* highlight row piece */
+#tablePiece tbody tr {
+    background-color: #fff3cd;
+}
+
+#tablePiece tbody tr:hover {
+    background-color: #ffe8a1;
+}
+
+/* input cacat inline */
+#tableCacatInput input,
+#tableCacatInput select {
+    height: 26px;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+/* readonly panjang cacat */
+#tableCacatInput input[readonly] {
+    background-color: #f8f9fa;
+}
+
+/* tab active */
+.nav-tabs .nav-link.active {
+    font-weight: bold;
+    background-color: #e9ecef;
+}
+
+/* modal padding */
+#modalPiece .modal-body {
+    padding: 0.75rem 1rem;
+}
+
+/* responsive */
+@media (max-width: 768px) {
+    .modal-xl {
+        max-width: 98%;
+    }
+}

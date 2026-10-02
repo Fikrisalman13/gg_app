@@ -1,0 +1,166 @@
+<?php
+session_start();
+include '../../koneksi3.php';
+
+if (!isset($_SESSION['UserName'])) {
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
+
+// DataTables params
+$draw   = intval($_POST['draw']   ?? 1);
+$start  = intval($_POST['start']  ?? 0);
+$length = intval($_POST['length'] ?? 10);
+$searchValue = trim($_POST['search']['value'] ?? '');
+
+// Order
+$orderColIndex = intval($_POST['order'][0]['column'] ?? 0);
+$orderDir      = strtoupper($_POST['order'][0]['dir'] ?? 'ASC');
+$orderDir      = in_array($orderDir, ['ASC','DESC']) ? $orderDir : 'ASC';
+
+$columns = [
+    0 => 'a.transdestnmbr',
+    1 => 'a.transdestdate',
+    2 => 'c.wrhscode',
+    3 => 'b.prodcode',
+    4 => 'b.transinqty',
+    5 => 'b.transoutqty',
+    6 => 'e.uomname',
+    7 => 'b.upddate',
+];
+$orderCol = $columns[$orderColIndex] ?? 'b.upddate';
+
+// Custom filters
+$prodcode  = trim($_POST['prodcode']  ?? '');
+$transtype = trim($_POST['transtype'] ?? '');
+
+if ($prodcode === '') {
+    echo json_encode([
+        'draw'            => $draw,
+        'recordsTotal'    => 0,
+        'recordsFiltered' => 0,
+        'data'            => [],
+    ]);
+    exit;
+}
+
+// Build WHERE
+$whereClauses = ['b.prodcode = :prodcode'];
+$params = [':prodcode' => $prodcode];
+
+if ($transtype !== '') {
+    $whereClauses[] = 'a.transdesttype = :transtype';
+    $params[':transtype'] = $transtype;
+}
+
+// Global search filter
+if ($searchValue !== '') {
+    $whereClauses[] = "(
+        a.transdestnmbr    LIKE :search1 OR
+        d.transname        LIKE :search2 OR
+        c.wrhscode         LIKE :search3 OR
+        c.wrhsname         LIKE :search4 OR
+        b.prodcode         LIKE :search5 OR
+        b.prodname         LIKE :search6 OR
+        e.uomname          LIKE :search7 OR
+        b.upduser          LIKE :search8
+    )";
+    $searchLike = '%' . $searchValue . '%';
+    for ($i = 1; $i <= 8; $i++) {
+        $params[":search$i"] = $searchLike;
+    }
+}
+
+$whereSQL = implode(' AND ', $whereClauses);
+
+$baseJoins = "
+    FROM whtranshd AS a
+    LEFT JOIN whtransdt AS b ON a.transhdid = b.transhdid
+    LEFT JOIN whwrhs    AS c ON a.transdestwrhsid = c.wrhsid
+    LEFT JOIN whtransms AS d ON a.transdesttype = d.transcode
+    LEFT JOIN smuom     AS e ON b.transuomid = e.uomid
+    WHERE $whereSQL
+";
+
+// Count total unfiltered (prodcode + transtype only, no search)
+$countParams = [':prodcode' => $prodcode];
+$countWhere  = ['b.prodcode = :prodcode'];
+if ($transtype !== '') {
+    $countWhere[]              = 'a.transdesttype = :transtype';
+    $countParams[':transtype'] = $transtype;
+}
+$countWhereSQL = implode(' AND ', $countWhere);
+$sqlTotal = "SELECT COUNT(*) FROM whtranshd AS a
+    LEFT JOIN whtransdt AS b ON a.transhdid = b.transhdid
+    LEFT JOIN whwrhs    AS c ON a.transdestwrhsid = c.wrhsid
+    LEFT JOIN whtransms AS d ON a.transdesttype = d.transcode
+    LEFT JOIN smuom     AS e ON b.transuomid = e.uomid
+    WHERE $countWhereSQL";
+$stmtTotal = $conn3->prepare($sqlTotal);
+foreach ($countParams as $k => $v) $stmtTotal->bindValue($k, $v);
+$stmtTotal->execute();
+$recordsTotal = (int) $stmtTotal->fetchColumn();
+
+// Count filtered (with search)
+$sqlFiltered = "SELECT COUNT(*) $baseJoins";
+$stmtFiltered = $conn3->prepare($sqlFiltered);
+foreach ($params as $k => $v) $stmtFiltered->bindValue($k, $v);
+$stmtFiltered->execute();
+$recordsFiltered = (int) $stmtFiltered->fetchColumn();
+
+// Fetch paginated data
+$sqlData = "
+    SELECT
+        a.transdestnmbr AS transno,
+        a.transdestdate AS transdate,
+        a.transdesttype AS transtype,
+        d.transname,
+        c.wrhscode,
+        c.wrhsname,
+        b.prodcode,
+        b.prodname,
+        b.transinqty  AS qty_in,
+        b.transoutqty AS qty_out,
+        e.uomname,
+        b.upddate,
+        b.upduser
+    $baseJoins
+    ORDER BY $orderCol $orderDir
+    LIMIT :limit OFFSET :offset
+";
+
+$stmtData = $conn3->prepare($sqlData);
+foreach ($params as $k => $v) $stmtData->bindValue($k, $v);
+$stmtData->bindValue(':limit',  $length, PDO::PARAM_INT);
+$stmtData->bindValue(':offset', $start,  PDO::PARAM_INT);
+$stmtData->execute();
+$rows = $stmtData->fetchAll(PDO::FETCH_ASSOC);
+
+$data = [];
+$no   = $start + 1;
+foreach ($rows as $row) {
+    $transdate = $row['transdate'] ? date('d/m/Y', strtotime($row['transdate'])) : '';
+    $updDate   = $row['upddate']   ? date('d/m/Y H:i', strtotime($row['upddate'])) : '';
+    $qtyIn     = number_format((float)$row['qty_in'],  2);
+    $qtyOut    = number_format((float)$row['qty_out'], 2);
+
+    $data[] = [
+        $no++,
+        htmlspecialchars($row['transno'])   . '<br><small class="text-muted">' . htmlspecialchars($row['transname']) . '</small>',
+        $transdate,
+        htmlspecialchars($row['wrhscode'])  . '<br><small class="text-muted">' . htmlspecialchars($row['wrhsname'])  . '</small>',
+        htmlspecialchars($row['prodcode'])  . '<br><small class="text-muted">' . htmlspecialchars($row['prodname'])  . '</small>',
+        '<span class="text-right d-block">' . $qtyIn  . '</span>',
+        '<span class="text-right d-block">' . $qtyOut . '</span>',
+        htmlspecialchars($row['uomname']),
+        $updDate . '<br><small class="text-muted">' . htmlspecialchars($row['upduser']) . '</small>',
+    ];
+}
+
+header('Content-Type: application/json');
+echo json_encode([
+    'draw'            => $draw,
+    'recordsTotal'    => $recordsTotal,
+    'recordsFiltered' => $recordsFiltered,
+    'data'            => $data,
+]);

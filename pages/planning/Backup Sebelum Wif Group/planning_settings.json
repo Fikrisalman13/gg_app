@@ -1,0 +1,41 @@
+{
+    "auto_refresh": "15000",
+    "tv_mode": "scroll",
+    "tv_speed": 2,
+    "col_prefs": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": false,
+        "4": true,
+        "5": true,
+        "6": true,
+        "7": false,
+        "8": true,
+        "9": true,
+        "10": true,
+        "11": false,
+        "12": true,
+        "13": false,
+        "14": true
+    },
+    "col_order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+    ],
+    "last_updated": "2026-04-18 02:35:18",
+    "updated_by": "PADDRY1",
+    "controller_user": "IT7"
+}

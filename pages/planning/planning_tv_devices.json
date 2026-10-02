@@ -1,0 +1,144 @@
+{
+    "93b205206194ce8c": {
+        "token_hash": "6a5252919209b27d56a3a276453d90e2126c787e23436056088cf352f9f1517b",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "IT7",
+        "created_at": "2026-07-13T04:15:07+02:00",
+        "last_used_at": "2026-08-18T02:43:02+02:00",
+        "revoked_at": null
+    },
+    "481b3f2c3f6a1243": {
+        "token_hash": "fe7435915b7432f53f2c64f87427917fed540f3cb2a6c7b35accc5fc30d6954b",
+        "label": "Mozilla/5.0 (Linux; NetCast; U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94",
+        "created_by": "PD1",
+        "created_at": "2026-07-13T04:18:10+02:00",
+        "last_used_at": "2026-09-18T09:22:03+07:00",
+        "revoked_at": null
+    },
+    "967b3610cca6bf4b": {
+        "token_hash": "291f3da59dc72ff76de6552817e027ad5c06c8250bafff9c1348a2cd3e627bf7",
+        "label": "Mozilla/5.0 (Linux; NetCast; U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94",
+        "created_by": "PD2",
+        "created_at": "2026-07-18T13:28:12+02:00",
+        "last_used_at": "2026-07-29T09:57:14+02:00",
+        "revoked_at": null
+    },
+    "ebe6c15c86825164": {
+        "token_hash": "2d1225410f0efbb7f3c24934e39a72504f43e370bc36deb354f58ff4e41a537d",
+        "label": "Mozilla/5.0 (Linux; NetCast; U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94",
+        "created_by": "PD3",
+        "created_at": "2026-07-23T09:22:15+02:00",
+        "last_used_at": "2026-09-15T09:35:48+07:00",
+        "revoked_at": null
+    },
+    "3b59f327921104a6": {
+        "token_hash": "f993e0c8119dcd8be02291e731dcfbf05ce3cdceb96b1c29b41a241986f4747e",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "vpk_2",
+        "created_at": "2026-07-24T22:27:14+02:00",
+        "last_used_at": "2026-07-30T23:10:49+02:00",
+        "revoked_at": null
+    },
+    "5678a37ae7d8b388": {
+        "token_hash": "0e37438c2f4eaf72bcfc6e2d529d77404156babe24b35fa1f5b2224c63c7c8ba",
+        "label": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome",
+        "created_by": "PDR49",
+        "created_at": "2026-07-25T18:05:46+02:00",
+        "last_used_at": "2026-07-25T18:05:46+02:00",
+        "revoked_at": null
+    },
+    "1568b94ae2b0d02f": {
+        "token_hash": "c6ebaa98d7fa8df337e2f22706bbabcd374dd62839112b179b7261987e7d5ddf",
+        "label": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.",
+        "created_by": "adm_chemical",
+        "created_at": "2026-07-29T01:49:41+02:00",
+        "last_used_at": "2026-09-11T03:36:14+02:00",
+        "revoked_at": null
+    },
+    "234d66a165ae3540": {
+        "token_hash": "c3f4b61c8b4802525e3478e7dd4382f2d3144400cd4a7afc096134699b66e024",
+        "label": "Mozilla/5.0 (Linux; NetCast; U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94",
+        "created_by": "adm_lab",
+        "created_at": "2026-07-29T04:23:55+02:00",
+        "last_used_at": "2026-08-20T10:07:04+07:00",
+        "revoked_at": null
+    },
+    "1288deef246b22bc": {
+        "token_hash": "dea5e645c92f8da61fe3bfa763eed27a08a69a5da7ac80e7fac0e7439c9d086c",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "IT6",
+        "created_at": "2026-07-30T04:32:08+02:00",
+        "last_used_at": "2026-09-08T03:29:36+02:00",
+        "revoked_at": null
+    },
+    "8afa60e6f878d418": {
+        "token_hash": "4e9b770a2248eedc9e24d3d195dfdc866c6ba96e3748f0728a73d8dace980455",
+        "label": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome",
+        "created_by": "PD1",
+        "group_id": 94,
+        "theme": "danger",
+        "created_at": "2026-08-05T05:32:56+02:00",
+        "last_used_at": "2026-08-15T23:47:49+02:00",
+        "revoked_at": null
+    },
+    "a6ca61a8ce3c984f": {
+        "token_hash": "78653c3f36023ac23e164fd80f987ccc66f56c1b3b49b154fc3483b7af05e72d",
+        "label": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome",
+        "created_by": "IT6",
+        "group_id": 1,
+        "theme": "indigo",
+        "created_at": "2026-08-05T07:40:38+02:00",
+        "last_used_at": "2026-08-05T07:40:38+02:00",
+        "revoked_at": null
+    },
+    "1511fd13733ebcc6": {
+        "token_hash": "994f332343066eeddd7b46ca60fb4d35f3c1b82ffa9e7a476b202de257440e78",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "rahmat",
+        "group_id": 45,
+        "theme": "primary",
+        "created_at": "2026-08-08T04:41:29+02:00",
+        "last_used_at": "2026-09-18T04:02:10+02:00",
+        "revoked_at": null
+    },
+    "bd8f67f729b19a3c": {
+        "token_hash": "8b18d25eeafcfb5b495c63d59bffa35fbe70409c3e3027435dbbef681fe6a3b7",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "adm_lab",
+        "group_id": 48,
+        "theme": "primary",
+        "created_at": "2026-08-20T05:54:39+02:00",
+        "last_used_at": "2026-08-20T05:54:39+02:00",
+        "revoked_at": null
+    },
+    "461b2b018808cee5": {
+        "token_hash": "88f192a0852e3370692a343d28c6f3c111cb39fdecb3b92737d46c49f535e4f6",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "GG",
+        "group_id": 1,
+        "theme": "success",
+        "created_at": "2026-09-10T03:48:47+02:00",
+        "last_used_at": "2026-09-10T03:48:47+02:00",
+        "revoked_at": null
+    },
+    "63ed7be970bd599a": {
+        "token_hash": "a527f9338d58b8050183ae250285921815713bda4a7b16a75a4a3c2f8c9d4066",
+        "label": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "created_by": "GG",
+        "group_id": 1,
+        "theme": "success",
+        "created_at": "2026-09-10T04:21:47+02:00",
+        "last_used_at": "2026-09-10T04:21:47+02:00",
+        "revoked_at": null
+    },
+    "d9ccab7bc748706b": {
+        "token_hash": "d8a4c5607c1597cad3e400191a26788b72dec0f33c529389bcce87de670edb87",
+        "label": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0",
+        "created_by": "adm_chemical",
+        "group_id": 97,
+        "theme": "lime",
+        "created_at": "2026-09-11T04:17:31+02:00",
+        "last_used_at": "2026-09-16T07:05:24+02:00",
+        "revoked_at": null
+    }
+}

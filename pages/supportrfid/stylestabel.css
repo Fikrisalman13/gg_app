@@ -1,0 +1,1105 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f1f5fb;
+  color: #333;
+}
+.container {
+  margin: 40px auto;
+  width: 95%;
+  max-width: 1400px;
+  background: white;
+  padding: 20px 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+h2 { color: #1565c0; text-align: center; margin-bottom: 20px; }
+
+.filter-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 15px;
+  align-items: center;
+}
+.filter-box input[type="text"],
+.filter-box input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+.filter-box button {
+  background: #1565c0;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.filter-box button:hover { background: #0d47a1; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead { background: #1565c0; color: white; }
+th, td { padding: 10px 8px; border: 1px solid #ddd; text-align: center; }
+tr:nth-child(even) { background: #f9f9f9; }
+button.delete {
+  background: #e53935;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+button.delete:hover { background: #b71c1c; }
+
+.notif {
+  text-align: center;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 6px;
+}
+.notif.success { background: #c8e6c9; color: #256029; }
+.notif.error { background: #ffcdd2; color: #b71c1c; }
+
+.pagination {
+  margin-top: 15px;
+  text-align: center;
+}
+.pagination a {
+  margin: 0 4px;
+  padding: 6px 10px;
+  background: #eee;
+  border-radius: 4px;
+  text-decoration: none;
+  color: #1565c0;
+}
+.pagination a.active {
+  background: #1565c0;
+  color: white;
+}
+
+
+/* Notifikasi */
+.notif {
+  text-align: center;
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-weight: 500;
+  width: 60%;
+  margin-left: auto;
+  margin-right: auto;
+}
+.notif.success { background: #c8e6c9; color: #256029; }
+.notif.error { background: #ffcdd2; color: #b71c1c; }
+
+/* Tabel data */
+.data-table {
+  background: rgba(255,255,255,0.95);
+  border-radius: 15px;
+  box-shadow: 0 8px 20px rgba(33,150,243,0.2);
+  overflow-x: auto;
+  padding: 20px;
+  max-width: 95%;
+  margin: 0 auto;
+}
+
+.data-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table th {
+  background: #1976d2;
+  color: white;
+  padding: 10px;
+  position: sticky;
+  top: 0;
+}
+
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.data-table tr:hover td {
+  background: #e3f2fd;
+  transition: background 0.3s;
+}
+
+/* Tombol hapus */
+.container button {
+  background: linear-gradient(45deg, #f44336, #ef5350);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.25s ease;
+}
+.container button:hover {
+  transform: scale(1.05);
+  background: linear-gradient(45deg, #e53935, #ef9a9a);
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: linear-gradient(135deg, #e3f2fd, #e8f5e9);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+.content {
+    margin-left: 240px;
+    padding: 25px;
+    animation: fadeIn 0.6s ease-in-out;
+	margin-top: 30px;
+}
+
+.container {
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    max-width: 95%;
+    margin: 25px auto;
+    animation: slideUp 0.8s ease;
+	
+}
+
+
+h2 {
+    color: #1565c0;
+    text-align: center;
+    margin-bottom: 25px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* ==== FILTER FORM ==== */
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #f6f9fc;
+    border-left: 5px solid #2196F3;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    animation: fadeIn 0.8s ease;
+}
+.filter-form input[type="text"], 
+.filter-form input[type="date"] {
+    padding: 8px 10px;
+    border: 1px solid #cfd8dc;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+.filter-form button {
+    background: linear-gradient(90deg, #2196F3, #42a5f5);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.filter-form button:hover {
+    background: linear-gradient(90deg, #1976d2, #2196F3);
+    transform: translateY(-1px);
+}
+
+.date-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ==== TABEL ==== */
+.table-wrapper {
+    overflow-x: auto;
+    animation: fadeIn 0.6s ease;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    white-space: nowrap;
+}
+th {
+    background: linear-gradient(90deg, #1976d2, #2196f3);
+    color: white;
+}
+tr:hover {
+    background: #f1f9ff;
+}
+
+/* ==== PAGINATION ==== */
+.pagination {
+    text-align: center;
+    margin-top: 20px;
+}
+.pagination a {
+    display: inline-block;
+    margin: 0 4px;
+    padding: 8px 14px;
+    background: #2196F3;
+    color: white;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+.pagination a.active {
+    background: #0d47a1;
+    transform: scale(1.1);
+}
+.pagination a:hover {
+    background: #1565c0;
+}
+
+/* ==== ANIMASI ==== */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to {opacity: 1; transform: translateY(0);} }
+@keyframes slideUp { from { opacity: 0; transform: translateY(30px);} to {opacity: 1; transform: translateY(0);} }
+
+/* ==== CARD VIEW (MOBILE) ==== */
+@media (max-width: 768px) {
+    .content { 
+        margin-left: 0; 
+        padding: 10px; 
+        margin-top: 70px;
+    }
+
+    .container { 
+        padding: 15px; 
+        margin-top: 10px; 
+    }
+
+    .filter-form { 
+        flex-direction: column; 
+        align-items: stretch; 
+    }
+
+    .filter-form button { 
+        width: 100%; 
+    }
+
+    /* ==== CARD VIEW ==== */
+    .table-wrapper table,
+    .table-wrapper thead,
+    .table-wrapper tbody,
+    .table-wrapper th,
+    .table-wrapper td,
+    .table-wrapper tr {
+        display: block;
+        width: 100%;
+    }
+
+    .table-wrapper thead { 
+        display: none; 
+    }
+
+    .table-wrapper tr {
+        background: #fff;
+        margin-bottom: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        padding: 12px;
+    }
+
+    .table-wrapper td {
+        border: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 8px 10px;
+        font-size: 13px;
+        border-bottom: 1px solid #eee;
+        word-wrap: break-word;       /* ✅ teks panjang bisa pecah */
+        overflow-wrap: break-word;   /* ✅ agar teks panjang tidak tembus */
+        white-space: normal;         /* ✅ biar bisa multi-baris */
+    }
+
+    .table-wrapper td:last-child { 
+        border-bottom: none; 
+    }
+
+    .table-wrapper td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #1976d2;
+        text-transform: capitalize;
+        margin-right: 8px;
+        min-width: 130px;
+        flex-shrink: 0;
+    }
+}@media (max-width: 768px) {
+    .content { 
+        margin-left: 0; 
+        padding: 10px; 
+        margin-top: 80px;
+    }
+
+    .container { 
+        padding: 15px; 
+        margin-top: 15px;
+    }
+
+    /* === FILTER FORM (Perbaikan tombol sejajar) === */
+    .filter-form { 
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        margin-top: 5px;
+    }
+
+    .filter-buttons button {
+        flex: 1;
+    }
+
+    /* === CARD VIEW === */
+    .table-wrapper {
+        overflow-x: hidden; /* ✅ cegah geser kanan */
+    }
+
+    .table-wrapper table,
+    .table-wrapper thead,
+    .table-wrapper tbody,
+    .table-wrapper th,
+    .table-wrapper td,
+    .table-wrapper tr {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .table-wrapper thead { 
+        display: none; 
+    }
+
+    .table-wrapper tr {
+        background: #fff;
+        margin-bottom: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        padding: 10px;
+        overflow: hidden;
+        word-wrap: break-word;
+    }
+
+    .table-wrapper td {
+        border: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 6px 10px;
+        font-size: 13px;
+        border-bottom: 1px solid #eee;
+        white-space: normal !important;   /* ✅ teks bisa turun baris */
+        word-wrap: break-word !important; /* ✅ potong teks panjang */
+        overflow-wrap: anywhere !important;
+        max-width: 100% !important;       /* ✅ batasi lebar */
+    }
+
+    .table-wrapper td:last-child { 
+        border-bottom: none; 
+    }
+
+    .table-wrapper td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #1976d2;
+        text-transform: capitalize;
+        margin-right: 8px;
+        min-width: 120px;
+        flex-shrink: 0;
+    }
+}
+
+
+
+/* ==== FIX POSISI DI MOBILE (lebih turun dari topbar) ==== */
+@media (max-width: 768px) {
+    .content {
+        margin: 0 !important;
+        padding: 50px 16px 60px 16px !important; /* ⬅️ dari 80px jadi 100px */
+        background: linear-gradient(180deg, #e3f2fd, #ffffff);
+    }
+
+    .container {
+        margin-top: 30px !important; /* ⬅️ tambah jarak */
+        padding: 18px !important;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+        margin-top: 10px !important; /* ⬅️ turun sedikit lagi */
+        font-size: 18px;
+        text-align: center;
+        line-height: 1.4;
+        color: #1976d2;
+    }
+}
+
+/* === FILTER FORM === */
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #f6f9fc;
+    border-left: 5px solid #2196F3;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.filter-form input[type="text"],
+.filter-form input[type="date"] {
+    padding: 8px 10px;
+    border: 1px solid #cfd8dc;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    height: 38px;
+}
+
+.filter-form input:focus {
+    border-color: #42a5f5;
+    box-shadow: 0 0 6px rgba(66,165,245,0.4);
+    outline: none;
+}
+
+.date-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.date-inline label {
+    font-size: 13px;
+    color: #555;
+    white-space: nowrap;
+}
+
+/* Tombol sejajar di bar atas */
+.filter-btn,
+.reset-btn {
+    background: linear-gradient(90deg, #2196F3, #42a5f5);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    transition: all 0.25s ease;
+}
+.filter-btn:hover,
+.reset-btn:hover {
+    background: linear-gradient(90deg, #1976d2, #2196F3);
+    transform: translateY(-1px);
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .filter-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filter-form input,
+    .filter-btn,
+    .reset-btn {
+        width: 100%;
+    }
+}
+
+/* ==== TABEL ==== */
+.table-wrapper {
+    overflow-x: auto; /* Memungkinkan scroll horizontal jika data terlalu lebar */
+    animation: fadeIn 0.6s ease;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    white-space: normal; /* Agar teks bisa turun ke bawah (break) */
+    word-wrap: break-word;  /* Agar kata panjang dipotong ke bawah */
+    overflow-wrap: break-word; /* Menjamin teks panjang tidak keluar dari cell */
+}
+
+th {
+    background: linear-gradient(90deg, #1976d2, #2196f3);
+    color: white;
+}
+
+tr:hover {
+    background: #f1f9ff;
+}
+
+/* Jika teks sangat panjang, kita akan batasi lebar kolom dan membuatnya wrap */
+td {
+    max-width: 200px; /* Batas lebar kolom */
+    word-wrap: break-word; /* Agar kata panjang dibungkus ke bawah */
+    overflow-wrap: break-word;
+}
+/* 💫 Gaya gelembung animasi */
+.popup-bubble {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease forwards;
+}
+.popup-bubble.show {
+  display: flex;
+}
+
+.popup-content {
+  background: white;
+  padding: 20px 25px;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+  text-align: center;
+  transform: scale(0.8);
+  opacity: 0;
+  animation: popUp 0.25s ease forwards;
+}
+
+.popup-text {
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.popup-actions button {
+  margin: 0 8px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.yes-btn {
+  background: #e74c3c;
+  color: white;
+}
+.no-btn {
+  background: #ccc;
+  color: #333;
+}
+.yes-btn:hover {
+  background: #c0392b;
+}
+.no-btn:hover {
+  background: #aaa;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes popUp {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 🌈 Notifikasi gelembung di tengah layar */
+.bubble-center {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  background: #333;
+  color: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+  text-align: center;
+  line-height: 1.5;
+  opacity: 0;
+  transition: all 0.4s ease;
+  z-index: 9999;
+}
+.bubble-center.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.bubble-center.success {
+  background: linear-gradient(135deg, #4CAF50, #43A047);
+}
+.bubble-center.error {
+  background: linear-gradient(135deg, #e53935, #c62828);
+}
+
+/* --- Tambahan styling layout dan responsif --- */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.controls input[type="text"] {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.controls button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 6px;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.controls button:hover {
+  background: #0056b3;
+}
+
+.controls form {
+  display: inline;
+  margin: 0;
+}
+
+.controls button[type="submit"] {
+  background: #28a745;
+}
+.controls button[type="submit"]:hover {
+  background: #218838;
+}
+
+/* Table style */
+#mikrotikTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#mikrotikTable th, #mikrotikTable td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+#mikrotikTable th {
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+/* === Responsive: ubah ke card view jika mobile === */
+@media (max-width: 768px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #mikrotikTable, #mikrotikTable thead, #mikrotikTable tbody, #mikrotikTable th, #mikrotikTable td, #mikrotikTable tr {
+    display: block;
+  }
+
+  #mikrotikTable thead {
+    display: none;
+  }
+
+  #mikrotikTable tr {
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 10px;
+    background: #fff;
+  }
+
+  #mikrotikTable td {
+    border: none;
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+  }
+
+  #mikrotikTable td::before {
+    content: attr(data-label);
+    font-weight: bold;
+    color: #007bff;
+  }
+  
+  
+}
+
+/* Tabel header sortable */
+th.sortable {
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+  background-color: #007bff; /* warna default */
+  color: white; /* teks default */
+}
+
+/* Hover untuk header sortable */
+th.sortable:hover {
+  background-color: #28a745 !important; /* hijau */
+  color: white !important;
+  transform: scale(1.05); /* sedikit membesar */
+}
+
+/* Panah kecil untuk sortable */
+th.sortable::after {
+  content: " ↕";
+  font-size: 12px;
+  color: #fff;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+}
+
+/* Animasi panah saat hover */
+th.sortable:hover::after {
+  color: #ffeb3b;
+  transform: scale(1.2);
+}
+ .login-box {
+    max-width: 380px;
+    margin: 25px auto;
+    padding: 25px 30px;
+    border-radius: 10px;
+    background: #f9f9f9;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    font-family: 'Segoe UI', sans-serif;
+  }
+  .login-box h3 {
+    text-align:center;
+    color:#007bff;
+    margin-bottom:20px;
+  }
+  .login-box label {
+    font-weight:600;
+    color:#333;
+    display:block;
+    margin-bottom:6px;
+  }
+  .login-box input {
+    width:100%;
+    padding:10px;
+    margin-bottom:15px;
+    border-radius:6px;
+    border:1px solid #ccc;
+    font-size:14px;
+  }
+  .login-box button {
+    width:100%;
+    padding:10px;
+    background-color:#007bff;
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    transition:all 0.2s;
+  }
+  .login-box button:hover {
+    background-color:#0056b3;
+  }
+    /* Wrapper switch dan teks */
+  .save-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-family: 'Segoe UI', sans-serif;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* Container untuk toggle */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  /* Sembunyikan checkbox asli */
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  /* Tampilan slider */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.3s;
+    border-radius: 24px;
+  }
+
+  /* Bulatan di dalam switch */
+  .slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+  }
+
+  /* Saat diaktifkan */
+  .switch input:checked + .slider {
+    background-color: #007bff;
+  }
+
+  .switch input:checked + .slider::before {
+    transform: translateX(22px);
+  }
+
+  /* Label teks */
+  .save-info label {
+    font-size: 14px;
+    color: #333;
+    line-height: 1;
+  }
+
+  /* Responsif untuk layar kecil */
+  @media (max-width: 480px) {
+    .save-info {
+      gap: 8px;
+    }
+    .save-info label {
+      font-size: 13px;
+    }
+  }
+  .alert.success {background:#d4edda;color:#155724;padding:10px;border-radius:6px;margin-bottom:15px;}
+  .alert.error {background:#f8d7da;color:#721c24;padding:10px;border-radius:6px;margin-bottom:15px;}
+
+
+
+/* === Default: tampilkan tabel di desktop === */
+.card-list {
+  display: none;
+}
+
+/* === Hanya aktif di mobile === */
+@media (max-width: 768px) {
+  #mikrotikTable {
+    display: none;
+  }
+
+  .card-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 15px;
+  }
+
+  .card {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    line-height: 1.5em;
+    transition: all 0.25s ease;
+    cursor: default;
+  }
+
+  /* Animasi hover */
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    border-color: #007bff;
+  }
+
+  /* Label rata kiri dan nilai rata kanan */
+  .card p {
+    margin: 6px 0;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Label (kiri) */
+  .card p b {
+    color: #007bff;
+    font-weight: 600;
+    flex: 1;
+    text-align: left;
+  }
+
+  /* Nilai (kanan) */
+  .card p span {
+    flex: 1;
+    text-align: right;
+    color: #333;
+  }
+
+  /* Efek hover khusus untuk Total Uploaded & Downloaded */
+  .card p.sortable:hover span {
+    color: #28a745; /* hijau */
+    font-weight: bold;
+  }
+
+  .card p.sortable:hover b {
+    color: #28a745;
+  }
+}
+
+/* Tabel header sortable */
+th.sortable {
+  cursor: pointer;
+  position: relative; /* penting untuk posisi panah absolut */
+  transition: all 0.3s ease;
+  background-color: #007bff; /* warna default */
+  color: white; /* teks default */
+  padding-right: 25px; /* beri ruang untuk panah di kanan */
+}
+
+/* Hover untuk header sortable */
+th.sortable:hover {
+  background-color: #28a745 !important; /* hijau */
+  color: white !important;
+  transform: scale(1.05); /* sedikit membesar */
+}
+
+/* Panah kecil untuk sortable */
+th.sortable::after {
+  content: "↕"; /* ikon panah */
+  position: absolute;
+  right: 8px; /* jarak dari kanan */
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #fff;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+}
+
+/* Animasi panah saat hover */
+th.sortable:hover::after {
+  color: #ffeb3b;
+  transform: translateY(-50%) scale(1.2); /* tetap vertikal center + membesar */
+}
+
+/* === Modal background === */
+#chartModal {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  overflow: auto;
+  padding: 20px;
+}
+
+/* === Modal content === */
+.chart-modal-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* inilah kunci agar modal selalu di tengah */
+  background: #fff;
+  padding: 20px 25px;
+  border-radius: 12px;
+  max-width: 800px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 5px 25px rgba(0,0,0,0.3);
+  animation: fadeIn 0.25s ease;
+  text-align: center;
+}
+
+/* === Chart canvas area === */
+#top10Chart {
+  width: 100% !important;
+  max-width: 700px;
+  height: 400px !important;
+  display: block;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* === Close button === */
+.close-chart {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 24px;
+  color: #555;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.close-chart:hover {
+  color: #e74c3c;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -60%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}

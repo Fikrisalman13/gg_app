@@ -1,0 +1,144 @@
+{
+    "PekatBesar": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 4000
+        }
+    },
+    "Anoxit": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 2000
+        }
+    },
+    "EqualSum": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 1300
+        }
+    },
+    "Daff1": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 2000
+        }
+    },
+    "Daff2": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 800
+        }
+    },
+    "Daff3": {
+        "cod": {
+            "std": 800
+        },
+        "ptco": {
+            "std": 600
+        }
+    },
+    "Aerasi1": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 250
+        }
+    },
+    "Aerasi2": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 200
+        }
+    },
+    "Aerasi3": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 180
+        }
+    },
+    "Aerasi4": {
+        "ph": {
+            "min": 6,
+            "max": 9
+        },
+        "cod": {
+            "std": 180
+        }
+    },
+    "Sedimen": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 150
+        },
+        "tss": {
+            "std": 150
+        }
+    },
+    "Outlet": {
+        "ph": {
+            "min": 7,
+            "max": 9
+        },
+        "cod": {
+            "std": 115
+        },
+        "tss": {
+            "std": 30
+        },
+        "ptco": {
+            "std": 200
+        }
+    },
+    "Dwatring": {
+        "cod": {
+            "std": 2000
+        },
+        "tss": {
+            "std": 30
+        }
+    },
+    "SelokanPekat": {
+        "cod": {
+            "std": 5000
+        },
+        "ph": {
+            "min": 7,
+            "max": 9
+        }
+    },
+    "SelokanReaktif": {
+        "cod": {
+            "std": 1300
+        },
+        "ph": {
+            "min": 7,
+            "max": 9
+        }
+    }
+}

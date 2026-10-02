@@ -1,0 +1,3 @@
+<FilesMatch "^(planning_tv_devices\.json|planning_tv_log\.php)$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,70 @@
+<?php
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+include __DIR__ . '/../../koneksi.php';
+include __DIR__ . '/../../koneksi3.php';
+require_once __DIR__ . '/rekapkartustock_query.php';
+
+if (!isset($_SESSION['UserName'])) {
+    die('Silakan login terlebih dahulu!');
+}
+$groupId = $_SESSION['GroupId'];
+$permissionStmt = sqlsrv_query($conn, 'SELECT TOP 1 CanView FROM dbo.SMGroupTrustee WHERE GroupId = ? AND MenuId = ?', [$groupId, 78]);
+$permission = ($permissionStmt && ($permissionRow = sqlsrv_fetch_array($permissionStmt, SQLSRV_FETCH_ASSOC))) ? $permissionRow : [];
+if ($permissionStmt) { sqlsrv_free_stmt($permissionStmt); }
+if (isset($permission['CanView']) && (int) $permission['CanView'] === 0) { die('Anda tidak memiliki hak untuk mengakses laporan ini.'); }
+
+$downloadToken = trim((string) ($_GET['downloadToken'] ?? ''));
+if ($downloadToken !== '') {
+    setcookie('downloadToken', $downloadToken, [
+        'expires' => time() + 300,
+        'path' => '/gg_app/',
+        'httponly' => false,
+        'samesite' => 'Lax',
+    ]);
+}
+
+try {
+    $warehouses = rekapKartuStockGetWarehouses($conn3);
+    [$filters, $error] = rekapKartuStockValidateFilters($_GET, $warehouses);
+    if ($filters === null) { http_response_code(422); die(htmlspecialchars($error)); }
+    $results = rekapKartuStockFetch($conn3, $filters);
+
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Rekap Kartu Stok');
+    $sheet->fromArray(['Product Code','Product Name','Warehouse Code','Warehouse Name','Jenis Transaksi','Saldo Awal Qty','Saldo Awal Harga','Saldo Awal Total','Terima Qty','Terima Harga','Terima Total','Keluar Qty','Keluar Harga','Keluar Total','Saldo Akhir Qty','Saldo Akhir Harga','Saldo Akhir Total'], null, 'A1');
+    $sheet->getStyle('A1:Q1')->applyFromArray([
+        'font' => ['bold' => true],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D9D9D9']],
+        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+    ]);
+
+    $rowNumber = 2;
+    foreach ($results as $row) {
+        $sheet->fromArray([[(string)$row['prodcode'],(string)$row['prodname'],(string)$row['wrhscode'],(string)$row['wrhsname'],(string)$row['transtype_name'],(float)$row['saldo_awal_qty'],(float)$row['saldo_awal_price'],(float)$row['saldo_awal_total'],(float)$row['in_qty'],(float)$row['in_price'],(float)$row['in_total'],(float)$row['out_qty'],(float)$row['out_price'],(float)$row['out_total'],(float)$row['saldo_akhir_qty'],(float)$row['saldo_akhir_price'],(float)$row['saldo_akhir_total']]], null, 'A' . $rowNumber);
+        $rowNumber++;
+    }
+    $sheet->getStyle('F2:Q' . ($rowNumber - 1))->getNumberFormat()->setFormatCode('0.0000');
+
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    $warehouseFilename = $filters['wrhscode'] ?? 'Semua_Gudang';
+    $filename = 'Rekap_Kartu_Stok_' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $warehouseFilename) . '.xlsx';
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: max-age=0');
+    (new Xlsx($spreadsheet))->save('php://output');
+    $spreadsheet->disconnectWorksheets();
+} catch (Throwable $e) {
+    error_log('Export Rekap Kartu Stok gagal: ' . $e->getMessage());
+    http_response_code(500);
+    die('Export gagal diproses. Silakan coba kembali atau hubungi administrator.');
+}

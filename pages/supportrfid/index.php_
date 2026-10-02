@@ -1,0 +1,161 @@
+<?php
+session_start();
+
+// 🔐 Cek login
+if (!isset($_SESSION['username'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$username = $_SESSION['username'] ?? 'Guest';
+$role = $_SESSION['role'] ?? '';
+?>
+
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Utama</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* 🎨 Styling konten utama agar selaras dengan sidebar */
+        .content {
+            margin-top: 60px; /* ruang untuk topbar */
+            margin-left: 240px; /* ruang untuk sidebar */
+            padding: 30px;
+            transition: margin-left 0.3s ease;
+            background: #f4f6f9;
+            min-height: calc(100vh - 60px);
+        }
+
+        .sidebar.closed ~ .content {
+            margin-left: 80px;
+        }
+
+        .welcome-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            max-width: 800px;
+            margin: 40px auto;
+            text-align: center;
+        }
+
+        .welcome-card h1 {
+            font-size: 26px;
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .welcome-card p {
+            color: #555;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .welcome-card .highlight {
+            font-weight: bold;
+            color: #0d47a1;
+        }
+
+        .quick-links {
+            margin-top: 30px;
+        }
+
+        .quick-links a {
+            display: inline-block;
+            background: #1976d2;
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            margin: 5px;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .quick-links a:hover {
+            background: #0d47a1;
+            transform: scale(1.05);
+        }
+		
+		
+/* ====== FIX MARGIN DAN POSISI DI MOBILE ====== */
+@media (max-width: 768px) {
+    body {
+        background: linear-gradient(180deg, #e3f2fd, #ffffff);
+        overflow-x: hidden;
+    }
+
+    .content {
+        margin: 0 !important;
+        padding: 80px 16px 60px 16px !important; /* 🔹 Turunkan container */
+    }
+
+    .container {
+        margin-top: 20px !important; /* 🔹 Tambah jarak dari atas */
+        padding: 18px !important;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        animation: fadeIn 0.4s ease;
+    }
+
+    h2 {
+        margin-top: 0;
+        font-size: 18px;
+        text-align: center;
+        line-height: 1.4;
+        color: #1976d2;
+    }
+
+    .caption {
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+        gap: 6px;
+    }
+
+    .caption button {
+        width: 100%;
+        padding: 8px;
+        font-size: 13px;
+        border-radius: 6px;
+    }
+
+    /* Tabel jadi scrollable, biar tidak pecah di HP */
+    .container table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        border-collapse: collapse;
+    }
+
+    table td {
+        word-break: break-all;
+        white-space: normal;
+    }
+}
+    </style>
+</head>
+<body>
+
+<?php include 'sidebar.php'; ?>
+
+<div class="content">
+    <div class="welcome-card">
+        <h1>👋 Selamat Datang, <?= htmlspecialchars($username) ?>!</h1>
+        <p>
+            Kamu saat ini login sebagai <span class="highlight"><?= htmlspecialchars(ucfirst($role)) ?></span>.
+            <br>
+            Silakan pilih menu di sidebar untuk mulai menggunakan sistem.
+        </p>
+
+        
+    </div>
+</div>
+
+</body>
+</html>

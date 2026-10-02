@@ -1,0 +1,522 @@
+<?php
+// /gg_app/pages/rute/api.php
+declare(strict_types=1);
+
+ob_start();
+ini_set('display_errors','0');
+ini_set('log_errors','1');
+
+if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+require_once __DIR__ . '/../../koneksi.php';   // harus menyediakan $conn (sqlsrv_connect)
+date_default_timezone_set('Asia/Jakarta');
+
+function nocache(): void {
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  header('Pragma: no-cache');
+  header('Expires: 0');
+}
+function json_out(array $arr, int $status=200): never {
+  if (ob_get_length()) { ob_clean(); }
+  http_response_code($status);
+  header('Content-Type: application/json; charset=utf-8');
+  header('X-Content-Type-Options: nosniff');
+  nocache();
+  echo json_encode($arr, JSON_UNESCAPED_UNICODE);
+  exit;
+}
+function sqlerr(): string {
+  $es = sqlsrv_errors(SQLSRV_ERR_ERRORS);
+  if (!$es) return 'Unknown database error';
+  $msgs = array_map(fn($e)=>"[{$e['SQLSTATE']}] {$e['code']} {$e['message']}", $es);
+  return implode(' | ', $msgs);
+}
+function required_post(string $key): string {
+  $v = $_POST[$key] ?? '';
+  if ($v === '' && $v !== '0') json_out(['success'=>false, 'error'=>"Missing field: {$key}"], 400);
+  return (string)$v;
+}
+/** Normalisasi smart punctuation ke ASCII agar tidak “â€”” */
+function normalize_ascii(string $s): string {
+  return strtr($s, [
+    "\xE2\x80\x93" => "-",  // –
+    "\xE2\x80\x94" => "-",  // —
+    "\xE2\x80\x98" => "'",  // ‘
+    "\xE2\x80\x99" => "'",  // ’
+    "\xE2\x80\x9C" => '"',  // “
+    "\xE2\x80\x9D" => '"',  // ”
+  ]);
+}
+
+/* ========= Auth ========= */
+nocache();
+if (!isset($_SESSION['UserName'])) json_out(['success'=>false, 'error'=>'Unauthorized'], 401);
+$CREATED_BY = $_SESSION['UserName'] ?? 'web';
+if (!$conn) json_out(['success'=>false, 'error'=>'Koneksi ke database gagal: '.sqlerr()], 500);
+
+$action = $_POST['action'] ?? '';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $action==='') json_out(['success'=>false,'error'=>'Invalid request'], 400);
+
+/* ========= Helpers SQL ========= */
+function batch_status($conn, int $batchId): string {
+  $st = sqlsrv_query($conn, "SELECT Status FROM dbo.Routes WHERE BatchId = ?", [$batchId]);
+  if (!$st) return 'open';
+  $allDone = true; $anyInprog=false;
+  while ($row = sqlsrv_fetch_array($st, SQLSRV_FETCH_ASSOC)) {
+    $s = strtolower((string)($row['Status'] ?? 'open'));
+    if ($s !== 'done') $allDone = false;
+    if ($s === 'inprog') $anyInprog = true;
+  }
+  sqlsrv_free_stmt($st);
+  if ($allDone) return 'done';
+  if ($anyInprog) return 'inprog';
+  return 'open';
+}
+function last_batch_for_pair($conn, string $plate, string $driver): ?int {
+  $st = sqlsrv_query($conn,
+    "SELECT TOP 1 BatchId FROM dbo.Routes WHERE VehiclePlate=? AND DriverName=? ORDER BY BatchId DESC",
+    [$plate,$driver]
+  );
+  if (!$st) return null;
+  $id = sqlsrv_fetch_array($st, SQLSRV_FETCH_NUMERIC)[0] ?? null;
+  sqlsrv_free_stmt($st);
+  return $id ? (int)$id : null;
+}
+function batch_has_start_route($conn, int $batchId): bool {
+  $st = sqlsrv_query($conn, "SELECT COUNT(*) AS C FROM dbo.Routes WHERE BatchId=? AND Name LIKE '%(Rute Awal)%'", [$batchId]);
+  if (!$st) return false;
+  $c = (int)(sqlsrv_fetch_array($st, SQLSRV_FETCH_ASSOC)['C'] ?? 0);
+  sqlsrv_free_stmt($st);
+  return $c > 0;
+}
+function base_name_from_route($conn, int $routeId): ?string {
+  $st = sqlsrv_query($conn, "SELECT Name FROM dbo.Routes WHERE RouteId=?", [$routeId]);
+  if (!$st) return null;
+  $name = (string)(sqlsrv_fetch_array($st, SQLSRV_FETCH_NUMERIC)[0] ?? '');
+  sqlsrv_free_stmt($st);
+  if ($name==='') return null;
+  return trim(preg_replace('/\s*\(Rute Awal\)\s*$/i','', $name));
+}
+function route_master_name_for_route($conn, int $routeId): ?string {
+  $base = base_name_from_route($conn, $routeId);
+  if (!$base) return null;
+  $st = sqlsrv_query($conn, "SELECT TOP 1 Name FROM dbo.RouteMaster WHERE Name = ?", [$base]);
+  if ($st && ($row = sqlsrv_fetch_array($st, SQLSRV_FETCH_NUMERIC))) {
+    $name = (string)($row[0] ?? '');
+    sqlsrv_free_stmt($st);
+    return $name ?: $base;
+  }
+  return $base;
+}
+
+/* ========= Pastikan kolom Note ada di RouteActivities ========= */
+function ensure_route_activities_note_column($conn): void {
+  $ddl = "
+    IF COL_LENGTH('dbo.RouteActivities','Note') IS NULL
+      ALTER TABLE dbo.RouteActivities ADD Note NVARCHAR(MAX) NULL;
+  ";
+  sqlsrv_query($conn, $ddl);
+}
+
+/* ========= ACTIONS ========= */
+
+if ($action === 'save_batch') {
+  $routes = json_decode($_POST['routes'] ?? '[]', true);
+  if (!is_array($routes) || count($routes) === 0) {
+    json_out(['success'=>false,'error'=>'Invalid routes payload'], 400);
+  }
+  $veh = (string)($routes[0]['vehicle_plate'] ?? '');
+  $drv = (string)($routes[0]['driver_name'] ?? '');
+  if ($veh==='' || $drv==='') {
+    json_out(['success'=>false,'error'=>'vehicle/driver required'], 400);
+  }
+
+  $appendBatchId = null;
+  $last = last_batch_for_pair($conn, $veh, $drv);
+  if ($last) {
+    $stt = batch_status($conn, $last);
+    if ($stt !== 'done') $appendBatchId = $last;
+  }
+
+  if (!sqlsrv_begin_transaction($conn)) {
+    json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  }
+
+  try {
+    if ($appendBatchId === null) {
+      $prefix = 'RB'.date('Ymd');
+      $cntSt = sqlsrv_query($conn, "SELECT COUNT(*) AS C FROM dbo.RouteBatch WHERE BatchNo LIKE ?", [$prefix.'%']);
+      if (!$cntSt) throw new RuntimeException(sqlerr());
+      $seq = (int)(sqlsrv_fetch_array($cntSt, SQLSRV_FETCH_ASSOC)['C'] ?? 0) + 1;
+      sqlsrv_free_stmt($cntSt);
+      $batchNo = $prefix . '-' . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+
+      $ins = sqlsrv_query(
+        $conn,
+        "INSERT INTO dbo.RouteBatch (BatchNo, CreatedBy, Locked, CreatedAt)
+         OUTPUT INSERTED.BatchId VALUES (?, ?, 0, DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+        [$batchNo, $CREATED_BY]
+      );
+      if (!$ins) throw new RuntimeException(sqlerr());
+      $row = sqlsrv_fetch_array($ins, SQLSRV_FETCH_ASSOC);
+      $batchId = (int)($row['BatchId'] ?? 0);
+      sqlsrv_free_stmt($ins);
+      if (!$batchId) throw new RuntimeException('Gagal mendapatkan BatchId');
+      $mode = 'new';
+    } else {
+      $batchId = $appendBatchId;
+      $bn = sqlsrv_query($conn, "SELECT BatchNo FROM dbo.RouteBatch WHERE BatchId=?", [$batchId]);
+      if (!$bn) throw new RuntimeException(sqlerr());
+      $batchNo = (string)(sqlsrv_fetch_array($bn, SQLSRV_FETCH_NUMERIC)[0] ?? '');
+      sqlsrv_free_stmt($bn);
+      if ($batchNo==='') throw new RuntimeException('Batch tidak ditemukan');
+      $mode = 'append';
+    }
+
+    $skipStart = ($mode==='append' && batch_has_start_route($conn, $batchId));
+
+    $sqlInsRoute = "INSERT INTO dbo.Routes
+      (BatchId, Name, Address, VehiclePlate, DriverName, Status, RouteDate, CreatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, DATEADD(HOUR, 7, SYSUTCDATETIME()))";
+
+    foreach ($routes as $r) {
+      $name = (string)($r['name'] ?? '');
+      if ($skipStart && stripos($name, '(Rute Awal)') !== false) continue;
+      $params = [
+        $batchId,
+        $name,
+        (string)($r['address'] ?? ''),
+        (string)($r['vehicle_plate'] ?? ''),
+        (string)($r['driver_name'] ?? ''),
+        strtolower((string)($r['status'] ?? 'open')),
+        (string)($r['route_date'] ?? null)
+      ];
+      $ok = sqlsrv_query($conn, $sqlInsRoute, $params);
+      if (!$ok) throw new RuntimeException(sqlerr());
+      sqlsrv_free_stmt($ok);
+    }
+
+    if (!sqlsrv_commit($conn)) {
+      throw new RuntimeException('Commit failed: '.sqlerr());
+    }
+    json_out(['success'=>true,'batchNo'=>$batchNo,'batchId'=>$batchId,'mode'=>$mode]);
+
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'delete_route') {
+  $routeId = (int)($_POST['routeId'] ?? 0);
+  if (!$routeId) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  // Ambil status & batchId rute
+  $st = sqlsrv_query($conn, "SELECT Status, BatchId FROM dbo.Routes WHERE RouteId=?", [$routeId]);
+  if (!$st) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  $row = sqlsrv_fetch_array($st, SQLSRV_FETCH_ASSOC);
+  sqlsrv_free_stmt($st);
+  if (!$row) json_out(['success'=>false,'error'=>'Route tidak ditemukan'], 404);
+
+  $status  = strtolower((string)($row['Status'] ?? 'open'));
+  $batchId = (int)($row['BatchId'] ?? 0);
+
+  // Hanya rute OPEN yang boleh dihapus
+  if (in_array($status, ['inprog','done'], true)) {
+    json_out(['success'=>false,'error'=>'Route tidak dapat dihapus (status inprog/selesai)'], 400);
+  }
+
+  if (!sqlsrv_begin_transaction($conn)) {
+    json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  }
+
+  try {
+    // Hapus activity rute ini (hindari orphan)
+    $ok = sqlsrv_query($conn, "DELETE FROM dbo.RouteActivities WHERE RouteId=?", [$routeId]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    // Hapus rute
+    $ok = sqlsrv_query($conn, "DELETE FROM dbo.Routes WHERE RouteId=?", [$routeId]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    // Jika setelah penghapusan rute jumlah rute pada batch = 0 -> hapus baris di RouteBatch
+    if ($batchId) {
+      $cst = sqlsrv_query($conn, "SELECT COUNT(*) AS C FROM dbo.Routes WHERE BatchId=?", [$batchId]);
+      if (!$cst) throw new RuntimeException(sqlerr());
+      $c = (int)(sqlsrv_fetch_array($cst, SQLSRV_FETCH_ASSOC)['C'] ?? 0);
+      sqlsrv_free_stmt($cst);
+
+      if ($c === 0) {
+        $ok = sqlsrv_query($conn, "DELETE FROM dbo.RouteBatch WHERE BatchId=?", [$batchId]);
+        if (!$ok) throw new RuntimeException(sqlerr());
+        sqlsrv_free_stmt($ok);
+      }
+    }
+
+    sqlsrv_commit($conn);
+    json_out(['success'=>true]);
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'delete_batch') {
+  $batchId = (int)($_POST['batchId'] ?? 0);
+  if (!$batchId) json_out(['success'=>false,'error'=>'batchId missing'], 400);
+  $st = batch_status($conn, $batchId);
+  if ($st !== 'open') json_out(['success'=>false,'error'=>'Batch hanya dapat dihapus bila status OPEN'], 400);
+
+  if (!sqlsrv_begin_transaction($conn)) {
+    json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  }
+  try {
+    $rs = sqlsrv_query($conn, "SELECT RouteId FROM dbo.Routes WHERE BatchId=?", [$batchId]);
+    if (!$rs) throw new RuntimeException(sqlerr());
+    $ids = [];
+    while ($r = sqlsrv_fetch_array($rs, SQLSRV_FETCH_NUMERIC)) { $ids[] = (int)$r[0]; }
+    sqlsrv_free_stmt($rs);
+
+    foreach ($ids as $rid) {
+      $ok = sqlsrv_query($conn, "DELETE FROM dbo.RouteActivities WHERE RouteId=?", [$rid]);
+      if (!$ok) throw new RuntimeException(sqlerr());
+      sqlsrv_free_stmt($ok);
+    }
+    $ok = sqlsrv_query($conn, "DELETE FROM dbo.Routes WHERE BatchId=?", [$batchId]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    $ok = sqlsrv_query($conn, "DELETE FROM dbo.RouteBatch WHERE BatchId=?", [$batchId]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    sqlsrv_commit($conn);
+    json_out(['success'=>true]);
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>'Gagal hapus batch: '.$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'update_status') {
+  $rid = (int)($_POST['routeId'] ?? 0);
+  $status = (string)($_POST['status'] ?? 'open');
+  if(!$rid) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  $ok = sqlsrv_query($conn, "UPDATE dbo.Routes SET Status=? WHERE RouteId=?", [$status, $rid]);
+  if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  sqlsrv_free_stmt($ok);
+
+  $comment = null;
+  if($status==='inprog') $comment = 'Menuju lokasi';
+  elseif($status==='done') $comment = 'Selesai pengiriman';
+
+  if ($comment) {
+    $ok = sqlsrv_query(
+      $conn,
+      "INSERT INTO dbo.RouteActivities (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, CreatedAt)
+       VALUES (?, NULL, NULL, NULL, NULL, ?, DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+      [$rid, $comment]
+    );
+    if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+    sqlsrv_free_stmt($ok);
+  }
+  json_out(['success'=>true]);
+}
+
+if ($action === 'start_route') {
+  $rid = (int)($_POST['routeId'] ?? 0);
+  if(!$rid) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  $name = route_master_name_for_route($conn, $rid) ?? null;
+
+  if (!sqlsrv_begin_transaction($conn)) json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  try {
+    $ok = sqlsrv_query($conn, "UPDATE dbo.Routes SET Status='inprog' WHERE RouteId=?", [$rid]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    $ok = sqlsrv_query(
+      $conn,
+      "INSERT INTO dbo.RouteActivities
+      (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, CreatedAt)
+      VALUES(?, ?, NULL, DATEADD(HOUR, 7, SYSUTCDATETIME()), NULL, 'Mulai Perjalanan', DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+      [$rid, $name]
+    );
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    sqlsrv_commit($conn);
+    json_out(['success'=>true]);
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'arrive_route') {
+  $rid = (int)($_POST['routeId'] ?? 0);
+  if(!$rid) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  $name = route_master_name_for_route($conn, $rid) ?? null;
+
+  $ok = sqlsrv_query(
+    $conn,
+    "INSERT INTO dbo.RouteActivities
+     (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, CreatedAt)
+     VALUES(?, NULL, ?, NULL, DATEADD(HOUR, 7, SYSUTCDATETIME()), 'Tiba lokasi', DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+    [$rid, $name]
+  );
+  if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  sqlsrv_free_stmt($ok);
+  json_out(['success'=>true]);
+}
+
+if ($action === 'cancel_route') {
+  $rid = (int)($_POST['routeId'] ?? 0);
+  if(!$rid) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  if (!sqlsrv_begin_transaction($conn)) json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  try {
+    $ok = sqlsrv_query($conn, "UPDATE dbo.Routes SET Status='open' WHERE RouteId=?", [$rid]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    $ok = sqlsrv_query(
+      $conn,
+      "DELETE FROM dbo.RouteActivities
+       WHERE RouteId=? AND Comment IN ('Mulai Perjalanan','Menuju lokasi','Tiba lokasi')",
+      [$rid]
+    );
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    sqlsrv_commit($conn);
+    json_out(['success'=>true]);
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'finish_route') {
+  // TIDAK mengisi kolom Note; Note hanya dari report.php
+  $rid = (int)($_POST['routeId'] ?? 0);
+  if(!$rid) json_out(['success'=>false,'error'=>'routeId missing'], 400);
+
+  // normalisasi ke ASCII biar gak muncul “â€””
+  $category = normalize_ascii((string)($_POST['category'] ?? ''));
+  $qty      = normalize_ascii((string)($_POST['qty'] ?? ''));
+  $noteUi   = normalize_ascii((string)($_POST['note'] ?? '')); // tetap dipakai di Comment
+
+  // fallback '-' bila kosong + pakai minus biasa
+  $categoryDisp = ($category !== '') ? $category : '-';
+  $qtyDisp      = ($qty !== '') ? $qty : '-';
+  $noteDisp     = ($noteUi !== '') ? $noteUi : '-';
+
+  // format teks komentar yang konsisten (dengan minus di setiap bagian)
+  $comment  = "Selesai pengiriman - Kategori: {$categoryDisp} - Qty: {$qtyDisp} - Note: {$noteDisp}";
+
+  if (!sqlsrv_begin_transaction($conn)) {
+    json_out(['success'=>false,'error'=>'Begin transaction failed: '.sqlerr()], 500);
+  }
+  try {
+    // tutup rute
+    $ok = sqlsrv_query($conn, "UPDATE dbo.Routes SET Status='done' WHERE RouteId=?", [$rid]);
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    // INSERT aktivitas selesai — kolom Note SELALU NULL di sini
+    $ok = sqlsrv_query(
+      $conn,
+      "INSERT INTO dbo.RouteActivities
+       (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, Note, CreatedAt)
+       VALUES(?, NULL, NULL, NULL, NULL, ?, NULL, DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+      [$rid, $comment]
+    );
+    if (!$ok) throw new RuntimeException(sqlerr());
+    sqlsrv_free_stmt($ok);
+
+    sqlsrv_commit($conn);
+    json_out(['success'=>true]);
+  } catch (Throwable $e) {
+    sqlsrv_rollback($conn);
+    json_out(['success'=>false,'error'=>$e->getMessage()], 500);
+  }
+}
+
+if ($action === 'start_full' || $action === 'finish_full') {
+  $batchId = (int)($_POST['batchId'] ?? 0);
+  if(!$batchId) json_out(['success'=>false,'error'=>'batchId missing'], 400);
+
+  $q = sqlsrv_query(
+    $conn,
+    "SELECT TOP 1 RouteId
+     FROM dbo.Routes
+     WHERE BatchId = ?
+     ORDER BY CASE WHEN CHARINDEX('(Rute Awal)', Name) > 0 THEN 0 ELSE 1 END, RouteId ASC",
+    [$batchId]
+  );
+  if (!$q) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  $rid = (int)(sqlsrv_fetch_array($q, SQLSRV_FETCH_NUMERIC)[0] ?? 0);
+  sqlsrv_free_stmt($q);
+  if(!$rid) json_out(['success'=>false,'error'=>'Rute awal tidak ditemukan'], 404);
+
+  $rmName = route_master_name_for_route($conn, $rid) ?? null;
+
+  if ($action === 'start_full') {
+    $ok = sqlsrv_query(
+      $conn,
+      "INSERT INTO dbo.RouteActivities
+       (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, CreatedAt)
+       VALUES(?, ?, NULL, DATEADD(HOUR, 7, SYSUTCDATETIME()), NULL, 'Menuju FULL', DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+      [$rid, $rmName]
+    );
+    if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+    sqlsrv_free_stmt($ok);
+
+    $ts = date('Y-m-d H:i:s'); // WIB
+    json_out(['success'=>true,'startedAt'=>$ts,'routeId'=>$rid]);
+  } else {
+    $ok = sqlsrv_query(
+      $conn,
+      "INSERT INTO dbo.RouteActivities
+       (RouteId, FromLocation, ToLocation, DepartTime, ArriveTime, Comment, CreatedAt)
+       VALUES(?, NULL, ?, NULL, DATEADD(HOUR, 7, SYSUTCDATETIME()), 'Tiba Di FULL', DATEADD(HOUR, 7, SYSUTCDATETIME()))",
+      [$rid, $rmName]
+    );
+    if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+    sqlsrv_free_stmt($ok);
+
+    $ts = date('Y-m-d H:i:s'); // WIB
+    json_out(['success'=>true,'finishedAt'=>$ts,'routeId'=>$rid]);
+  }
+}
+
+/* ======== Inline note dari report.php: update hanya baris 'Selesai pengiriman' ======== */
+if ($action === 'save_inline_note') {
+  ensure_route_activities_note_column($conn);
+
+  $activityId = (int)($_POST['activity_id'] ?? 0);
+  $noteTxt    = normalize_ascii((string)($_POST['note'] ?? ''));
+
+  if (!$activityId) json_out(['success'=>false,'error'=>'activity_id missing'], 400);
+
+  $st = sqlsrv_query($conn, "SELECT Comment FROM dbo.RouteActivities WHERE ActivityId=?", [$activityId]);
+  if (!$st) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  $cmt = sqlsrv_fetch_array($st, SQLSRV_FETCH_NUMERIC)[0] ?? '';
+  sqlsrv_free_stmt($st);
+
+  if (stripos((string)$cmt, 'Selesai pengiriman') !== 0) {
+    json_out(['success'=>false,'error'=>'Hanya bisa menyimpan Note untuk baris "Selesai pengiriman"'], 400);
+  }
+
+  $ok = sqlsrv_query($conn, "UPDATE dbo.RouteActivities SET Note=? WHERE ActivityId=?", [($noteTxt!==''?$noteTxt:null), $activityId]);
+  if (!$ok) json_out(['success'=>false,'error'=>sqlerr()], 500);
+  sqlsrv_free_stmt($ok);
+
+  json_out(['success'=>true]);
+}
+
+json_out(['success'=>false,'error'=>'Unknown action'], 400);

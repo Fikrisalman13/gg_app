@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Test Koneksi MongoDB (test_update / picking_process)</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:28px}
+    .card{max-width:760px;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    label{display:block;margin:8px 0 4px;font-weight:600}
+    input,button,select{padding:8px 10px;border-radius:6px;border:1px solid #ddd}
+    pre{background:#f7f7f7;padding:12px;border-radius:6px;overflow:auto}
+    .ok{color:green}.err{color:#b00020}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Test Koneksi MongoDB</h1>
+    <p>Halaman ini adalah front-end sederhana yang memanggil endpoint backend untuk menguji koneksi ke MongoDB di <code>localhost:27017</code>, database <code>test_update</code> dan koleksi <code>picking_process</code>.</p>
+
+    <label>URI Mongo (untuk informasi):</label>
+    <input id="uri" value="mongodb://localhost:27017" style="width:100%" />
+
+    <label>Database:</label>
+    <input id="db" value="test_update" />
+
+    <label>Collection:</label>
+    <input id="col" value="picking_process" />
+
+    <div style="margin-top:12px">
+      <button id="btnTest">Jalankan Tes Koneksi</button>
+    </div>
+
+    <h3 style="margin-top:18px">Hasil</h3>
+    <div id="result">Belum diuji.</div>
+
+    <hr />
+    <h3>Catatan penting</h3>
+    <ul>
+      <li>Browser <b>tidak bisa langsung</b> terhubung ke MongoDB — diperlukan backend (Node.js/Express) yang menjalankan driver MongoDB.</li>
+      <li>Di bawah terdapat contoh <code>server.js</code> (Node/Express) yang harus Anda simpan & jalankan di mesin yang sama dengan MongoDB.</li>
+    </ul>
+
+    <h3>Contoh server.js (save sebagai <code>server.js</code>)</h3>
+    <pre><code>// server.js
+const express = require('express');
+const { MongoClient } = require('mongodb');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Ubah sesuai kebutuhan
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
+const DB_NAME = process.env.DB_NAME || 'test_update';
+const COLLECTION = process.env.COLLECTION || 'picking_process';
+
+let client;
+
+async function connectOnce(){
+  if (client && client.isConnected && client.isConnected()) return client;
+  client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+  await client.connect();
+  return client;
+}
+
+app.get('/test-mongo', async (req, res) => {
+  try{
+    const uri = req.query.uri || MONGO_URI;
+    const dbName = req.query.db || DB_NAME;
+    const col = req.query.col || COLLECTION;
+
+    // koneksi baru per request agar predictable
+    const tmpClient = new MongoClient(uri, { useUnifiedTopology: true });
+    await tmpClient.connect();
+    const db = tmpClient.db(dbName);
+    const collection = db.collection(col);
+
+    // contoh operasi ringan: hitung dokumen (fast) dan temukan 1 dokumen
+    const count = await collection.countDocuments();
+    const one = await collection.findOne({}, { projection: { _id: 1 } });
+
+    await tmpClient.close();
+
+    res.json({ ok: true, message: 'Koneksi berhasil', count, sampleId: one ? one._id : null });
+  }catch(err){
+    res.status(500).json({ ok: false, message: 'Koneksi gagal', error: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, ()=> console.log(`Server listening on http://localhost:${PORT}`));
+</code></pre>
+
+    <h3>Instruksi singkat menjalankan</h3>
+    <ol>
+      <li>Simpan file di atas sebagai <code>server.js</code> di folder baru.</li>
+      <li>Jalankan: <code>npm init -y</code> lalu <code>npm install express mongodb cors</code></li>
+      <li>Jalankan server: <code>node server.js</code> (atau set env <code>MONGO_URI</code>/<code>DB_NAME</code>/<code>COLLECTION</code> jika ingin berbeda)</li>
+      <li>Buka file <b>index.html</b> (file ini) di browser, klik <i>Jalankan Tes Koneksi</i>.</li>
+    </ol>
+
+    <p style="font-size:13px;color:#555">Jika server berjalan di mesin yang sama, front-end akan memanggil <code>http://localhost:3000/test-mongo</code> dengan parameter URI, DB, dan collection.</p>
+  </div>
+
+  <script>
+    const btn = document.getElementById('btnTest');
+    const result = document.getElementById('result');
+    btn.addEventListener('click', async ()=>{
+      result.textContent = 'Menguji...';
+      const uri = encodeURIComponent(document.getElementById('uri').value);
+      const db = encodeURIComponent(document.getElementById('db').value);
+      const col = encodeURIComponent(document.getElementById('col').value);
+
+      try{
+        const resp = await fetch(`http://localhost:3000/test-mongo?uri=${uri}&db=${db}&col=${col}`);
+        const json = await resp.json();
+        if (json.ok){
+          result.innerHTML = `<div class="ok">OK — ${json.message}</div>` +
+            `<div>count: ${json.count}</div>` +
+            `<div>sampleId: ${json.sampleId}</div>`;
+        } else {
+          result.innerHTML = `<div class="err">Gagal — ${json.message}</div><pre>${json.error || ''}</pre>`;
+        }
+      }catch(e){
+        result.innerHTML = `<div class="err">Request gagal: ${e.message}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>

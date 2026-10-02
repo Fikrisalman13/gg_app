@@ -1,0 +1,472 @@
+<?php
+session_start();
+ob_start();
+include '../../koneksi.php';
+include '../../koneksi3.php';
+include '../../includes/header.php';
+include '../../includes/sidebar.php';
+
+if (!isset($_SESSION['UserName'])) {
+    $_SESSION['error'] = "Silakan login terlebih dahulu!";
+    header('Location: /gg_app/login.php');
+    exit;
+}
+$themeColor = $_SESSION['Theme'] ?? 'primary';
+if (!$conn || !$conn3) {
+    die("Koneksi ke database gagal: " . print_r(sqlsrv_errors(), true));
+}
+
+date_default_timezone_set('Asia/Jakarta');
+
+// Permission Check
+$groupId = $_SESSION['GroupId'];
+$menuId  = 78; // sesuaikan MenuId halaman ini
+$sql = "SELECT TOP 1 CanView FROM dbo.SMGroupTrustee WHERE GroupId = ? AND MenuId = ?";
+$stmt = sqlsrv_query($conn, $sql, array($groupId, $menuId));
+$permissions = ($stmt && $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) ? $row : [];
+sqlsrv_free_stmt($stmt);
+if (isset($permissions['CanView']) && $permissions['CanView'] == 0) {
+    die("Anda tidak memiliki hak untuk melihat halaman ini.");
+}
+
+// Ambil parameter dari GET
+$prodcode = isset($_GET['prodcode']) ? trim($_GET['prodcode']) : '';
+$startdate = isset($_GET['startdate']) ? trim($_GET['startdate']) : date('Y-m-d', strtotime('-1 month'));
+$enddate = isset($_GET['enddate']) ? trim($_GET['enddate']) : date('Y-m-d');
+$wrhsid = isset($_GET['wrhsid']) && ctype_digit($_GET['wrhsid']) ? trim($_GET['wrhsid']) : '';
+$warehouses = [];
+try {
+    $warehouseStmt = $conn3->query('SELECT WrhsId AS "WrhsId", WrhsCode AS "WrhsCode", WrhsName AS "WrhsName" FROM WHWrhs ORDER BY WrhsCode');
+    if ($warehouseStmt) {
+        $warehouses = $warehouseStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $e) {
+    $warehouses = [];
+}
+$warehouseFilterSql = $wrhsid !== '' ? " AND WHTransHd.TransDestWrhsId = " . (int) $wrhsid : '';
+$results = [];
+
+if ($prodcode !== '') {
+    try {
+        // Eksekusi DO block terlebih dahulu
+        $doQuery = "
+        DO $$
+        DECLARE
+        vStartTransDate TimeStamp;
+        vEndTransDate TimeStamp;
+        vProdCode Varchar(25);
+        vProdId Int;
+        vSaldoStartDate TimeStamp;
+        vSaldoEndDate TimeStamp;
+        vLastProcdate TimeStamp;
+
+        Begin
+        vProdCode = '$prodcode';
+        vStartTransDate = '$startdate';
+        vEndTransDate = '$enddate';
+
+        vProdId = (Select ProdId From SMProduct Where ProdCode = vProdCode);
+        
+        DROP TABLE If Exists TmpDisplay;
+        CREATE Temp TABLE TmpDisplay(
+            Seq Int,
+            ProdId Int,
+            ProdCode  Varchar(25),	
+            ProdName  Varchar(100),
+            WrhsCode Varchar(25),
+            WrhsName Varchar(80),
+            TransNo Varchar(25),	
+            TransDate TimeStamp,
+            TransType Varchar(2),
+            TransTypeName Varchar(30),
+            FgINOut Varchar(1),
+            INQty Numeric(19,4),
+            INPrice Numeric(19,4),
+            INQtyPrice Numeric(19,4),
+            OutQty Numeric(19,4),
+            OutPrice Numeric(19,4),
+            OutQtyPrice Numeric(19,4),
+            BalanceQty Numeric(19,4) default 0,
+            BalancePrice Numeric(19,4) default 0,
+            BalanceQtyPrice Numeric(19,4) default 0
+        );
+
+        DROP TABLE If exists TmpSaldoAwal;
+        CREATE Temp TABLE TmpSaldoAwal(
+            Seq Int,	
+            ProdId Int,
+            ProdCode Varchar(25),
+            StartDate TimeStamp, 
+            EndDate TimeStamp, 
+            BalanceQty Numeric(19,4), 
+            BalAdjPrice Numeric(19,4), 
+            BalAdjQtyPrice Numeric(19,4)
+        );
+
+        IF ('$wrhsid' <> '') THEN
+            Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjPrice, BalAdjQtyPrice)
+            Select 1, vProdId, vStartTransDate, vSaldoEndDate,
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0),
+                    Case When Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0) <> 0
+                        Then Round(Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransQtyPrice,0)
+                            Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                    End),0) /
+                        Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransInStdQty,0)
+                            Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                    End),0), 4)
+                        Else 0
+                    End,
+                    Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                            Then Coalesce(WHTransDt.TransQtyPrice,0)
+                            Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                    End),0)
+            From WHTransHd
+            Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+            Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransdestType
+            Where WHTransDt.TransProdId = vProdId
+              And WHTransHd.TransdestDate < vStartTransDate
+              And WHTransHd.TransDestWrhsId = NULLIF('$wrhsid', '')::Int;
+        ELSE
+            Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjPrice, BalAdjQtyPrice)
+            Select 1, WHAverageAll.ProdId, whprocessdateAll.StartDate, whprocessdateAll.EndDate, WHAverageAll.BalanceQty, WHAverageAll.BalAdjPrice, WHAverageAll.BalAdjQtyPrice
+            From WHAverageAll
+            Inner Join whprocessdateAll on whprocessdateAll.ProcessDateAllId = WHAverageAll.ProcessDateAllId
+            Where WHAverageAll.ProdId = vProdId
+              And whprocessdateAll.EndDate < vStartTransDate
+            Order By whprocessdateAll.StartDate Desc, whprocessdateAll.EndDate Desc
+            Limit 1;
+        END IF;
+        vLastProcdate = (Select EndDate From TmpSaldoAwal);
+        vSaldoEndDate = cast(vStartTransDate + Cast('-1 Day' as Interval) as TimeStamp);
+
+        IF (vLastProcdate is Not Null) THEN
+            IF(vLastProcdate <> vSaldoEndDate) THEN
+                vSaldoStartDate = cast(vLastProcdate + Cast('1 Day' as Interval) as TimeStamp);
+
+                Insert Into TmpSaldoAwal (Seq, ProdId, StartDate, EndDate, BalanceQty, BalAdjQtyPrice)
+                Select 2, vProdId, vSaldoStartDate, vSaldoEndDate, 
+                        Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                                Then Coalesce(WHTransDt.TransInStdQty,0)
+                                Else -1 * Coalesce(WHTransDt.TransOutStdQty,0)
+                        End),0),
+                        Coalesce(SUM(Case When WHTransMs.FgStatus = 'I'
+                                Then Coalesce(WHTransDt.TransQtyPrice,0)
+                                Else -1 * Coalesce(WHTransDt.TransQtyPrice,0)
+                        End),0)
+                From WHTransHd
+                Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+                Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransdestType
+                Where WHTransDt.TransProdId = vProdId
+                  And WHTransHd.TransdestDate Between vSaldoStartDate And vSaldoEndDate;
+            END IF;
+        END IF;
+
+        IF Exists (Select 1 From TmpSaldoAwal Where Seq = 2) Then
+            Insert Into TmpDisplay (Seq, ProdId, TransTypeName, FgINOut,
+                        INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+            Select 1, TmpSaldoAwal.ProdId, 'Saldo Awal', 'I',
+                    SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)), 
+                    case When SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)) <> 0 
+                        Then Round(SUM(Coalesce(TmpSaldoAwal.BalAdjQtyPrice,0)) / SUM(Coalesce(TmpSaldoAwal.BalanceQty,0)), 4)
+                        Else 0
+                    End, 
+                    SUM(Coalesce(TmpSaldoAwal.BalAdjQtyPrice,0)), 0, 0, 0
+            From TmpSaldoAwal	
+            Inner Join SMProduct on SMProduct.ProdId = TmpSaldoAwal.ProdId
+            Group By TmpSaldoAwal.ProdId;
+         ELSE 
+            Insert Into TmpDisplay (Seq, ProdId, TransTypeName, FgINOut,
+                        INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+            Select 1, TmpSaldoAwal.ProdId, 'Saldo Awal', 'I',
+                    TmpSaldoAwal.BalanceQty, TmpSaldoAwal.BalAdjPrice, TmpSaldoAwal.BalAdjQtyPrice, 0, 0, 0
+            From TmpSaldoAwal	
+            Inner Join SMProduct on SMProduct.ProdId = TmpSaldoAwal.ProdId;
+        END IF;
+
+        Insert Into TmpDisplay (Seq, ProdId, wrhsCode, wrhsName, TransNo, TransDate, TransType, TransTypeName, FgINOut,
+            INQty,	INPrice, INQtyPrice, OutQty, OutPrice, OutQtyPrice)
+        Select ROW_NUMBER() Over(Order By WHTransHd.TransDestDate, WHTransDt.UpdDate, WHTransHd.TransDestNmbr) + 1 Seq,
+            WHTransDt.TransProdId, WHWrhs.WrhsCode,WHWrhs.WrhsName,
+            WHTransHd.TransDestNmbr, WHTransHd.TransDestDate, WHTransHd.TransDestType, WHTransMs.TransName, WHTransMs.FgStatus,
+            Coalesce(WHTransDt.TransInStdQty,0), Case When WHTransMs.FgStatus = 'I' Then Coalesce(WHTransDt.TransPrice,0) Else 0 End, Case When WHTransMs.FgStatus = 'I' Then Coalesce(WHTransDt.TransQtyPrice,0) Else 0 End,
+            Coalesce(WHTransDt.TransOutStdQty,0),  Case When WHTransMs.FgStatus = 'I' Then 0 Else Coalesce(WHTransDt.TransPrice,0) End, Case When WHTransMs.FgStatus = 'I' Then 0 Else Coalesce(WHTransDt.TransQtyPrice,0)  End
+        From WHTransHd
+        Inner Join WHTransDt on WHTransHd.TransHdId = WHTransDt.TransHdId
+        Inner Join WHTransMs on WHTransMs.TransCode = WHTransHd.TransDestType
+        Inner Join SMProduct on SMProduct.ProdId = WHTransDt.TransProdId
+        Inner Join WHWrhs on WHWrhs.WrhsId = WHTransHd.TransDestWrhsId
+        Where WHTransDt.TransProdId = vProdId
+          And WHTransHd.TransdestDate Between vStartTransDate And vEndTransDate$warehouseFilterSql
+        Order By WHTransHd.TransDestDate, WHTransDt.UpdDate, WHTransHd.TransDestNmbr;
+
+        Update TmpDisplay
+        Set Seq = case TransType			
+                    When '20' Then 2
+                    When '70' Then 2
+                    When '08' Then 3
+                    When '56' Then 3
+                    When '24' Then 4
+                    When '74' Then 4									
+                 End
+        Where TransType in ('08', '20', '24', '56','70', '74');
+
+        Update TmpDisplay
+        Set Seq = (select Max(A.Seq) from TmpDisplay A) + (Seq - 1)
+        Where TransType in ('08', '20', '24', '56','70', '74');
+
+        Update TmpDisplay
+        Set BalanceQty = Coalesce(INQty,0),
+            BalancePrice = Coalesce(INPrice,0),
+            BalanceQtyPrice = Coalesce(INQtyPrice,0)
+        Where Seq = 1;
+
+        Update TmpDisplay
+        Set BalanceQty = Coalesce(INQty,0) - Coalesce(OutQty,0) + Coalesce((Select SUM(Coalesce(A.INQty,0) - Coalesce(A.OutQty,0)) From TmpDisplay A Where A.Seq <= TmpDisplay.Seq - 1),0),
+            BalanceQtyPrice = Coalesce(INQtyPrice,0) - Coalesce(OutQtyPrice,0) + Coalesce((Select SUM(Coalesce(B.INQtyPrice,0) - Coalesce(B.OutQtyPrice,0)) From TmpDisplay B Where B.Seq <= TmpDisplay.Seq - 1),0)
+        Where Seq > 1;
+
+        Update TmpDisplay
+        Set BalancePrice = case When BalanceQty = 0 
+                                    Then 0
+                                Else Round(BalanceQtyPrice/ BalanceQty,4)
+                            End  
+        Where Seq > 1;
+
+        Update TmpDisplay
+        Set ProdCode = SMproduct.ProdCode,
+            ProdName = SMProduct.ProdName
+        From SMProduct
+        Where SMProduct.ProdId = TmpDisplay.ProdId;
+
+        END $$;
+        ";
+
+        // Eksekusi DO block
+        $doStmt = $conn3->prepare($doQuery);
+        $doStmt->execute();
+        
+        // Sekarang eksekusi SELECT query terpisah
+        $selectQuery = "
+        SELECT ProdCode as \"Product Code\", ProdName as \"Product Name\",
+            WrhsCode as \"Warehouse Code\", WrhsName as \"Warehouse Name\",
+            TransNo as \"No Bukti\", TransDate as \"Tanggal\", TransTypeName as \"Jenis Transaksi\", 
+            INQty as \"Kuantitas Terima\", INPrice as \"Harga Satuan Terima\", INQtyPrice as \"Total Terima\", 
+            OutQty as \"Kuantitas Keluar\", OutPrice as \"Harga Satuan Keluar\", OutQtyPrice as \"Total Keluar\", 
+            BalanceQty as \"Kuantitas Saldo\", BalancePrice as \"Harga Satuan Saldo\", BalanceQtyPrice as \"Total Saldo\"
+        FROM TmpDisplay 
+        ORDER BY Seq
+        ";
+        
+        $selectStmt = $conn3->prepare($selectQuery);
+        $selectStmt->execute();
+        $results = $selectStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+    } catch (PDOException $e) {
+        die("Error executing query: " . $e->getMessage());
+    }
+}
+?>
+
+<div class="wrapper">
+    <div class="content-wrapper">
+        <div class="content-header">
+            <div class="container-fluid">
+                <div class="row mb-2">
+                    <div class="col-sm-6">
+                        <h1 class="m-0">Kartu Stok</h1>
+                    </div>
+                    <div class="col-sm-6">
+                        <ol class="breadcrumb float-sm-right">
+                            <li class="breadcrumb-item"><a href="/gg_app/index.php">Beranda</a></li>
+                            <li class="breadcrumb-item active">Kartu Stok</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="container-fluid">               
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-<?php echo htmlspecialchars($themeColor);?> text-white">
+                                <h3 class="card-title">Kartu Stok Produk</h3>
+                            </div>
+                            <div class="card-body">
+                                <!-- Filter Form -->
+                                <form method="get" class="row align-items-end mb-3">
+                                    <div class="form-group col-md-3 col-sm-6 mb-2">
+                                        <label for="prodcode" class="d-block mb-1">Product Code</label>
+                                        <input type="text" id="prodcode" name="prodcode" class="form-control form-control-sm" 
+                                               value="<?= htmlspecialchars($prodcode) ?>" placeholder="Masukkan kode produk" required>
+                                    </div>
+
+                                    <div class="form-group col-md-3 col-sm-6 mb-2">
+                                        <label for="wrhsid" class="d-block mb-1">Warehouse</label>
+                                        <select id="wrhsid" name="wrhsid" class="form-control form-control-sm select2" style="width: 100%;">
+                                            <option value="">Semua Warehouse</option>
+                                            <?php foreach ($warehouses as $warehouse) : ?>
+                                                <option value="<?= htmlspecialchars($warehouse['WrhsId']) ?>" <?= ((string) $wrhsid === (string) $warehouse['WrhsId']) ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($warehouse['WrhsName']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="form-group col-md-2 col-sm-6 mb-2">
+                                        <label for="startdate" class="d-block mb-1">Tanggal Mulai</label>
+                                        <input type="date" id="startdate" name="startdate" class="form-control form-control-sm" 
+                                               value="<?= htmlspecialchars($startdate) ?>">
+                                    </div>
+                                    
+                                    <div class="form-group col-md-2 col-sm-6 mb-2">
+                                        <label for="enddate" class="d-block mb-1">Tanggal Akhir</label>
+                                        <input type="date" id="enddate" name="enddate" class="form-control form-control-sm" 
+                                               value="<?= htmlspecialchars($enddate) ?>">
+                                    </div>
+                                    
+                                    <div class="form-group col-md-2 col-sm-6 mb-2">
+                                        <button type="submit" class="btn btn-<?php echo htmlspecialchars($themeColor);?> btn-sm btn-block">
+                                            <i class="fas fa-search"></i> Tampilkan
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <?php if (!empty($results)) : ?>
+                                    <!-- Tombol Export Excel -->
+                                    <a href="export_excel_kartu_stok.php?prodcode=<?= urlencode($prodcode) ?>&startdate=<?= urlencode($startdate) ?>&enddate=<?= urlencode($enddate) ?>&wrhsid=<?= urlencode($wrhsid) ?>" 
+                                       class="btn btn-success btn-sm mb-3">
+                                       <i class="fas fa-file-excel"></i> Export to Excel
+                                    </a>
+
+                                    <!-- Info Produk -->
+                                    <div class="alert alert-info mb-3">
+                                        <strong>Produk:</strong> <?= htmlspecialchars($results[0]['Product Code'] ?? '') ?> - 
+                                        <?= htmlspecialchars($results[0]['Product Name'] ?? '') ?>
+                                    </div>
+
+                                    <!-- Data Table -->
+                                    <div class="table-responsive">                 
+                                        <table id="stokTable" class="table table-hover table-sm">
+                                            <thead class="thead-light">
+                                                <tr class="text-center align-middle">
+                                                    <th>No</th>
+                                                    <th>Tanggal</th>
+                                                    <th>No Bukti</th>
+                                                    <th>Jenis Transaksi</th>
+                                                    <th>Warehouse</th>
+                                                    <th>Qty In</th>
+                                                    <th>Harga In</th>
+                                                    <th>Total In</th>
+                                                    <th>Qty Out</th>
+                                                    <th>Harga Out</th>
+                                                    <th>Total Out</th>
+                                                    <th>Saldo Qty</th>
+                                                    <th>Harga Saldo</th>
+                                                    <th>Total Saldo</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php
+                                            $no = 1;
+                                            foreach ($results as $row) {
+                                                echo "<tr>";
+                                                echo "<td class='text-center'>".$no++."</td>";
+                                                echo "<td class='text-center'>".($row['Tanggal'] ? date("d/m/Y", strtotime($row['Tanggal'])) : '')."</td>";
+                                                echo "<td>".htmlspecialchars($row['No Bukti'])."</td>";
+                                                echo "<td>".htmlspecialchars($row['Jenis Transaksi'])."</td>";
+                                                echo "<td>".htmlspecialchars($row['Warehouse Code'])."<br><small class='text-muted'>".htmlspecialchars($row['Warehouse Name'])."</small></td>";
+                                                echo "<td class='text-right'>".number_format($row['Kuantitas Terima'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Harga Satuan Terima'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Total Terima'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Kuantitas Keluar'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Harga Satuan Keluar'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Total Keluar'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Kuantitas Saldo'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Harga Satuan Saldo'], 2)."</td>";
+                                                echo "<td class='text-right'>".number_format($row['Total Saldo'], 2)."</td>";
+                                                echo "</tr>";
+                                            }
+                                            ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php else : ?>
+                                    <?php if ($prodcode !== '') : ?>
+                                        <div class="alert alert-warning">
+                                            Data tidak ditemukan untuk produk: <strong><?= htmlspecialchars($prodcode) ?></strong>
+                                            dalam periode <?= htmlspecialchars($startdate) ?> hingga <?= htmlspecialchars($enddate) ?>
+                                        </div>
+                                    <?php else : ?>
+                                        <div class="alert alert-info">
+                                            Silakan masukkan kode produk dan periode untuk melihat kartu stok
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- ===================================================
+    10. IMPORT FOOTER
+======================================================= -->
+<?php include '../../includes/footer.php'; ?>
+<!-- ===================================================
+    11. JAVASCRIPT LIBRARIES
+======================================================= -->
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+
+<!-- DataTables JS -->
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        $("#stokTable").DataTable({
+            responsive: true,
+        autoWidth: false,
+        language: {
+            processing: "Memproses...",
+            lengthMenu: "Tampilkan _MENU_ data per halaman",
+            zeroRecords: "Tidak ada data ditemukan",
+            info: "Menampilkan _START_ - _END_ dari _TOTAL_ data",
+            infoEmpty: "Tidak ada data tersedia",
+            infoFiltered: "(disaring dari _MAX_ total data)",
+            search: "Cari:",
+            paginate: {
+                first: "Pertama",
+                last: "Terakhir",
+                next: "Selanjutnya",
+                previous: "Sebelumnya"
+            }
+        },
+            pageLength: 50,
+            dom: 'Bfrtip',
+            buttons: [
+                'pageLength', 
+                {
+                    extend: 'excel',
+                    text: 'Export to Excel',
+                    className: 'btn btn-success btn-sm'
+                }
+            ],
+        });
+    });
+</script>

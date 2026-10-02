@@ -1,0 +1,51 @@
+{
+    "admin": {
+        "menu": [
+            "updateGudangSubmenu",
+            "updatepicking",
+            "updatecpbatch",
+            "updatemultimenu",
+            "upload",
+            "riwayatSubmenu",
+            "riwayatgudang",
+            "riwayatmulti",
+            "riwayatupload",
+            "adminmenu",
+            "manajemenAksesMenu",
+            "userGroupMenu",
+            "hakAksesMenu",
+            "toolsSubmenu",
+            "tools"
+        ],
+        "buttons": [
+            "search",
+            "update-btn",
+            "tampilkan",
+            "delete"
+        ]
+    },
+    "staff": {
+        "menu": [
+            "updateGudangSubmenu",
+            "updatepicking",
+            "updatecpbatch",
+            "upload",
+            "riwayatSubmenu",
+            "riwayatgudang"
+        ],
+        "buttons": [
+            "search",
+            "update-btn",
+            "tampilkan"
+        ]
+    },
+    "staff 2": {
+        "menu": [
+            "riwayatSubmenu",
+            "riwayatupload"
+        ],
+        "buttons": [
+            "delete"
+        ]
+    }
+}

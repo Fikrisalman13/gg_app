@@ -1,0 +1,182 @@
+<?php
+
+/** Shared validation and PostgreSQL query for the Rekap Kartu Stok report. */
+function rekapKartuStockIsValidDate(string $value): bool
+{
+    $date = DateTime::createFromFormat('!Y-m-d', $value);
+    return $date !== false && $date->format('Y-m-d') === $value;
+}
+
+function rekapKartuStockGetWarehouses(PDO $conn3): array
+{
+    $stmt = $conn3->query('SELECT wrhscode, wrhsname FROM whwrhs ORDER BY wrhscode');
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function rekapKartuStockValidateFilters(array $input, array $warehouses): array
+{
+    $startDate = trim((string) ($input['startdate'] ?? ''));
+    $endDate = trim((string) ($input['enddate'] ?? ''));
+    $wrhsCode = trim((string) ($input['wrhscode'] ?? ''));
+
+    if (!rekapKartuStockIsValidDate($startDate) || !rekapKartuStockIsValidDate($endDate)) {
+        return [null, 'Tanggal mulai dan tanggal akhir harus valid.'];
+    }
+    if ($startDate > $endDate) {
+        return [null, 'Tanggal mulai tidak boleh melebihi tanggal akhir.'];
+    }
+    if ($wrhsCode === '') {
+        return [null, 'Warehouse wajib dipilih.'];
+    }
+
+    foreach ($warehouses as $warehouse) {
+        if ((string) ($warehouse['wrhscode'] ?? '') === $wrhsCode) {
+            return [[
+                'startdate' => $startDate,
+                'enddate' => $endDate,
+                'wrhscode' => $wrhsCode,
+            ], null];
+        }
+    }
+
+    return [null, 'Warehouse yang dipilih tidak ditemukan.'];
+}
+
+function rekapKartuStockFetch(PDO $conn3, array $filters, ?int $limit = null, int $offset = 0, string $search = ''): array
+{
+    // end_exclusive membuat semua transaksi pada tanggal akhir tetap ikut dihitung.
+    $sql = <<<'SQL'
+WITH parameters AS (
+    SELECT CAST(? AS timestamp) AS start_date,
+           CAST(? AS timestamp) + INTERVAL '1 day' AS end_exclusive,
+           CAST(? AS varchar(25)) AS wrhs_code
+),
+transaction_data AS (
+    SELECT
+        p.prodid,
+        p.prodcode,
+        p.prodname,
+        w.wrhscode,
+        w.wrhsname,
+        m.transname,
+        m.fgstatus,
+        h.transdestdate,
+        COALESCE(d.transinstdqty, 0) AS in_qty,
+        COALESCE(d.transoutstdqty, 0) AS out_qty,
+        COALESCE(d.transqtyprice, 0) AS qty_price
+    FROM whtranshd h
+    INNER JOIN whtransdt d ON h.transhdid = d.transhdid
+    INNER JOIN whtransms m ON m.transcode = h.transdesttype
+    INNER JOIN smproduct p ON p.prodid = d.transprodid
+    INNER JOIN whwrhs w ON w.wrhsid = h.transdestwrhsid
+    CROSS JOIN parameters prm
+    WHERE w.wrhscode = prm.wrhs_code
+      -- Saldo awal hanya membutuhkan riwayat sebelum start_date dan aktivitas
+      -- periode berakhir pada end_exclusive; transaksi sesudahnya tidak pernah
+      -- dipakai oleh report ini.
+      AND h.transdestdate < prm.end_exclusive
+),
+opening_totals AS (
+    SELECT
+        td.prodid, td.prodcode, td.prodname, td.wrhscode, td.wrhsname,
+        SUM(CASE WHEN td.fgstatus = 'I' THEN td.in_qty ELSE 0 END)
+            - SUM(CASE WHEN td.fgstatus <> 'I' THEN td.out_qty ELSE 0 END) AS qty,
+        SUM(CASE WHEN td.fgstatus = 'I' THEN td.qty_price ELSE 0 END)
+            - SUM(CASE WHEN td.fgstatus <> 'I' THEN td.qty_price ELSE 0 END) AS total
+    FROM transaction_data td
+    CROSS JOIN parameters prm
+    WHERE td.transdestdate < prm.start_date
+    GROUP BY td.prodid, td.prodcode, td.prodname, td.wrhscode, td.wrhsname
+),
+opening AS (
+    SELECT prodid, prodcode, prodname, wrhscode, wrhsname,
+           'Saldo Awal'::varchar AS transtype_name,
+           qty AS saldo_awal_qty,
+           CASE WHEN qty <> 0 THEN ROUND(total / qty, 4) ELSE 0 END AS saldo_awal_price,
+           CASE WHEN qty <> 0 THEN total ELSE 0 END AS saldo_awal_total,
+           0::numeric AS in_qty, 0::numeric AS in_price, 0::numeric AS in_total,
+           0::numeric AS out_qty, 0::numeric AS out_price, 0::numeric AS out_total
+    FROM opening_totals
+),
+period_totals AS (
+    SELECT
+        td.prodid, td.prodcode, td.prodname, td.wrhscode, td.wrhsname, td.transname,
+        SUM(CASE WHEN td.fgstatus = 'I' THEN td.in_qty ELSE 0 END) AS in_qty,
+        SUM(CASE WHEN td.fgstatus = 'I' THEN td.qty_price ELSE 0 END) AS in_total,
+        SUM(CASE WHEN td.fgstatus <> 'I' THEN td.out_qty ELSE 0 END) AS out_qty,
+        SUM(CASE WHEN td.fgstatus <> 'I' THEN td.qty_price ELSE 0 END) AS out_total
+    FROM transaction_data td
+    CROSS JOIN parameters prm
+    WHERE td.transdestdate >= prm.start_date
+      AND td.transdestdate < prm.end_exclusive
+    GROUP BY td.prodid, td.prodcode, td.prodname, td.wrhscode, td.wrhsname, td.transname
+),
+period_activity AS (
+    SELECT prodid, prodcode, prodname, wrhscode, wrhsname,
+           transname AS transtype_name,
+           0::numeric AS saldo_awal_qty, 0::numeric AS saldo_awal_price, 0::numeric AS saldo_awal_total,
+           in_qty, CASE WHEN in_qty <> 0 THEN ROUND(in_total / in_qty, 4) ELSE 0 END AS in_price, in_total,
+           out_qty, CASE WHEN out_qty <> 0 THEN ROUND(out_total / out_qty, 4) ELSE 0 END AS out_price, out_total
+    FROM period_totals
+),
+activity AS (
+    SELECT * FROM opening
+    UNION ALL
+    SELECT * FROM period_activity
+),
+closing_totals AS (
+    SELECT prodid, prodcode, prodname, wrhscode, wrhsname,
+           SUM(saldo_awal_qty) + SUM(in_qty) - SUM(out_qty) AS qty,
+           SUM(saldo_awal_total) + SUM(in_total) - SUM(out_total) AS total
+    FROM activity
+    GROUP BY prodid, prodcode, prodname, wrhscode, wrhsname
+),
+report_rows AS (
+    SELECT prodid, prodcode, prodname, wrhscode, wrhsname, transtype_name,
+           saldo_awal_qty, saldo_awal_price, saldo_awal_total,
+           in_qty, in_price, in_total, out_qty, out_price, out_total,
+           0::numeric AS saldo_akhir_qty, 0::numeric AS saldo_akhir_price, 0::numeric AS saldo_akhir_total
+    FROM activity
+    UNION ALL
+    SELECT prodid, prodcode, prodname, wrhscode, wrhsname, 'Saldo Akhir',
+           0, 0, 0, 0, 0, 0, 0, 0, 0,
+           qty, CASE WHEN qty <> 0 THEN ROUND(total / qty, 4) ELSE 0 END,
+           CASE WHEN qty <> 0 THEN total ELSE 0 END
+    FROM closing_totals
+)
+SELECT COUNT(*) OVER () AS total_rows,
+       prodcode, prodname, wrhscode, wrhsname, transtype_name,
+       saldo_awal_qty, saldo_awal_price, saldo_awal_total,
+       in_qty, in_price, in_total, out_qty, out_price, out_total,
+       saldo_akhir_qty, saldo_akhir_price, saldo_akhir_total
+FROM report_rows
+SQL;
+
+    $parameters = [$filters['startdate'], $filters['enddate'], $filters['wrhscode']];
+    $search = trim($search);
+    if ($search !== '') {
+        $sql .= "\n" . <<<'SQL'
+WHERE prodcode ILIKE ?
+   OR prodname ILIKE ?
+   OR transtype_name ILIKE ?
+SQL;
+        $like = '%' . $search . '%';
+        array_push($parameters, $like, $like, $like);
+    }
+
+    $sql .= "\n" . <<<'SQL'
+ORDER BY prodcode, wrhscode,
+         CASE WHEN transtype_name = 'Saldo Awal' THEN 0 WHEN transtype_name = 'Saldo Akhir' THEN 999 ELSE 1 END,
+         transtype_name
+SQL;
+
+    if ($limit !== null) {
+        $sql .= "\nLIMIT ? OFFSET ?";
+        $parameters[] = max(1, min($limit, 100));
+        $parameters[] = max(0, $offset);
+    }
+
+    $stmt = $conn3->prepare($sql);
+    $stmt->execute($parameters);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}

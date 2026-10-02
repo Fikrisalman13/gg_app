@@ -1,0 +1,47 @@
+# Git ignore configuration for gg_app
+
+# Compressed / Archive files (e.g. backup archives)
+*.rar
+*.zip
+*.7z
+*.tar.gz
+*.tar
+*.iso
+
+# Composer dependencies
+/vendor/
+
+# Temporary, scratch & cache
+/scratch/
+*.tmp
+*.bak
+*.swp
+*~
+
+# Application Logs
+/logs/*
+!/logs/.gitkeep
+*.log
+
+# Dynamic User Uploads (Dokumen, Lampiran, Foto Resep)
+**/uploads/*
+!**/uploads/.gitkeep
+**/uploads_lampiran/*
+!**/uploads_lampiran/.gitkeep
+**/tmp_uploads/*
+!**/tmp_uploads/.gitkeep
+
+# Backup & Release folders
+/backups/*
+!/backups/.gitkeep
+/releases/*
+!/releases/.gitkeep
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

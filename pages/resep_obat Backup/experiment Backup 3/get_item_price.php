@@ -1,0 +1,8 @@
+<?php
+require_once __DIR__ . '/../../../koneksi3.php';
+header('Content-Type: application/json');
+$prodcode=$_GET['prodcode']??''; if($prodcode===''){ echo json_encode(['price'=>0,'source'=>'none']); exit; }
+try{ $price=0; $source='none';
+$sqlPO="WITH last_po AS (SELECT h.pohdid FROM prpohd h JOIN prpodt d ON h.pohdid=d.pohdid JOIN smproduct p ON d.poprodid=p.prodid WHERE p.prodcode=:prodcode ORDER BY h.podate DESC,h.pohdid DESC LIMIT 1) SELECT (d.poprice*h.pocurrrate) price_po FROM last_po lp JOIN prpohd h ON lp.pohdid=h.pohdid JOIN prpodt d ON h.pohdid=d.pohdid JOIN smproduct p ON d.poprodid=p.prodid WHERE p.prodcode=:prodcode2"; $stmt=$conn3->prepare($sqlPO); $stmt->bindParam(':prodcode',$prodcode); $stmt->bindParam(':prodcode2',$prodcode); $stmt->execute(); $r=$stmt->fetch(PDO::FETCH_ASSOC); if($r && $r['price_po']>0){$price=(float)$r['price_po'];$source='PO';} else { $sqlT="SELECT w.price price_template FROM whpricetemp w JOIN smproduct p ON w.prodid=p.prodid WHERE w.prodtypename='Raw Material' AND p.prodcode=:prodcode ORDER BY w.price DESC LIMIT 1"; $stmt=$conn3->prepare($sqlT); $stmt->bindParam(':prodcode',$prodcode); $stmt->execute(); $r=$stmt->fetch(PDO::FETCH_ASSOC); if($r){$price=(float)$r['price_template'];$source='Template';}}
+$sqlU="SELECT u.uomcode FROM smproduct p LEFT JOIN smuom u ON p.uomid=u.uomid WHERE p.prodcode=:prodcode"; $stmt=$conn3->prepare($sqlU); $stmt->bindParam(':prodcode',$prodcode); $stmt->execute(); $u=$stmt->fetch(PDO::FETCH_ASSOC); echo json_encode(['price'=>$price,'source'=>$source,'uom'=>$u['uomcode']??'','satuan'=>$u['uomcode']??'']);
+}catch(PDOException $e){ echo json_encode(['price'=>0,'source'=>'none','error'=>$e->getMessage()]); }

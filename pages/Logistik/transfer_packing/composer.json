@@ -1,0 +1,22 @@
+{
+    "name": "administrator/transfer_packing",
+    "autoload": {
+        "psr-4": {
+            "Administrator\\TransferPacking\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "yes"
+        }
+    ],
+    "require": {
+        "tecnickcom/tcpdf": "^6.8",
+        "endroid/qr-code": "3.0"
+    },
+    "config": {
+        "platform": {
+            "php": "8.0.28"
+        }
+    }
+}

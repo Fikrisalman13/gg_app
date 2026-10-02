@@ -1,0 +1,46 @@
+{
+    "BakClarivier": {
+        "ph": {
+            "min": 6.5,
+            "max": 9
+        }
+    },
+    "Bak2": {
+        "ph": {
+            "min": 7,
+            "max": 8
+        }
+    },
+    "Bak3": {
+        "ph": {
+            "min": 7,
+            "max": 8
+        },
+        "dh": {
+            "std": 2
+        },
+        "turbidity": {
+            "min": 0,
+            "max": 5
+        }
+    },
+    "Bak4": {
+        "ph": {
+            "min": 7,
+            "max": 8
+        },
+        "dh": {
+            "std": 0
+        },
+        "turbidity": {
+            "min": 0,
+            "max": 5
+        }
+    },
+    "AirSungai": {
+        "ph": {
+            "min": 7,
+            "max": 8
+        }
+    }
+}

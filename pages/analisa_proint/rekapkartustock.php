@@ -1,0 +1,169 @@
+<?php
+session_start();
+ob_start();
+include '../../koneksi.php';
+include '../../koneksi3.php';
+require_once __DIR__ . '/rekapkartustock_query.php';
+include '../../includes/header.php';
+include '../../includes/sidebar.php';
+
+if (!isset($_SESSION['UserName'])) {
+    $_SESSION['error'] = 'Silakan login terlebih dahulu!';
+    header('Location: /gg_app/login.php');
+    exit;
+}
+
+$themeColor = $_SESSION['Theme'] ?? 'primary';
+$groupId = $_SESSION['GroupId'];
+$permissionStmt = sqlsrv_query($conn, 'SELECT TOP 1 CanView FROM dbo.SMGroupTrustee WHERE GroupId = ? AND MenuId = ?', [$groupId, 78]);
+$permission = ($permissionStmt && ($permissionRow = sqlsrv_fetch_array($permissionStmt, SQLSRV_FETCH_ASSOC))) ? $permissionRow : [];
+if ($permissionStmt) {
+    sqlsrv_free_stmt($permissionStmt);
+}
+if (isset($permission['CanView']) && (int) $permission['CanView'] === 0) {
+    die('Anda tidak memiliki hak untuk melihat halaman ini.');
+}
+
+$wrhsCode = trim((string) ($_GET['wrhscode'] ?? ''));
+// URL laporan juga dapat dibuka langsung (mis. dari bookmark/export) tanpa
+// harus membawa tombol submit `show=1`.
+$submitted = isset($_GET['show']) || $wrhsCode !== '';
+$warehouses = [];
+$error = null;
+
+try {
+    $warehouses = rekapKartuStockGetWarehouses($conn3);
+    if ($submitted) {
+        [$filters, $error] = rekapKartuStockValidateFilters($_GET, $warehouses);
+    }
+} catch (Throwable $e) {
+    $error = 'Data rekap tidak dapat dimuat. Silakan coba kembali atau hubungi administrator.';
+}
+?>
+<div class="wrapper"><div class="content-wrapper">
+    <div class="content-header"><div class="container-fluid"><div class="row mb-2">
+        <div class="col-sm-6"><h1 class="m-0">Rekap Kartu Stok</h1></div>
+        <div class="col-sm-6"><ol class="breadcrumb float-sm-right"><li class="breadcrumb-item"><a href="/gg_app/index.php">Beranda</a></li><li class="breadcrumb-item active">Rekap Kartu Stok</li></ol></div>
+    </div></div></div>
+    <div class="content"><div class="container-fluid"><div class="card">
+        <div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white"><h3 class="card-title"><i class="fas fa-clipboard-list mr-1"></i> Rekap per Warehouse</h3></div>
+        <div class="card-body">
+            <form method="get" id="rekapFilterForm" class="row align-items-end mb-3">
+                <input type="hidden" id="startdate" disabled>
+                <input type="hidden" id="enddate" disabled>
+                <div class="form-group col-md-5 col-sm-8"><label for="wrhscode">Warehouse</label><select id="wrhscode" name="wrhscode" class="form-control form-control-sm select2" style="width:100%" required><option value="">Pilih Warehouse</option><option value="__ALL__" <?= $wrhsCode === '__ALL__' ? 'selected' : '' ?>>Semua Gudang</option><?php foreach ($warehouses as $warehouse): ?><option value="<?= htmlspecialchars($warehouse['wrhscode']) ?>" <?= $wrhsCode === (string) $warehouse['wrhscode'] ? 'selected' : '' ?>><?= htmlspecialchars($warehouse['wrhscode'] . ' - ' . $warehouse['wrhsname']) ?></option><?php endforeach; ?></select></div>
+                <div class="form-group col-md-2 col-sm-4"><button type="submit" name="show" value="1" class="btn btn-sm btn-block bg-<?= htmlspecialchars($themeColor) ?> rekap-submit-button"><i class="fas fa-search"></i> Tampilkan</button></div>
+            </form>
+            <?php if ($error !== null): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+            <?php if ($submitted && $error === null): ?>
+                <a id="btnExportRekap" class="btn btn-success btn-sm mb-3" href="export_excel_rekapkartustock.php?wrhscode=<?= urlencode($wrhsCode) ?>"><i class="fas fa-file-excel"></i> Export to Excel</a>
+                <div class="table-responsive"><table id="rekapTable" class="table table-hover table-sm table-bordered"><thead class="thead-light"><tr class="text-center"><th>Product Code</th><th>Product Name</th><th>Warehouse</th><th>Jenis Transaksi</th><th>Saldo Awal<br>Qty</th><th>Saldo Awal<br>Harga</th><th>Saldo Awal<br>Total</th><th>Terima<br>Qty</th><th>Terima<br>Harga</th><th>Terima<br>Total</th><th>Keluar<br>Qty</th><th>Keluar<br>Harga</th><th>Keluar<br>Total</th><th>Saldo Akhir<br>Qty</th><th>Saldo Akhir<br>Harga</th><th>Saldo Akhir<br>Total</th></tr></thead><tbody></tbody></table></div>
+            <?php elseif (!$submitted): ?><div class="alert alert-info mb-0">Pilih periode dan warehouse, atau <strong>Semua Gudang</strong>, lalu klik <strong>Tampilkan</strong> untuk melihat rekap.</div><?php endif; ?>
+        </div>
+    </div></div></div>
+</div></div>
+<?php include '../../includes/footer.php'; ?>
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+<style>
+    /* Gunakan kelas bg tema yang sama dengan header; btn-{tema} tidak tersedia untuk semua tema AdminLTE. */
+    .rekap-submit-button { color: #fff !important; border-color: transparent; }
+    .rekap-submit-button:hover, .rekap-submit-button:focus { color: #fff !important; filter: brightness(.9); }
+    .rekap-progress-overlay { position: fixed; inset: 0; z-index: 99999; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, .42); }
+    .rekap-progress-overlay.is-visible { display: flex; }
+    .rekap-progress-panel { width: min(420px, calc(100vw - 32px)); padding: 24px; border-radius: 6px; background: #fff; box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+    .rekap-progress-track { height: 12px; overflow: hidden; border-radius: 99px; background: #e9ecef; }
+    .rekap-progress-bar { width: 42%; height: 100%; border-radius: inherit; background: #17a2b8; animation: rekap-progress 1.2s ease-in-out infinite; }
+    @keyframes rekap-progress { 0% { transform: translateX(-110%); } 100% { transform: translateX(250%); } }
+</style>
+<div id="rekapProgressOverlay" class="rekap-progress-overlay" role="status" aria-live="polite" aria-hidden="true">
+    <div class="rekap-progress-panel text-center">
+        <div id="rekapProgressTitle" class="font-weight-bold mb-2">Memproses laporan...</div>
+        <div id="rekapProgressMessage" class="text-muted small mb-3">Harap tunggu, data sedang disiapkan.</div>
+        <div class="rekap-progress-track"><div class="rekap-progress-bar"></div></div>
+    </div>
+</div>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script>
+$(function () {
+    $('#wrhscode').select2({theme: 'bootstrap4', width: '100%'});
+    var $overlay = $('#rekapProgressOverlay');
+    function showProgress(title, message) {
+        $('#rekapProgressTitle').text(title);
+        $('#rekapProgressMessage').text(message);
+        $overlay.addClass('is-visible').attr('aria-hidden', 'false');
+    }
+    function hideProgress() { $overlay.removeClass('is-visible').attr('aria-hidden', 'true'); }
+
+    var isSubmittingReport = false;
+    $('#rekapFilterForm').on('submit', function (event) {
+        if (isSubmittingReport) {
+            return true;
+        }
+        event.preventDefault();
+        isSubmittingReport = true;
+        showProgress('Menampilkan rekap...', 'Harap tunggu, data stok sedang dihitung.');
+        $(this).find('button[type="submit"]').prop('disabled', true);
+        var form = this;
+        // Beri browser satu frame untuk menggambar progress bar sebelum request dimulai.
+        setTimeout(function () { form.submit(); }, 50);
+        return false;
+    });
+
+    var isExportingReport = false;
+    $('#btnExportRekap').on('click', function (event) {
+        event.preventDefault();
+        if (isExportingReport) {
+            return false;
+        }
+        isExportingReport = true;
+        var $link = $(this);
+        var originalUrl = $link.attr('href');
+        var token = 'rekap_' + Date.now();
+        var exportUrl = originalUrl + '&downloadToken=' + encodeURIComponent(token);
+        showProgress('Menyiapkan Excel...', 'Harap tunggu, file Excel sedang dibuat.');
+
+        // Overlay terus berjalan sampai cookie downloadToken diterima dari endpoint export.
+        var checkDownload = setInterval(function () {
+            if (document.cookie.split('; ').some(function (cookie) { return cookie === 'downloadToken=' + token; })) {
+                clearInterval(checkDownload);
+                document.cookie = 'downloadToken=; Max-Age=0; path=/gg_app/';
+                hideProgress();
+                isExportingReport = false;
+            }
+        }, 500);
+        // Beri browser satu frame untuk menampilkan overlay sebelum request file dimulai.
+        setTimeout(function () { window.location.href = exportUrl; }, 50);
+        return false;
+    });
+    <?php if ($submitted && $error === null): ?>
+    var escapeHtml = function (value) { return $('<div>').text(value == null ? '' : value).html(); };
+    var formatNumber = function (value) { return Number(value || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4}); };
+    var numericColumn = function (name) { return {data:name, className:'text-right', render:function (data, type) { return type === 'display' ? formatNumber(data) : data; }}; };
+    var $rekapTable = $('#rekapTable');
+    showProgress('Menampilkan rekap...', 'Menyiapkan halaman pertama data stok.');
+    $rekapTable.on('error.dt', function () { hideProgress(); });
+    $rekapTable.DataTable({
+        processing:true,
+        serverSide:true,
+        scrollX:true,
+        pageLength:20,
+        lengthMenu:[[20,40,60,80,100],[20,40,60,80,100]],
+        ajax:{url:'rekapkartustock_data.php', type:'GET', data:{wrhscode:<?= json_encode($wrhsCode) ?>}},
+        order:[],
+        columns:[
+            {data:'prodcode', render:function(data){ return escapeHtml(data); }},
+            {data:'prodname', render:function(data){ return escapeHtml(data); }},
+            {data:null, render:function(data){ return escapeHtml(data.wrhscode) + '<br><small class="text-muted">' + escapeHtml(data.wrhsname) + '</small>'; }},
+            {data:'transtype_name', render:function(data){ return escapeHtml(data); }},
+            numericColumn('saldo_awal_qty'), numericColumn('saldo_awal_price'), numericColumn('saldo_awal_total'),
+            numericColumn('in_qty'), numericColumn('in_price'), numericColumn('in_total'),
+            numericColumn('out_qty'), numericColumn('out_price'), numericColumn('out_total'),
+            numericColumn('saldo_akhir_qty'), numericColumn('saldo_akhir_price'), numericColumn('saldo_akhir_total')
+        ],
+        initComplete:function () { hideProgress(); },
+        language:{search:'Cari:', lengthMenu:'Tampilkan _MENU_ data', zeroRecords:'Tidak ada data ditemukan', info:'Menampilkan _START_ - _END_ dari _TOTAL_ data', paginate:{next:'Selanjutnya', previous:'Sebelumnya'}}
+    });
+    <?php endif; ?>
+});
+</script>

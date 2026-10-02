@@ -1,0 +1,32 @@
+[
+    {
+        "group_id": "admin",
+        "group_name": "Administrator",
+        "members": [
+            "admin1",
+            "IT7",
+            "sum",
+            "IT8"
+        ]
+    },
+    {
+        "group_id": "staff",
+        "group_name": "Staf Gudang",
+        "members": [
+            "user1",
+            "user2",
+            "akarin",
+            "TB4",
+            "TB1",
+            "TB2",
+            "TB3",
+            "TB5",
+            "TB6",
+            "TB7",
+            "TB8",
+            "TB9",
+            "PL2",
+            "PL1"
+        ]
+    }
+]
