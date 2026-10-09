@@ -359,9 +359,36 @@ $dueDefault = date('Y-m-d', strtotime('+1 day'));
                 <button type="button" class="btn btn-outline-primary btn-sm" id="btnQuickAddPPN" title="Tambah Baris PPN 11%">
                     <i class="fas fa-percentage"></i> + PPN 11%
                 </button>
-                <button type="button" class="btn btn-outline-danger btn-sm" id="btnQuickAddPPh" title="Tambah Baris PPh 23 2%">
-                    <i class="fas fa-minus-circle"></i> + PPh 23 (2%)
-                </button>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-danger btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" id="btnDropdownPPh" title="Pilih Potongan PPh">
+                        <i class="fas fa-minus-circle"></i> + PPh
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-right shadow-sm" style="font-size: 0.85rem; min-width: 250px;">
+                        <h6 class="dropdown-header text-uppercase font-weight-bold py-1 px-3 text-secondary" style="font-size: 0.72rem;">
+                            <i class="fas fa-percent mr-1"></i> Potongan PPh
+                        </h6>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 21 2.5%" data-rate="0.025">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">21</span> PPh 21 (2.5%)
+                        </a>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 23 2%" data-rate="0.02">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">23</span> PPh 23 (2%)
+                        </a>
+                        <div class="dropdown-divider my-1"></div>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 4(2) 0.5%" data-rate="0.005">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">4(2)</span> PPh 4(2) - 0.5% (Jasa/Konstruksi)
+                        </a>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 4(2) 10%" data-rate="0.10">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">4(2)</span> PPh 4(2) - 10% (Sewa Bangunan)
+                        </a>
+                        <div class="dropdown-divider my-1"></div>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 22 1.5%" data-rate="0.015">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">22</span> PPh 22 (1.5%)
+                        </a>
+                        <a class="dropdown-item btn-quick-add-pph py-1 px-3" href="#" data-label="PPH 26 20%" data-rate="0.20">
+                            <span class="badge badge-light text-danger mr-1 border font-weight-bold">26</span> PPh 26 (20%)
+                        </a>
+                    </div>
+                </div>
                 <button type="button" class="btn btn-primary btn-sm" id="btnAddRow">
                     <i class="fas fa-plus"></i> Tambah Baris
                 </button>
@@ -714,18 +741,25 @@ $dueDefault = date('Y-m-d', strtotime('+1 day'));
         });
     });
 
-    // Quick Add PPh 23 2%
-    $('#btnQuickAddPPh').on('click', function(e) {
+    // Quick Add PPh via Dropdown (+ backward-compatible alias untuk #btnQuickAddPPh)
+    $(document).on('click', '.btn-quick-add-pph', function(e) {
         e.preventDefault();
+        var label = $(this).data('label');
+        var rate = parseFloat($(this).data('rate')) || 0;
         var firstDpp = parseFloat($tbody.find('tr:first .item-dpp').val()) || 0;
-        var pphVal = Math.round(firstDpp * 0.02 * 100) / 100;
+        var pphVal = Math.round(firstDpp * rate * 100) / 100;
         addRow({
-            keterangan: 'PPH 23 2%',
+            keterangan: label,
             cd: 'D',
             sifat: '-',
             curr: $('#codCurrency').val() || 'IDR',
             dpp: pphVal > 0 ? pphVal : ''
         });
+    });
+
+    $('#btnQuickAddPPh').on('click', function(e) {
+        e.preventDefault();
+        $('.btn-quick-add-pph[data-label="PPH 23 2%"]').trigger('click');
     });
 
     // Update currency in items when main currency changes

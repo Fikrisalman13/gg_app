@@ -12,10 +12,14 @@ function getCurrentUserIdentity($conn) {
     $user = trim($_SESSION['UserName'] ?? '');
     $nama = trim($_SESSION['NamaLengkap'] ?? '');
     $dept = '';
+    $idDept = null;
+    $groupId = $_SESSION['GroupId'] ?? null;
+    $groupName = $_SESSION['GroupName'] ?? '';
     
     if (!empty($conn) && !empty($user)) {
-        $q = sqlsrv_query($conn, "SELECT e.nama_lengkap, d.dept 
+        $q = sqlsrv_query($conn, "SELECT u.GroupId, g.GroupName, e.nama_lengkap, d.id_dept, d.dept 
             FROM dbo.SMUserMs u 
+            LEFT JOIN dbo.SMUserGroup g ON u.GroupId = g.GroupId 
             LEFT JOIN dbo.m_emp e ON u.EmpId = e.id_emp 
             LEFT JOIN dbo.m_subbag sb ON e.id_subbag = sb.id_subbag
             LEFT JOIN dbo.m_bag b ON sb.id_bag = b.id_bag
@@ -24,16 +28,50 @@ function getCurrentUserIdentity($conn) {
         if ($q && ($row = sqlsrv_fetch_array($q, SQLSRV_FETCH_ASSOC))) {
             if (!empty($row['nama_lengkap'])) $nama = trim($row['nama_lengkap']);
             if (!empty($row['dept'])) $dept = trim($row['dept']);
+            if (isset($row['id_dept'])) $idDept = (int)$row['id_dept'];
+            if (!empty($row['GroupId'])) $groupId = $row['GroupId'];
+            if (!empty($row['GroupName'])) $groupName = trim($row['GroupName']);
         }
     }
     if (empty($nama)) $nama = $user;
     $formatted = !empty($dept) ? "{$nama} ({$dept})" : $nama;
 
+    // Evaluasi Hak Akses Departemen:
+    // 1. Administrator (GroupName = 'Administrator' atau GroupId = 1): Full Bypass
+    $isAdmin = (
+        (!empty($groupName) && strcasecmp(trim($groupName), 'Administrator') === 0) ||
+        (int)$groupId === 1
+    );
+
+    // 2. Finance (id_dept = 9) & Accounting (id_dept = 6)
+    $isFinAcc = (
+        in_array($idDept, [6, 9], true) ||
+        stripos($dept, 'Finance') !== false ||
+        stripos($dept, 'Accounting') !== false
+    );
+
+    // Hak Akses Fitur:
+    // - Sign: Hanya Finance/Accounting & Admin
+    // - Edit/Add/Delete: Purchasing & departemen lain bisa, Finance/Accounting TIDAK bisa (Admin tetap bisa)
+    $canSign   = ($isAdmin || $isFinAcc);
+    $canEdit   = ($isAdmin || !$isFinAcc);
+    $canAdd    = ($isAdmin || !$isFinAcc);
+    $canDelete = ($isAdmin || !$isFinAcc);
+
     return [
-        'user'      => $user,
-        'nama'      => $nama,
-        'dept'      => $dept,
-        'formatted' => $formatted
+        'user'       => $user,
+        'nama'       => $nama,
+        'dept'       => $dept,
+        'id_dept'    => $idDept,
+        'group_id'   => $groupId,
+        'group_name' => $groupName,
+        'is_admin'   => $isAdmin,
+        'is_fin_acc' => $isFinAcc,
+        'can_sign'   => $canSign,
+        'can_edit'   => $canEdit,
+        'can_add'    => $canAdd,
+        'can_delete' => $canDelete,
+        'formatted'  => $formatted
     ];
 }
 
@@ -557,6 +595,14 @@ if ($action === 'get_po_keterangan_list') {
 // ACTION: ADD (Tambah Dokumen Baru)
 // =========================================================================
 if ($action === 'add') {
+    if (!$currentUser['can_add']) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Akses Ditolak: Departemen Finance & Accounting tidak memiliki hak untuk menambah data serah terima!'
+        ]);
+        exit;
+    }
+
     $tanggal = trim($_POST['tanggal'] ?? date('Y-m-d'));
     $items = $_POST['items'] ?? [];
     $pengirim = trim($_POST['pengirim'] ?? $currentUser['formatted']);
@@ -796,6 +842,14 @@ if ($action === 'add') {
 // ACTION: EDIT (Perbarui Dokumen)
 // =========================================================================
 if ($action === 'edit') {
+    if (!$currentUser['can_edit']) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Akses Ditolak: Departemen Finance & Accounting tidak memiliki hak untuk mengubah data serah terima!'
+        ]);
+        exit;
+    }
+
     $id = intval($_POST['id'] ?? 0);
     if ($id <= 0) {
         echo json_encode(['status' => 'error', 'message' => 'ID data tidak valid!']);
@@ -953,6 +1007,14 @@ if ($action === 'edit') {
 // ACTION: DELETE (Hapus Dokumen)
 // =========================================================================
 if ($action === 'delete') {
+    if (!$currentUser['can_delete']) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Akses Ditolak: Departemen Finance & Accounting tidak memiliki hak untuk menghapus data serah terima!'
+        ]);
+        exit;
+    }
+
     $id = intval($_POST['id'] ?? 0);
     if ($id <= 0) {
         echo json_encode(['status' => 'error', 'message' => 'ID data tidak valid!']);
@@ -988,6 +1050,14 @@ if ($action === 'delete') {
 // Penerima akan diisi otomatis dengan Nama (Departemen) akun yang TTD
 // =========================================================================
 if ($action === 'sign') {
+    if (!$currentUser['can_sign']) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Akses Ditolak: Hanya Departemen Finance & Accounting atau Administrator yang berhak menandatangani dokumen ini.'
+        ]);
+        exit;
+    }
+
     $id = intval($_POST['id'] ?? 0);
     $signatureData = trim($_POST['signature_data'] ?? '');
 
@@ -1084,6 +1154,14 @@ if ($action === 'sign') {
 // ACTION: BATCH_SIGN (Tanda Tangan Massal / Batch Sign)
 // =========================================================================
 if ($action === 'batch_sign') {
+    if (!$currentUser['can_sign']) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Akses Ditolak: Hanya Departemen Finance & Accounting atau Administrator yang berhak menandatangani dokumen ini.'
+        ]);
+        exit;
+    }
+
     $ids = $_POST['ids'] ?? [];
     if (!is_array($ids)) {
         if (is_string($ids)) {
@@ -1285,9 +1363,9 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
         $tandaTangan = '<span class="badge-status-pending"><i class="fas fa-clock mr-1 text-warning"></i>Belum TTD</span>';
     }
 
-    // 4. Hak Akses Tanda Tangan: Siapapun yang login bisa TTD (penerima diisi otomatis dari akun yang TTD)
+    // 4. Hak Akses Tanda Tangan & Tombol Aksi
     $penerima = $row['penerima'] ?? '';
-    $canSign = !$isSigned; // Semua user bisa TTD selama belum ditandatangani
+    $canSign = !$isSigned;
 
     $signBtn = '';
     if ($isSigned) {
@@ -1296,15 +1374,23 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
         $signBtn = '<button type="button" class="btn btn-primary btn-xs btn-signature" title="Tanda Tangan Dokumen (Penerima otomatis terisi dengan akun Anda)"><i class="fas fa-file-signature"></i></button>';
     }
 
-    $editBtn = $isSigned 
-        ? '<button type="button" class="btn btn-secondary btn-xs" disabled title="Dokumen yang sudah ditandatangani tidak dapat diedit"><i class="fas fa-edit"></i></button>'
-        : '<button type="button" class="btn btn-warning btn-xs btn-edit" title="Edit Data"><i class="fas fa-edit"></i></button>';
+    $editBtn = '';
+    if (!empty($currentUser['can_edit'])) {
+        $editBtn = $isSigned 
+            ? '<button type="button" class="btn btn-secondary btn-xs" disabled title="Dokumen yang sudah ditandatangani tidak dapat diedit"><i class="fas fa-edit"></i></button>'
+            : '<button type="button" class="btn btn-warning btn-xs btn-edit" title="Edit Data"><i class="fas fa-edit"></i></button>';
+    }
+
+    $deleteBtn = '';
+    if (!empty($currentUser['can_delete'])) {
+        $deleteBtn = '<button type="button" class="btn btn-danger btn-xs btn-delete" title="Hapus Data"><i class="fas fa-trash"></i></button>';
+    }
 
     $aksi = '
         <div class="action-btn-group">
             <button type="button" class="btn btn-info btn-xs btn-detail" title="View Detail"><i class="fas fa-eye"></i></button>
             ' . $editBtn . '
-            <button type="button" class="btn btn-danger btn-xs btn-delete" title="Hapus Data"><i class="fas fa-trash"></i></button>
+            ' . $deleteBtn . '
             ' . $signBtn . '
         </div>
     ';
@@ -1348,6 +1434,9 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
         'status_ttd_raw'       => $statusTtd,
         'signature_data'       => $row['signature_data'] ?? '',
         'can_sign'             => $canSign,
+        'user_can_sign'        => !empty($currentUser['can_sign']),
+        'user_can_edit'        => !empty($currentUser['can_edit']),
+        'user_can_delete'      => !empty($currentUser['can_delete']),
         'aksi'                 => $aksi
     ];
 }

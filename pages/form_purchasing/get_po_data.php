@@ -165,8 +165,16 @@ try {
             ponetto,
             popcppn,
             poppn,
+            popcpph21,
+            popph21,
+            popcpph22,
+            popph22,
             popcpph23,
             popph23,
+            popcpph4,
+            popph4,
+            popcpph26,
+            popph26,
             pototalamount
         FROM prpodt
         WHERE pohdid = :pohdid
@@ -180,7 +188,7 @@ try {
     $rowCounter = 1;
     $currencyCode = $header['currcode'] ?: 'IDR';
 
-    // Rangkum item, PPN, dan PPh 23
+    // Rangkum item, PPN, dan seluruh jenis PPh (21, 23, 4(2), 22, 26)
     foreach ($details as $dt) {
         $dpp = floatval($dt['ponetto'] ?? $dt['poprice'] ?? 0);
         $itemDesc = trim($dt['poprodname'] ?? '') ?: trim($dt['podesc'] ?? '');
@@ -213,22 +221,33 @@ try {
             ];
         }
 
-        // Baris PPh 23 (jika ada nilai PPh 23)
-        $pphVal = floatval($dt['popph23'] ?? 0);
-        $pphPerc = floatval($dt['popcpph23'] ?? 0);
-        if ($pphVal > 0) {
-            $pphLabel = 'PPH 23';
-            if ($pphPerc > 0) {
-                $pphLabel .= ' ' . rtrim(rtrim(number_format($pphPerc, 2, '.', ''), '0'), '.') . '%';
+        // Daftar jenis PPh yang didukung dari ERP:
+        // PPh 21, PPh 23, PPh 4(2), PPh 22, PPh 26
+        $pphConfig = [
+            ['val' => 'popph21', 'perc' => 'popcpph21', 'label' => 'PPH 21'],
+            ['val' => 'popph23', 'perc' => 'popcpph23', 'label' => 'PPH 23'],
+            ['val' => 'popph4',  'perc' => 'popcpph4',  'label' => 'PPH 4(2)'],
+            ['val' => 'popph22', 'perc' => 'popcpph22', 'label' => 'PPH 22'],
+            ['val' => 'popph26', 'perc' => 'popcpph26', 'label' => 'PPH 26'],
+        ];
+
+        foreach ($pphConfig as $cfg) {
+            $pphVal = floatval($dt[$cfg['val']] ?? 0);
+            $pphPerc = floatval($dt[$cfg['perc']] ?? 0);
+            if ($pphVal > 0) {
+                $pphLabel = $cfg['label'];
+                if ($pphPerc > 0) {
+                    $pphLabel .= ' ' . rtrim(rtrim(number_format($pphPerc, 2, '.', ''), '0'), '.') . '%';
+                }
+                $items[] = [
+                    'no' => $rowCounter++,
+                    'keterangan' => $pphLabel,
+                    'cd' => 'D',
+                    'sifat' => '-',
+                    'curr' => $currencyCode,
+                    'dpp' => $pphVal
+                ];
             }
-            $items[] = [
-                'no' => $rowCounter++,
-                'keterangan' => $pphLabel,
-                'cd' => 'D',
-                'sifat' => '-',
-                'curr' => $currencyCode,
-                'dpp' => $pphVal
-            ];
         }
     }
 

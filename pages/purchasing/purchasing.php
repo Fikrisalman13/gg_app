@@ -19,24 +19,55 @@ if (!empty($menuId) && !empty($_SESSION['GroupId'])) {
     }
 }
 
-// Ambil data Akun Pengirim saat ini (Format: Nama (Departemen))
-$currentUserPengirim = 'Fikri Salman Ramadhan (Information Technology)'; // Default fallback
-if (!empty($_SESSION['UserName']) && !empty($conn)) {
-    $qUser = sqlsrv_query($conn, "SELECT e.nama_lengkap, ISNULL(d.dept, 'Information Technology') AS dept
+// Ambil data Akun Pengguna saat ini & Hak Akses Berdasarkan Departemen
+$currentUserName = trim($_SESSION['UserName'] ?? '');
+$currentNamaLengkap = trim($_SESSION['NamaLengkap'] ?? '');
+$currentDeptName = '';
+$currentIdDept = null;
+$currentGroupId = $_SESSION['GroupId'] ?? null;
+$currentGroupName = $_SESSION['GroupName'] ?? '';
+
+if (!empty($currentUserName) && !empty($conn)) {
+    $qUser = sqlsrv_query($conn, "SELECT u.GroupId, g.GroupName, e.nama_lengkap, d.id_dept, d.dept
         FROM dbo.SMUserMs u
+        LEFT JOIN dbo.SMUserGroup g ON u.GroupId = g.GroupId
         LEFT JOIN dbo.m_emp e ON u.EmpId = e.id_emp
         LEFT JOIN dbo.m_subbag sb ON e.id_subbag = sb.id_subbag
         LEFT JOIN dbo.m_bag b ON sb.id_bag = b.id_bag
         LEFT JOIN dbo.m_dept d ON b.id_dept = d.id_dept
-        WHERE u.UserName = ?", [$_SESSION['UserName']]);
+        WHERE u.UserName = ?", [$currentUserName]);
     if ($qUser && ($uRow = sqlsrv_fetch_array($qUser, SQLSRV_FETCH_ASSOC))) {
-        $namaUser = !empty($uRow['nama_lengkap']) ? trim($uRow['nama_lengkap']) : (!empty($_SESSION['NamaLengkap']) ? trim($_SESSION['NamaLengkap']) : $_SESSION['UserName']);
-        $deptUser = !empty($uRow['dept']) ? trim($uRow['dept']) : 'Information Technology';
-        $currentUserPengirim = $namaUser . ' (' . $deptUser . ')';
-    } elseif (!empty($_SESSION['NamaLengkap'])) {
-        $currentUserPengirim = trim($_SESSION['NamaLengkap']) . ' (Information Technology)';
+        if (!empty($uRow['nama_lengkap'])) $currentNamaLengkap = trim($uRow['nama_lengkap']);
+        if (!empty($uRow['dept'])) $currentDeptName = trim($uRow['dept']);
+        if (isset($uRow['id_dept'])) $currentIdDept = (int)$uRow['id_dept'];
+        if (!empty($uRow['GroupId'])) $currentGroupId = $uRow['GroupId'];
+        if (!empty($uRow['GroupName'])) $currentGroupName = trim($uRow['GroupName']);
     }
 }
+if (empty($currentNamaLengkap)) $currentNamaLengkap = $currentUserName;
+$currentUserPengirim = !empty($currentDeptName) ? "{$currentNamaLengkap} ({$currentDeptName})" : $currentNamaLengkap;
+
+// Evaluasi Hak Akses Departemen:
+// 1. Administrator (GroupName = 'Administrator' atau GroupId = 1): Full Bypass
+$isAdminUser = (
+    (!empty($currentGroupName) && strcasecmp(trim($currentGroupName), 'Administrator') === 0) ||
+    (int)$currentGroupId === 1
+);
+
+// 2. Finance (id_dept = 9) & Accounting (id_dept = 6)
+$isFinAccUser = (
+    in_array($currentIdDept, [6, 9], true) ||
+    stripos($currentDeptName, 'Finance') !== false ||
+    stripos($currentDeptName, 'Accounting') !== false
+);
+
+// Hak Akses Fitur:
+// - Sign: Hanya Finance/Accounting & Admin
+// - Edit/Add/Delete: Purchasing & departemen lain bisa, Finance/Accounting TIDAK bisa (Admin tetap bisa)
+$userCanSign   = ($isAdminUser || $isFinAccUser);
+$userCanEdit   = ($isAdminUser || !$isFinAccUser);
+$userCanAdd    = ($isAdminUser || !$isFinAccUser);
+$userCanDelete = ($isAdminUser || !$isFinAccUser);
 
 // Penerima tidak diinput saat pembuatan — akan otomatis terisi dari akun yang menandatangani
 
@@ -535,9 +566,11 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                 <i class="fas fa-bell mr-1"></i> Notifikasi Browser
                             </label>
                         </div>
+                        <?php if ($userCanAdd): ?>
                         <button type="button" class="btn btn-success btn-sm font-weight-bold shadow-sm" id="btnTambahData">
                             <i class="fas fa-plus mr-1"></i> Tambah Data
                         </button>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="card-body">
@@ -1020,6 +1053,12 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 
 <script>
 $(document).ready(function() {
+    // Hak Akses Pengguna
+    var userCanSign = <?= json_encode($userCanSign) ?>;
+    var userCanEdit = <?= json_encode($userCanEdit) ?>;
+    var userCanAdd = <?= json_encode($userCanAdd) ?>;
+    var userCanDelete = <?= json_encode($userCanDelete) ?>;
+
     // ---------------------------------------------------------
     // FITUR DINAMIS KETERANGAN KHUSUS TYPE PO (DROPDOWN + MANUAL)
     // ---------------------------------------------------------
@@ -1264,6 +1303,15 @@ $(document).ready(function() {
 
     // Klik tombol Floating Bar: Langsung buka modal tanda tangan untuk dokumen terpilih
     $('#btnTriggerBatchSign').on('click', function() {
+        if (!userCanSign) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Akses Ditolak',
+                text: 'Hanya Departemen Finance & Accounting atau Administrator yang berhak menandatangani dokumen ini.'
+            });
+            return;
+        }
+
         if (selectedDocIds.size === 0) {
             Swal.fire({
                 icon: 'warning',
@@ -1640,6 +1688,15 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '.btn-edit', function() {
+        if (!userCanEdit) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Akses Ditolak',
+                text: 'Departemen Finance & Accounting tidak memiliki hak untuk mengubah data serah terima.'
+            });
+            return;
+        }
+
         var rowData = getRowData($(this));
         if (!rowData || !rowData.id) return;
 
@@ -1774,6 +1831,15 @@ $(document).ready(function() {
     // 4. AKSI: DELETE DATA
     // ---------------------------------------------------------
     $(document).on('click', '.btn-delete', function() {
+        if (!userCanDelete) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Akses Ditolak',
+                text: 'Departemen Finance & Accounting tidak memiliki hak untuk menghapus data serah terima.'
+            });
+            return;
+        }
+
         var rowData = getRowData($(this));
         if (!rowData || !rowData.id) return;
 
@@ -1971,6 +2037,15 @@ $(document).ready(function() {
 
     // Buka Modal Signature (Single Mode)
     $(document).on('click', '.btn-signature', function() {
+        if (!userCanSign) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Akses Ditolak',
+                text: 'Hanya Departemen Finance & Accounting atau Administrator yang berhak menandatangani dokumen ini.'
+            });
+            return;
+        }
+
         isBatchSignMode = false;
         activeSignRow = getRowData($(this));
         if (!activeSignRow) return;
@@ -3175,6 +3250,15 @@ $(document).ready(function() {
 
     $('#btnTambahData').on('click', function(e) {
         e.preventDefault();
+        if (!userCanAdd) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Akses Ditolak',
+                text: 'Departemen Finance & Accounting tidak memiliki hak untuk menambah data serah terima.'
+            });
+            return;
+        }
+
         $('#formTambahPurchasing')[0].reset();
         $('#inputTanggal').val(new Date().toISOString().split('T')[0]);
         $('#inputPengirim').val('<?= addslashes($currentUserPengirim) ?>');

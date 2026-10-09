@@ -93,8 +93,22 @@ class RouterosAPI
      *
      * @return boolean                If we are connected or not
      */
-    public function connect($ip, $login, $password)
+    public function connect($ip, $login, $password, $port = null)
     {
+        if ($port !== null) {
+            $this->port = (int)$port;
+        } elseif (isset($GLOBALS['mt_port']) && !empty($GLOBALS['mt_port'])) {
+            $this->port = (int)$GLOBALS['mt_port'];
+        }
+
+        if (strpos($ip, ':') !== false) {
+            $parts = explode(':', $ip, 2);
+            $ip = $parts[0];
+            if (!empty($parts[1]) && is_numeric($parts[1])) {
+                $this->port = (int)$parts[1];
+            }
+        }
+
         for ($ATTEMPT = 1; $ATTEMPT <= $this->attempts; $ATTEMPT++) {
             $this->connected = false;
             $PROTOCOL = ($this->ssl ? 'ssl://' : '' );

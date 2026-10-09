@@ -122,6 +122,14 @@ $rawAddresses = [];
 
 $ipDataMap = []; // Key: IP Address
 $detectedSubnets = []; // Subnet list
+$summary = [
+    'total_ip' => 0,
+    'unused' => 0,
+    'incomplete_no_tag' => 0,
+    'incomplete_with_tag' => 0,
+    'complete_no_tag' => 0,
+    'complete' => 0
+];
 
 try {
     $API = new RouterosAPI();
@@ -140,7 +148,8 @@ try {
 
         $API->disconnect();
     } else {
-        $errorMessage = "Gagal terhubung ke Mikrotik ($mt_ip). Pastikan API Mikrotik aktif di port 8728.";
+        $portUsed = $API->port ?? 8728;
+        $errorMessage = "Gagal terhubung ke Mikrotik ($mt_ip). Pastikan API Mikrotik aktif di port $portUsed.";
     }
 } catch (Exception $ex) {
     $errorMessage = "Error Mikrotik: " . $ex->getMessage();
