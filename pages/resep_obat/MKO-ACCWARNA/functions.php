@@ -553,7 +553,10 @@ function getMasterResepMap($conn)
 {
     $stmt = sqlsrvExecOrFail(
         $conn,
-        "SELECT DISTINCT LTRIM(RTRIM(CAST(kode_warna AS VARCHAR(100)))) AS kode_warna FROM dbo.resep_obat WHERE ISNULL(LTRIM(RTRIM(CAST(kode_warna AS VARCHAR(100)))), '') <> ''"
+        "SELECT DISTINCT LTRIM(RTRIM(CAST(kode_warna AS VARCHAR(100)))) AS kode_warna 
+         FROM dbo.resep_obat 
+         WHERE ISNULL(LTRIM(RTRIM(CAST(kode_warna AS VARCHAR(100)))), '') <> ''
+           AND LTRIM(RTRIM(CAST(status_resep_lipat AS VARCHAR(100)))) = 'Master Resep'"
     );
     $rows = sqlsrvAll($stmt);
     $map = [];
