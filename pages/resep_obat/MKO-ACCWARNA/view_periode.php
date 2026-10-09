@@ -102,25 +102,39 @@ include '../../../includes/sidebar.php';
 
             <div class="card card-outline card-<?= htmlspecialchars($themeColor) ?>">
                 <div class="card-header">
-                    <h3 class="card-title">Kode Periode: <?= htmlspecialchars($kodePeriode) ?></h3>
+                    <h3 class="card-title font-weight-bold">
+                        <i class="fas fa-tag text-purple mr-1"></i> Kode Periode: <span class="badge badge-light border ml-1 font-weight-bold" style="font-size: 14px;"><?= htmlspecialchars($kodePeriode) ?></span>
+                    </h3>
                     <div class="card-tools">
-                        <a href="export_periode_excel.php?kode_periode=<?= urlencode($kodePeriode) ?>" class="btn btn-sm btn-success">Export Excel</a>
-                        <a href="index.php" class="btn btn-sm btn-default">Kembali</a>
+                        <a href="export_periode_excel.php?kode_periode=<?= urlencode($kodePeriode) ?>" class="btn btn-sm btn-success font-weight-bold shadow-sm">
+                            <i class="fas fa-file-excel mr-1"></i> Export Excel
+                        </a>
+                        <a href="index.php" class="btn btn-sm btn-default font-weight-bold ml-1">
+                            <i class="fas fa-arrow-left mr-1"></i> Kembali
+                        </a>
                     </div>
                 </div>
                 <div class="card-body">
-                    <ul class="nav nav-tabs" id="periodeTabs" role="tablist">
+                    <ul class="nav nav-tabs font-weight-bold" id="periodeTabs" role="tablist">
                         <li class="nav-item">
-                            <a class="nav-link active" id="raw-tab" data-toggle="tab" href="#raw-sheet" role="tab">Sheet mko_rawdata</a>
+                            <a class="nav-link active" id="raw-tab" data-toggle="tab" href="#raw-sheet" role="tab">
+                                <i class="fas fa-database text-primary mr-1"></i> Sheet mko_rawdata
+                            </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" id="material-tab" data-toggle="tab" href="#material-sheet" role="tab">Sheet MKO_materialobat</a>
+                            <a class="nav-link" id="material-tab" data-toggle="tab" href="#material-sheet" role="tab">
+                                <i class="fas fa-flask text-success mr-1"></i> Sheet MKO_materialobat
+                            </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" id="rekap-tab" data-toggle="tab" href="#rekap-sheet" role="tab">Sheet MKO_rekap</a>
+                            <a class="nav-link" id="rekap-tab" data-toggle="tab" href="#rekap-sheet" role="tab">
+                                <i class="fas fa-table text-info mr-1"></i> Sheet MKO_rekap
+                            </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" id="ppt-tab" data-toggle="tab" href="#ppt-sheet" role="tab">Sheet MKO_PPT</a>
+                            <a class="nav-link" id="ppt-tab" data-toggle="tab" href="#ppt-sheet" role="tab">
+                                <i class="fas fa-file-powerpoint text-warning mr-1"></i> Sheet MKO_PPT
+                            </a>
                         </li>
                     </ul>
 
