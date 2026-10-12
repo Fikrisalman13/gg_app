@@ -1,5 +1,3 @@
-
-
 <?php
 session_start();
 require_once __DIR__ . "/../../../koneksi.php";
@@ -16,107 +14,114 @@ include "../../../includes/sidebar.php";
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center">
         <div>
-          <h1>Audit Detail Resep</h1>
-          <p class="text-muted mb-0">Bandingkan detail lokal lama dengan material aktual ProInt berdasarkan No CP.</p>
+          <h1><i class="fas fa-clipboard-check mr-2"></i>Audit Detail Resep V2</h1>
+          <p class="text-muted mb-0">Bandingkan formula detail resep V2 (Multi-Routing Table) dengan material Bon aktual ProInt berdasarkan No CP.</p>
         </div>
-        <a href="list_resep.php" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> List Resep</a>
+        <div>
+          <a href="input_resep.php" class="btn btn-outline-primary mr-1"><i class="fas fa-plus mr-1"></i> Input Resep V2</a>
+          <a href="list_resep.php" class="btn btn-outline-secondary"><i class="fas fa-arrow-left mr-1"></i> List Resep</a>
+        </div>
       </div>
     </div>
   </section>
   <section class="content">
     <div class="container-fluid">
       <div class="card shadow-sm">
-        <div class="card-header bg-<?= htmlspecialchars( $themeColor, ) ?> text-white">
-          <h3 class="card-title"><i class="fas fa-search-plus mr-1"></i> Debug Detail Resep</h3>
+        <div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white">
+          <h3 class="card-title"><i class="fas fa-search-plus mr-1"></i> Filter & Pengawasan Resep V2</h3>
         </div>
         <div class="card-body">
           <div class="row align-items-end mb-3">
-            <div class="col-lg-3">
+            <div class="col-lg-2 col-md-4 mb-2">
               <label for="auditCp">No CP</label>
-              <input id="auditCp" class="form-control" maxlength="25" placeholder="Contoh D26G0002.01.0101" />
+              <input id="auditCp" class="form-control" maxlength="25" placeholder="Contoh D26I0829..." />
             </div>
-            <div class="col-lg-2">
+            <div class="col-lg-2 col-md-4 mb-2">
               <label for="auditLabelJual">Label Jual</label>
               <select id="auditLabelJual" class="form-control" disabled>
                 <option value="">Memuat label...</option>
               </select>
             </div>
-            <div class="col-lg-2">
-              <label for="auditSource">Sumber</label>
-              <select id="auditSource" class="form-control">
-                <option value="">Semua</option>
-                <option>MANUAL</option>
-                <option>PROINT</option>
+            <div class="col-lg-2 col-md-4 mb-2">
+              <label for="auditRoute">Routing Tabel</label>
+              <select id="auditRoute" class="form-control">
+                <option value="">Semua Routing</option>
               </select>
             </div>
-            <div class="col-lg-2">
+            <div class="col-lg-2 col-md-4 mb-2">
+              <label for="auditSource">Sumber Resep</label>
+              <select id="auditSource" class="form-control">
+                <option value="">Semua</option>
+                <option value="PROINT">PROINT (Otomatis)</option>
+                <option value="MANUAL">MANUAL</option>
+              </select>
+            </div>
+            <div class="col-lg-1 col-md-3 mb-2">
               <label for="auditStart">Mulai</label>
               <input type="date" id="auditStart" class="form-control" />
             </div>
-            <div class="col-lg-2">
+            <div class="col-lg-1 col-md-3 mb-2">
               <label for="auditEnd">Selesai</label>
               <input type="date" id="auditEnd" class="form-control" />
             </div>
-            <div class="col-lg-1 d-flex">
-              <button id="auditFilter" class="btn btn-primary" title="Terapkan filter">
-                <i class="fas fa-filter"></i>
+            <div class="col-lg-2 col-md-6 mb-2 d-flex">
+              <button id="auditFilter" class="btn btn-primary flex-fill" title="Terapkan filter">
+                <i class="fas fa-filter mr-1"></i> Filter
               </button>
-              <button id="auditExport" class="btn btn-success ml-2" title="Export audit">
-                <i class="fas fa-file-excel"></i>
+              <button id="auditExport" class="btn btn-success ml-2" title="Export audit ke Excel">
+                <i class="fas fa-file-excel mr-1"></i> Excel
               </button>
             </div>
           </div>
           <div class="audit-summary">
-            <div><span>Cocok</span><b id="sumMatch">0</b></div>
-            <div><span>Berbeda</span><b id="sumDiff">0</b></div>
+            <div><span>Cocok</span><b id="sumMatch" class="text-success">0</b></div>
+            <div><span>Berbeda</span><b id="sumDiff" class="text-danger">0</b></div>
             <button type="button" class="recipe-audit-low-stock-tile" id="recipe-audit-low-stock-open"
               aria-controls="recipe-audit-low-stock-modal" aria-label="Buka ringkasan material di bawah target minimum">
               <span>Di Bawah Target</span><b id="recipe-audit-low-stock-count">0 Material</b>
               <small id="recipe-audit-low-stock-progress">Menunggu audit</small>
             </button>
-            <div><span>CP Tidak Ada</span><b id="sumMissing">0</b></div>
-            <div><span>Total Routing</span><b id="sumTotal">0</b></div>
+            <div><span>Belum Ada Bon</span><b id="sumMissing" class="text-secondary">0</b></div>
+            <div><span>Total Resep</span><b id="sumTotal">0</b></div>
           </div>
           <section class="recipe-audit-low-stock-preview d-none" id="recipe-audit-low-stock-preview"
             aria-labelledby="recipe-audit-low-stock-preview-title">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong id="recipe-audit-low-stock-preview-title">Material paling kritis</strong>
-              <button type="button" class="btn btn-sm btn-outline-danger" data-action="open-low-stock-summary">Lihat semua</button>
+              <strong id="recipe-audit-low-stock-preview-title"><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Material Paling Kritis (&lt; 500 KG)</strong>
+              <button type="button" class="btn btn-sm btn-outline-danger" data-action="open-low-stock-summary">Lihat Semua</button>
             </div>
             <div id="recipe-audit-low-stock-preview-list"></div>
           </section>
-          <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i> Audit mencari berdasarkan No CP. Kandidat ProInt dibatasi ke routing
-            PADDRY 1 WARNA TUA, PADDRY 2 WARNA MUDA, PADDRY 3 WARNA MEDIUM, PADDRY 4 WARNA MEDIUM, PADDRY 5 WARNA MUDA,
-            dan PADDRY 6 WARNA MEDIUM.
+          <div class="alert alert-info py-2 mb-3">
+            <i class="fas fa-info-circle mr-1"></i> <b>Logika Audit V2:</b> Memeriksa seluruh material (Dyestuff, Chemical, Auxiliary) pada setiap <b>Routing Table</b> lokal (Paddry, Alkali, Resin, dll.) terhadap Bon Permintaan Obat ProInt aktual. Mendukung pencocokan otomatis cerdas dan komparasi kode ProInt langsung.
           </div>
           <div id="auditProgress" class="mb-3 d-none">
             <div class="d-flex justify-content-between mb-1">
-              <small id="auditProgressText">Menyiapkan audit ProInt...</small><small id="auditProgressCount">0/0</small>
+              <small id="auditProgressText">Memeriksa data ProInt...</small><small id="auditProgressCount">0/0</small>
             </div>
             <div class="progress" style="height: 8px">
               <div
                 id="auditProgressBar"
-                class="progress-bar progress-bar-striped progress-bar-animated bg-<?= htmlspecialchars( $themeColor, ) ?>"
+                class="progress-bar progress-bar-striped progress-bar-animated bg-<?= htmlspecialchars($themeColor) ?>"
                 style="width: 0%"
               ></div>
             </div>
           </div>
           <div class="table-responsive">
-            <table class="table table-hover table-bordered">
-              <thead>
+            <table class="table table-hover table-bordered table-sm align-middle">
+              <thead class="thead-light">
                 <tr>
-                  <th>No CP</th>
+                  <th style="min-width: 140px;">No CP</th>
                   <th>Label Jual</th>
                   <th>Cus Color</th>
                   <th>Stock Warehouse</th>
-                  <th>Routing Lokal</th>
+                  <th style="min-width: 160px;">Routing Tabel Lokal</th>
                   <th>Sumber</th>
                   <th>Status Resep</th>
-                  <th>Dibuat</th>
-                  <th>Bon ProInt</th>
-                  <th>Status Audit</th>
-                  <th>Aksi</th>
+                  <th style="min-width: 90px;">Dibuat</th>
+                  <th style="min-width: 140px;">Bon ProInt</th>
+                  <th style="min-width: 150px;">Status Audit</th>
+                  <th style="min-width: 130px;">Aksi</th>
                 </tr>
               </thead>
               <tbody id="auditRows"></tbody>
@@ -128,38 +133,32 @@ include "../../../includes/sidebar.php";
     </div>
   </section>
 </div>
-<div class="modal fade" id="auditDetailModal" tabindex="-1">
-  <div class="modal-dialog modal-xl">
+
+<!-- Modal Perbandingan Detail Multi-Tabel V2 -->
+<div class="modal fade" id="auditDetailModal" tabindex="-1" aria-labelledby="auditDetailTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header bg-<?= htmlspecialchars( $themeColor, ) ?> text-white">
-        <h5 class="modal-title">Perbandingan Detail</h5>
-        <button class="close text-white" data-dismiss="modal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div id="auditBonChooser" class="mb-3"></div>
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered">
-            <thead>
-              <tr>
-                <th>Kode</th>
-                <th>Nama</th>
-                <th>Qty Lokal</th>
-                <th>Qty ProInt</th>
-                <th>CF Lokal</th>
-                <th>CF ProInt</th>
-                <th>UOM Lokal</th>
-                <th>UOM ProInt</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="auditDetails"></tbody>
-          </table>
+      <div class="modal-header bg-<?= htmlspecialchars($themeColor) ?> text-white align-items-center">
+        <div>
+          <h5 class="modal-title mb-0" id="auditDetailTitle"><i class="fas fa-balance-scale mr-2"></i>Perbandingan Detail Formula Resep V2</h5>
+          <small id="auditDetailSubtitle" class="text-white-50"></small>
         </div>
+        <div class="d-flex align-items-center">
+          <a id="auditBtnOpenRecipe" href="#" target="_blank" class="btn btn-warning btn-sm font-weight-bold mr-3">
+            <i class="fas fa-edit mr-1"></i> Buka / Edit Resep
+          </a>
+          <button type="button" class="close text-white" data-dismiss="modal" aria-label="Tutup">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" id="auditDetailModalBody">
+        <div id="auditDetailHeaderSummary" class="mb-3"></div>
+        <div id="auditTablesContainer"></div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Modal Low Stock Material -->
 <div class="modal fade" id="recipe-audit-low-stock-modal" tabindex="-1"
   aria-labelledby="recipe-audit-low-stock-title" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -187,13 +186,14 @@ include "../../../includes/sidebar.php";
   </div>
 </div>
 
+<!-- Modal Stock Detail -->
 <div class="modal fade" id="stockDetailModal" tabindex="-1" aria-labelledby="stockDetailTitle" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content stock-modal-content">
-      <div class="modal-header stock-modal-header bg-<?= htmlspecialchars( $themeColor, ) ?> text-white">
+      <div class="modal-header stock-modal-header bg-<?= htmlspecialchars($themeColor) ?> text-white">
         <div>
-          <small class="stock-modal-eyebrow">STOCK MATERIAL</small>
-          <h5 class="modal-title" id="stockDetailTitle">Detail Stock</h5>
+          <small class="stock-modal-eyebrow">STOCK WAREHOUSE</small>
+          <h5 class="modal-title" id="stockDetailTitle">Detail Stock Resep</h5>
           <span class="stock-modal-subtitle" id="stockDetailCp"></span>
         </div>
         <button class="close text-white" data-dismiss="modal" aria-label="Tutup detail stock">&times;</button>
@@ -202,7 +202,9 @@ include "../../../includes/sidebar.php";
     </div>
   </div>
 </div>
+
 <?php include "../../../includes/footer.php"; ?>
+
 <style>
   .audit-summary {
     display: grid;
@@ -292,7 +294,7 @@ include "../../../includes/sidebar.php";
     font-family: Consolas, monospace;
     font-size: .75rem;
     font-weight: 700;
-    padding: 4px 7px;
+    padding: 3px 6px;
     width: fit-content;
   }
 
@@ -321,15 +323,24 @@ include "../../../includes/sidebar.php";
 
   .audit-status {
     font-size: 0.72rem;
-    padding: 0.28rem 0.5rem;
+    padding: 0.25rem 0.55rem;
     border-radius: 999px;
     font-weight: 700;
+    display: inline-block;
+    white-space: nowrap;
   }
 
   .audit-COCOK,
   .audit-COCOK---ROUTING-BERBEDA {
     background: #dcfce7;
     color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .audit-COCOK-SEBAGIAN {
+    background: #fef08a;
+    color: #854d0e;
+    border: 1px solid #fde047;
   }
 
   .audit-BERBEDA,
@@ -338,17 +349,47 @@ include "../../../includes/sidebar.php";
   .audit-HANYA-PROINT {
     background: #fee2e2;
     color: #991b1b;
+    border: 1px solid #fecaca;
   }
 
   .audit-PERLU-PILIH-BON {
     background: #fef3c7;
     color: #92400e;
+    border: 1px solid #fde68a;
   }
 
+  .audit-BELUM-ADA-BON-PROINT,
   .audit-CP-TIDAK-DITEMUKAN,
-  .audit-ROUTING-TIDAK-COCOK {
-    background: #e5e7eb;
-    color: #374151;
+  .audit-ROUTING-TIDAK-COCOK,
+  .audit-MENUNGGU {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+
+  .route-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 5px;
+    margin: 1px 2px;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    font-weight: 600;
+  }
+
+  .route-badge.table-2 {
+    background: #eff6ff;
+    color: #1e40af;
+    border-color: #bfdbfe;
+  }
+
+  .route-badge.table-3 {
+    background: #faf5ff;
+    color: #6b21a8;
+    border-color: #e9d5ff;
   }
 
   .status-badge {
@@ -390,14 +431,14 @@ include "../../../includes/sidebar.php";
   }
 
   .stock-cell {
-    min-width: 190px;
-    max-width: 220px;
+    min-width: 170px;
+    max-width: 200px;
   }
 
   .stock-summary-card {
-    padding: 10px 12px;
+    padding: 8px 10px;
     border: 1px solid #dfe8e6;
-    border-radius: 10px;
+    border-radius: 8px;
     background: linear-gradient(145deg, #f7fbfa, #fff);
   }
 
@@ -409,31 +450,32 @@ include "../../../includes/sidebar.php";
 
   .stock-high-warning {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     color: #9a5a00;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 800;
   }
 
   .stock-summary-count {
     display: block;
     color: #0f4c45;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 800;
   }
 
   .stock-summary-meta {
     display: block;
-    margin: 3px 0 8px;
+    margin: 2px 0 6px;
     color: #667875;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
   }
 
   .stock-view-button {
     border-color: #0f766e;
     color: #0f766e;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 700;
+    padding: 2px 6px;
   }
 
   .stock-view-button:hover {
@@ -472,7 +514,7 @@ include "../../../includes/sidebar.php";
   }
 
   .stock-material-heading {
-    padding: 11px 14px;
+    padding: 10px 14px;
     border-bottom: 1px solid #e8efed;
     background: #f9fcfb;
   }
@@ -483,8 +525,8 @@ include "../../../includes/sidebar.php";
 
   .stock-high-badge {
     display: inline-block;
-    margin-top: 5px;
-    padding: 3px 7px;
+    margin-top: 4px;
+    padding: 2px 6px;
     border-radius: 999px;
     background: #fff0c2;
     color: #8a5200;
@@ -494,7 +536,7 @@ include "../../../includes/sidebar.php";
 
   .stock-modal-alert {
     margin-bottom: 12px;
-    padding: 11px 13px;
+    padding: 10px 12px;
     border: 1px solid #f3c35d;
     border-radius: 10px;
     background: #fff7df;
@@ -502,7 +544,7 @@ include "../../../includes/sidebar.php";
   }
 
   .stock-product-group {
-    padding: 10px 14px;
+    padding: 8px 12px;
   }
 
   .stock-product-group + .stock-product-group {
@@ -517,7 +559,7 @@ include "../../../includes/sidebar.php";
     display: flex;
     justify-content: space-between;
     gap: 16px;
-    padding: 7px 0;
+    padding: 6px 0;
     border-bottom: 1px solid #edf0f2;
   }
 
@@ -541,16 +583,16 @@ include "../../../includes/sidebar.php";
     font-weight: 800;
   }
 
-  @media (max-width: 767.98px) {
-    .recipe-audit-low-stock-item {
-      grid-template-columns: 1fr;
-      gap: 2px;
-    }
+  .table-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
 
-    .stock-row {
-      flex-direction: column;
-      gap: 4px;
-    }
+  .table-card-header {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 10px 14px;
   }
 
   @media (max-width: 900px) {
@@ -559,6 +601,7 @@ include "../../../includes/sidebar.php";
     }
   }
 </style>
+
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2/sweetalert2.all.min.js"></script>
 <script>
   $(function () {
@@ -570,11 +613,15 @@ include "../../../includes/sidebar.php";
       auditResults = new Map(),
       stockResponses = new Map(),
       lowStockRequests = new Set(),
-      lowStockState = createLowStockState();
-    const esc = (v) =>
-      $("<div>")
-        .text(v == null ? "" : String(v))
-        .html();
+      lowStockState = createLowStockState(),
+      currentModalRecipeId = null,
+      currentTableBonOverrides = {};
+
+    const DEFAULT_MINIMUM_STOCK_KG = 500;
+    const LOW_STOCK_KG = 500;
+
+    const esc = (v) => $("<div>").text(v == null ? "" : String(v)).html();
+
     const numberDisplay = (v) => {
       if (v == null || v === "") return "-";
       let s = String(v);
@@ -582,7 +629,12 @@ include "../../../includes/sidebar.php";
       if (s.startsWith("-.")) return "-0" + s.slice(1);
       return s;
     };
-    const badge = (s) => `<span class="audit-status audit-${esc(s).replaceAll(" ", "-")}">${esc(s)}</span>`;
+
+    const badge = (s) => {
+      let key = esc(s || "").replaceAll(" ", "-").split("(")[0].trim().replace(/-$/, "");
+      return `<span class="audit-status audit-${key}">${esc(s || "-")}</span>`;
+    };
+
     const recipeStatusBadge = (value) => {
       let label = value == null || value === "" ? "-" : String(value),
         status = label.toLowerCase(),
@@ -594,15 +646,18 @@ include "../../../includes/sidebar.php";
       else if (status === "kestabilan" || status === "kesetabilan") className = "status-kestabilan";
       return `<span class="status-badge ${className}">${esc(label)}</span>`;
     };
+
     function params() {
       return {
         cp: $("#auditCp").val().trim(),
         label_jual: $("#auditLabelJual").val() || "",
+        route: $("#auditRoute").val() || "",
         source: $("#auditSource").val(),
         start: $("#auditStart").val(),
         end: $("#auditEnd").val(),
       };
     }
+
     function error(xhr) {
       let r = xhr.responseJSON || {};
       Swal.fire(
@@ -611,6 +666,7 @@ include "../../../includes/sidebar.php";
         "error",
       );
     }
+
     function initLabelFilter() {
       $("#auditLabelJual")
         .html('<option value=""></option>')
@@ -640,34 +696,54 @@ include "../../../includes/sidebar.php";
           },
         });
     }
+
     function loadRoutes() {
       $.getJSON("debug_detail_resep_api.php", {
         action: "routes",
       })
         .done((r) => {
-          let html =
-            '<option value="">Pilih routing...</option>' +
-            r.routes
-              .map(
-                (x) =>
-                  `<option value="${esc(x.code)}">${esc(x.code === "-" ? "TANPA ROUTING" : x.code + " - " + (x.name || "-"))} (${x.total})</option>`,
-              )
-              .join("");
+          let html = '<option value="">Semua Routing</option>' +
+            (r.routes || []).map((x) =>
+              `<option value="${esc(x.code)}">${esc(x.code === "-" ? "TANPA ROUTING" : x.code + " - " + (x.name || "-"))} (${x.total})</option>`
+            ).join("");
           $("#auditRoute").html(html);
         })
         .fail(error);
     }
+
     function showResult(x) {
       let $tr = $(`tr[data-audit-id="${x.id}"]`);
       if (!$tr.length) return;
+
       $tr.find(".audit-source").text(x.source || "");
-      $tr
-        .find(".audit-bon")
-        .html(`${esc(x.bonno || "-")} ${x.candidate_count > 1 ? `<small>(${x.candidate_count} pilihan)</small>` : ""}`);
-      $tr
-        .find(".audit-result")
-        .html(`${badge(x.status)}<br><small class="text-muted">${esc(x.status_detail || "")}</small>`);
+
+      // Display bon numbers
+      let bonHtml = "-";
+      if (x.tables && x.tables.length > 0) {
+        bonHtml = x.tables.map(t => {
+          return `<div><small class="badge badge-secondary mr-1">T${t.table_index}</small><b>${esc(t.bonno || '-')}</b></div>`;
+        }).join("");
+      } else if (x.bonno) {
+        bonHtml = `<b>${esc(x.bonno)}</b>`;
+      }
+      $tr.find(".audit-bon").html(bonHtml);
+
+      // Display audit result with table mini-badges
+      let tableBadgesHtml = "";
+      if (x.tables && x.tables.length > 1) {
+        tableBadgesHtml = '<div class="mt-1">' + x.tables.map(t => {
+          let isOk = t.status === "COCOK";
+          let badgeClass = isOk ? "badge-success" : (t.status === "BELUM ADA BON PROINT" ? "badge-secondary" : "badge-danger");
+          let icon = isOk ? "✓" : "✗";
+          return `<span class="badge ${badgeClass} mr-1" title="Tabel #${t.table_index} (${t.rtg_code}): ${t.status}">T${t.table_index}: ${icon}</span>`;
+        }).join("") + '</div>';
+      }
+
+      $tr.find(".audit-result").html(
+        `${badge(x.status)}${tableBadgesHtml}<br><small class="text-muted">${esc(x.status_detail || "")}</small>`
+      );
     }
+
     function load(p = 1, restart = false) {
       page = p;
       if (pageRequest) pageRequest.abort();
@@ -681,77 +757,93 @@ include "../../../includes/sidebar.php";
         $("#auditProgress").addClass("d-none");
       }
       let token = auditToken;
-      $("#auditRows").html('<tr><td colspan="11" class="text-center">Memuat daftar resep lokal...</td></tr>');
+      $("#auditRows").html('<tr><td colspan="11" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-1"></i> Memuat daftar resep V2...</td></tr>');
+
       pageRequest = $.getJSON("debug_detail_resep_api.php", {
         ...params(),
         page: page,
       })
         .done((r) => {
           if (token !== auditToken) return;
-          const rowsHtml = r.rows
-            .map((row) => {
-              const recipe = row.recipe;
-              return [
-                `<tr data-audit-id="${recipe.id}">`,
-                `<td><b>${esc(recipe.no_cp)}</b><br>`,
-                '<small class="text-muted audit-source"></small></td>',
-                `<td>${esc(recipe.label_jual || "-")}</td>`,
-                `<td>${esc(recipe.cus_color || "-")}</td>`,
-                `<td class="stock-cell" data-stock-id="${recipe.id}">`,
-                '<small class="text-muted"><i class="fas fa-spinner fa-spin"></i> ',
-                'Memuat stock...</small></td>',
-                `<td>${esc(recipe.rtg_code || "-")} - `,
-                `${esc(recipe.rtg_name || "-")}</td>`,
-                `<td>${Number(recipe.is_manual) === 1 ? "MANUAL" : "PROINT"}</td>`,
-                `<td>${recipeStatusBadge(recipe.status_resep_lipat)}</td>`,
-                `<td>${esc(recipe.created_at)}</td>`,
-                '<td class="audit-bon">-</td>',
-                `<td class="audit-result">${badge("MENUNGGU")}<br>`,
-                '<small class="text-muted">Menunggu pemeriksaan ProInt</small></td>',
-                `<td><button class="btn btn-info btn-sm detail-audit" data-id="${recipe.id}">`,
-                '<i class="fas fa-balance-scale"></i> Bandingkan</button> ',
-                `<a class="btn btn-outline-secondary btn-sm" href="view_resep.php?resep_id=${recipe.id}">`,
-                '<i class="fas fa-eye"></i></a></td></tr>',
-              ].join("");
-            })
-            .join("");
-          $("#auditRows").html(rowsHtml || '<tr><td colspan="11" class="text-center">Tidak ada data.</td></tr>');
-          r.rows.forEach((x) => {
+          const rowsHtml = (r.rows || []).map((row) => {
+            const recipe = row.recipe;
+
+            // Multi-table routing summary
+            let routesHtml = "";
+            if (recipe.routes_summary && recipe.routes_summary.length > 0) {
+              routesHtml = recipe.routes_summary.map(rs => {
+                let badgeClass = rs.table_index === 2 ? "table-2" : (rs.table_index === 3 ? "table-3" : "");
+                return `<span class="route-badge ${badgeClass}" title="Tabel #${rs.table_index}: ${esc(rs.rtg_name || '-')}">` +
+                  `<span class="badge badge-light mr-1">T${rs.table_index}</span>${esc(rs.rtg_code || '-')}` +
+                  `</span>`;
+              }).join(" ");
+            } else {
+              routesHtml = `${esc(recipe.rtg_code || "-")} - ${esc(recipe.rtg_name || "-")}`;
+            }
+
+            return [
+              `<tr data-audit-id="${recipe.id}">`,
+              `<td><b>${esc(recipe.no_cp)}</b><br><small class="text-muted audit-source"></small></td>`,
+              `<td>${esc(recipe.label_jual || "-")}</td>`,
+              `<td>${esc(recipe.cus_color || "-")}</td>`,
+              `<td class="stock-cell" data-stock-id="${recipe.id}">`,
+              '<small class="text-muted"><i class="fas fa-spinner fa-spin"></i> Memuat stock...</small></td>',
+              `<td>${routesHtml}</td>`,
+              `<td><span class="badge ${Number(recipe.is_manual) === 1 ? 'badge-warning' : 'badge-light border'}">${Number(recipe.is_manual) === 1 ? "MANUAL" : "PROINT"}</span></td>`,
+              `<td>${recipeStatusBadge(recipe.status_resep_lipat)}</td>`,
+              `<td><small>${esc(recipe.created_at)}</small></td>`,
+              '<td class="audit-bon">-</td>',
+              `<td class="audit-result">${badge("MENUNGGU")}<br><small class="text-muted">Menunggu pemeriksaan ProInt</small></td>`,
+              `<td>`,
+              `<div class="btn-group btn-group-sm">`,
+              `<button class="btn btn-info detail-audit" data-id="${recipe.id}" title="Bandingkan Detail Formula">`,
+              `<i class="fas fa-balance-scale mr-1"></i> Bandingkan</button>`,
+              `<a class="btn btn-outline-secondary" href="view_resep.php?resep_id=${recipe.id}" title="Lihat Resep">`,
+              `<i class="fas fa-eye"></i></a>`,
+              `<a class="btn btn-warning" href="input_resep.php?resep_id=${recipe.id}" target="_blank" title="Buka / Edit Resep V2">`,
+              `<i class="fas fa-edit"></i></a>`,
+              `</div>`,
+              `</td></tr>`,
+            ].join("");
+          }).join("");
+
+          $("#auditRows").html(rowsHtml || '<tr><td colspan="11" class="text-center py-4 text-muted">Tidak ada data resep yang sesuai filter.</td></tr>');
+
+          (r.rows || []).forEach((x) => {
             const recipeId = Number(x.recipe.id);
             const stockResponse = stockResponses.get(recipeId);
             if (stockResponse) $(`[data-stock-id="${recipeId}"]`).html(stockSummaryHtml(recipeId, stockResponse));
             let result = auditResults.get(recipeId);
             if (result) showResult(result);
           });
-          $("#sumTotal").text(r.total);
-          const pages = Math.max(1, Math.ceil(r.total / r.limit));
+
+          $("#sumTotal").text(r.total || 0);
+
+          const pages = Math.max(1, Math.ceil((r.total || 0) / (r.limit || 25)));
           let nav = [
             `<li class="page-item ${page === 1 ? "disabled" : ""}">`,
-            `<button class="page-link audit-page" data-page="${page - 1}" `,
-            'aria-label="Halaman sebelumnya">&laquo;</button></li>',
+            `<button class="page-link audit-page" data-page="${page - 1}" aria-label="Halaman sebelumnya">&laquo;</button></li>`,
           ].join("");
+
           const shown = [1, pages, page - 1, page, page + 1]
-            .filter((value, index, allPages) => {
-              return value >= 1 && value <= pages && allPages.indexOf(value) === index;
-            })
-            .sort((firstPage, secondPage) => firstPage - secondPage);
+            .filter((value, index, allPages) => value >= 1 && value <= pages && allPages.indexOf(value) === index)
+            .sort((a, b) => a - b);
+
           let previous = 0;
           shown.forEach((pageNumber) => {
             if (previous && pageNumber > previous + 1) {
               nav += '<li class="page-item disabled"><span class="page-link">...</span></li>';
             }
-            nav += [
-              `<li class="page-item ${pageNumber === page ? "active" : ""}">`,
-              `<button class="page-link audit-page" data-page="${pageNumber}">`,
-              `${pageNumber}</button></li>`,
-            ].join("");
+            nav += `<li class="page-item ${pageNumber === page ? "active" : ""}">` +
+              `<button class="page-link audit-page" data-page="${pageNumber}">${pageNumber}</button></li>`;
             previous = pageNumber;
           });
+
           nav += [
             `<li class="page-item ${page === pages ? "disabled" : ""}">`,
-            `<button class="page-link audit-page" data-page="${page + 1}" `,
-            'aria-label="Halaman berikutnya">&raquo;</button></li>',
+            `<button class="page-link audit-page" data-page="${page + 1}" aria-label="Halaman berikutnya">&raquo;</button></li>`,
           ].join("");
+
           $("#auditPager").html(nav);
           if (restart) loadAllIds(token);
         })
@@ -762,9 +854,7 @@ include "../../../includes/sidebar.php";
           pageRequest = null;
         });
     }
-    const DEFAULT_MINIMUM_STOCK_KG = 500;
 
-    /** Format KG by truncating, not rounding, after two decimal digits. */
     function formatStockKg(value, fixedDecimals = false) {
       const truncated = Math.trunc((Number(value) + Number.EPSILON) * 100) / 100;
       return truncated.toLocaleString("id-ID", {
@@ -773,12 +863,10 @@ include "../../../includes/sidebar.php";
       });
     }
 
-    /** Create isolated whole-filter stock aggregation state. */
     function createLowStockState(total = 0) {
       return { total, completed: 0, failed: 0, materials: new Map() };
     }
 
-    /** Reset whole-filter stock work and abort requests belonging to the previous filter. */
     function resetLowStockSummary() {
       lowStockRequests.forEach((request) => request.abort());
       lowStockRequests.clear();
@@ -790,7 +878,6 @@ include "../../../includes/sidebar.php";
       $("#recipe-audit-low-stock-preview-list,#recipe-audit-low-stock-modal-rows").empty();
     }
 
-    /** Stable identity prevents duplicate warehouse stock snapshots across recipes. */
     function stockSnapshotKey(product, stock) {
       return [
         product.code || "",
@@ -800,7 +887,6 @@ include "../../../includes/sidebar.php";
       ].join("|");
     }
 
-    /** Merge one recipe stock response without double-counting repeated materials or warehouses. */
     function mergeLowStockResponse(response) {
       (response.materials || []).forEach((material) => {
         const products = material.products || [];
@@ -841,7 +927,6 @@ include "../../../includes/sidebar.php";
       });
     }
 
-    /** Return unique mapped materials below threshold, sorted from lowest stock. */
     function lowStockMaterials() {
       return Array.from(lowStockState.materials.values())
         .map((material) => ({
@@ -891,7 +976,6 @@ include "../../../includes/sidebar.php";
       </div>`;
     }
 
-    /** Render progressive tile and bounded critical-material preview. */
     function renderLowStockSummary() {
       const materials = lowStockMaterials();
       const successful = lowStockState.completed - lowStockState.failed;
@@ -937,7 +1021,6 @@ include "../../../includes/sidebar.php";
       );
     }
 
-    /** Sum only KG stock for one material; other UOM values are not mixed. */
     function materialStockKg(material) {
       return (material.products || []).reduce((materialTotal, product) => {
         return materialTotal + (product.stocks || []).reduce((productTotal, stock) => {
@@ -948,13 +1031,11 @@ include "../../../includes/sidebar.php";
       }, 0);
     }
 
-    /** A mapped material below its configured minimum target needs purchase attention. */
     function needsMaterialPurchase(material) {
       const minimumStockKg = Number(material.minimum_stock_kg ?? DEFAULT_MINIMUM_STOCK_KG);
       return (material.products || []).length > 0 && materialStockKg(material) < minimumStockKg;
     }
 
-    /** Summarize material availability for compact table display. */
     function stockSummaryHtml(recipeId, response) {
       const materials = response.materials || [];
       const uniqueWarehouses = new Set();
@@ -995,7 +1076,6 @@ include "../../../includes/sidebar.php";
       ].join("");
     }
 
-    /** Render complete stock response inside the dedicated detail modal. */
     function stockDetailHtml(response) {
       if (!response.materials || !response.materials.length) {
         return `<div class="text-muted text-center py-4">${esc(
@@ -1041,12 +1121,8 @@ include "../../../includes/sidebar.php";
               const productName = product.name ? ` · ${esc(product.name)}` : "";
               const stockRows = (product.stocks || [])
                 .map((stock) => {
-                  const location = stock.location_name
-                    ? ` / ${esc(stock.location_name)}`
-                    : "";
-                  const warehouseLabel = esc(
-                    stock.warehouse_name || stock.warehouse_code || "-",
-                  );
+                  const location = stock.location_name ? ` / ${esc(stock.location_name)}` : "";
+                  const warehouseLabel = esc(stock.warehouse_name || stock.warehouse_code || "-");
                   const quantity = formatStockKg(stock.qty, true);
                   return [
                     '<div class="stock-row">',
@@ -1056,9 +1132,7 @@ include "../../../includes/sidebar.php";
                   ].join("");
                 })
                 .join("");
-              const productState = product.message
-                ? `<span class="text-muted">${esc(product.message)}</span>`
-                : "";
+              const productState = product.message ? `<span class="text-muted">${esc(product.message)}</span>` : "";
               return [
                 '<div class="stock-product-group">',
                 `<small class="d-block text-muted mb-1">ProInt: ${esc(product.code)}${productName}</small>`,
@@ -1087,7 +1161,7 @@ include "../../../includes/sidebar.php";
       $("#stockDetailBody").html(stockDetailHtml(response));
       $("#stockDetailModal").modal("show");
     }
-    /** Load stock for every filtered recipe with bounded concurrency and progressive aggregation. */
+
     function loadStocks(ids, token) {
       const queue = Array.from(new Set(ids.map(Number))).filter(Number.isInteger);
       lowStockState = createLowStockState(queue.length);
@@ -1127,22 +1201,32 @@ include "../../../includes/sidebar.php";
       }
       next();
     }
+
     $(document).on("click", "[data-stock-detail-id]", function () {
       showStockDetail($(this).data("stock-detail-id"));
     });
+
     $(document).on("click", "#recipe-audit-low-stock-open,[data-action='open-low-stock-summary']", function () {
       renderLowStockModal($("#recipe-audit-low-stock-search").val() || "");
       $("#recipe-audit-low-stock-modal").modal("show");
     });
+
     $("#recipe-audit-low-stock-search").on("input", function () {
       renderLowStockModal(this.value);
     });
+
     function updateSummary(s) {
       summary[s] = (summary[s] || 0) + 1;
-      $("#sumMatch").text((summary.COCOK || 0) + (summary["COCOK - ROUTING BERBEDA"] || 0));
+      let cocok = (summary.COCOK || 0) + (summary["COCOK - ROUTING BERBEDA"] || 0);
+      let sebagian = 0;
+      Object.keys(summary).forEach(k => {
+        if (k.startsWith("COCOK SEBAGIAN")) sebagian += summary[k];
+      });
+      $("#sumMatch").text(cocok + (sebagian > 0 ? ` (+${sebagian})` : ""));
       $("#sumDiff").text(summary.BERBEDA || 0);
-      $("#sumMissing").text((summary["CP TIDAK DITEMUKAN"] || 0) + (summary["ROUTING TIDAK COCOK"] || 0));
+      $("#sumMissing").text((summary["BELUM ADA BON PROINT"] || 0) + (summary["CP TIDAK DITEMUKAN"] || 0));
     }
+
     function loadAllIds(token) {
       auditRequest = $.getJSON("debug_detail_resep_api.php", {
         action: "ids",
@@ -1161,6 +1245,7 @@ include "../../../includes/sidebar.php";
           auditRequest = null;
         });
     }
+
     function runBatches(ids, token) {
       let done = 0,
         total = ids.length;
@@ -1169,6 +1254,7 @@ include "../../../includes/sidebar.php";
       $("#auditProgressText").text("Memeriksa seluruh data ProInt...");
       $("#auditProgressCount").text(`0/${total}`);
       $("#auditProgressBar").addClass("progress-bar-animated").css("width", "0%");
+
       function next() {
         if (token !== auditToken) return;
         if (done >= total) {
@@ -1204,74 +1290,181 @@ include "../../../includes/sidebar.php";
       }
       next();
     }
-    function detail(id, bon) {
-      $.getJSON("debug_detail_resep_api.php", {
-        action: "detail",
-        id: id,
-        bonreq_id: bon || "",
-      })
+
+    // Modal detail with multi-table support
+    function detail(id, tableOverrides = null) {
+      currentModalRecipeId = id;
+      if (tableOverrides) {
+        currentTableBonOverrides = { ...currentTableBonOverrides, ...tableOverrides };
+      } else {
+        currentTableBonOverrides = {};
+      }
+
+      $("#auditTablesContainer").html('<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><p class="mt-2 text-muted">Memuat perbandingan formula multi-tabel...</p></div>');
+      $("#auditDetailModal").modal("show");
+
+      let apiParams = { action: "detail", id: id };
+      if (Object.keys(currentTableBonOverrides).length > 0) {
+        apiParams.table_bon = currentTableBonOverrides;
+      }
+
+      $.getJSON("debug_detail_resep_api.php", apiParams)
         .done((response) => {
           const audit = response.audit;
-          let chooserHtml = "";
-          const selectedBon = audit.selected_bon || {};
-          if (audit.candidates.length > 1) {
-            const candidateButtons = audit.candidates
-              .map((candidate) => {
-                return [
-                  '<button class="btn btn-outline-primary btn-sm choose-bon" ',
-                  `data-id="${id}" data-bon="${candidate.bonreqid}">`,
-                  `${esc(candidate.bonno)} · ${esc(candidate.rtgname || "-")}</button>`,
-                ].join("");
-              })
-              .join("");
-            chooserHtml = [
-              "<label>Pilih Bon ProInt:</label>",
-              `<div class="btn-group flex-wrap">${candidateButtons}</div>`,
-            ].join("");
+          const recipe = audit.recipe || {};
+
+          // Subtitle and direct edit button
+          $("#auditDetailSubtitle").text(`No CP: ${recipe.no_cp || "-"} | Label Jual: ${recipe.label_jual || "-"} | Cus Color: ${recipe.cus_color || "-"}`);
+          $("#auditBtnOpenRecipe").attr("href", `input_resep.php?resep_id=${id}`);
+
+          // Header summary box
+          const headerSummaryHtml = `
+            <div class="card bg-light border mb-3">
+              <div class="card-body p-3 d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                  <h6 class="mb-1 font-weight-bold">
+                    No CP: <span class="text-primary">${esc(recipe.no_cp)}</span>
+                    <span class="ml-2 badge ${Number(recipe.is_manual) === 1 ? 'badge-warning' : 'badge-secondary'}">${Number(recipe.is_manual) === 1 ? 'MANUAL' : 'PROINT'}</span>
+                  </h6>
+                  <div class="text-muted small">
+                    Label Jual: <b>${esc(recipe.label_jual || '-')}</b> | 
+                    Warna: <b>${esc(recipe.cus_color || '-')}</b> | 
+                    Total Tabel: <b>${audit.total_tables || (audit.tables ? audit.tables.length : 1)}</b> |
+                    Dibuat: <b>${esc(recipe.created_at || '-')}</b>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div>${badge(audit.status)}</div>
+                  <small class="text-muted">${esc(audit.status_detail || "")}</small>
+                </div>
+              </div>
+            </div>
+          `;
+          $("#auditDetailHeaderSummary").html(headerSummaryHtml);
+
+          // Render tables
+          const tables = audit.tables || [];
+          if (!tables.length) {
+            $("#auditTablesContainer").html('<div class="alert alert-warning text-center">Tidak ada rincian tabel formula resep untuk CP ini.</div>');
+            return;
           }
-          const bonInfo = selectedBon.bonno
-            ? [
-                '<div class="mt-2"><strong>Bon No:</strong> ',
-                `${esc(selectedBon.bonno)} &nbsp; <strong>Routing ProInt:</strong> `,
-                `${esc(selectedBon.rtgname || "-")}</div>`,
-              ].join("")
-            : "";
-          const chooserSummary = [
-            '<div class="alert alert-light border">',
-            `<b>${esc(audit.recipe.no_cp)}</b> · ${badge(audit.status)}<br>`,
-            `<small>${esc(audit.status_detail || "")}</small>${bonInfo}</div>`,
-          ].join("");
-          $("#auditBonChooser").html(chooserSummary + chooserHtml);
-          const detailRows = audit.details
-            .map((detail) => {
-              const local = detail.local || {};
-              const proint = detail.proint || {};
-              const reason = (detail.reasons || []).join(", ") || detail.status;
-              return [
-                `<tr><td>${esc(detail.kode)}</td>`,
-                `<td>${esc(local.name || proint.name || "-")}</td>`,
-                `<td>${esc(numberDisplay(local.receipe))}</td>`,
-                `<td>${esc(numberDisplay(proint.qty))}</td>`,
-                `<td>${esc(numberDisplay(local.cf))}</td>`,
-                `<td>${esc(numberDisplay(proint.cf))}</td>`,
-                `<td>${esc(local.uom || "-")}</td>`,
-                `<td>${esc(proint.uom || "-")}</td>`,
-                `<td>${badge(detail.status)}<br>`,
-                `<small class="text-muted">${esc(reason)}</small></td></tr>`,
-              ].join("");
-            })
-            .join("");
-          const emptyDetails =
-            '<tr><td colspan="9" class="text-center">Pilih Bon untuk membandingkan.</td></tr>';
-          $("#auditDetails").html(detailRows || emptyDetails);
-          $("#auditDetailModal").modal("show");
+
+          let tablesHtml = "";
+          tables.forEach((t) => {
+            const selectedBon = t.selected_bon || {};
+            const candidates = t.candidates || [];
+
+            // Bon chooser dropdown for this table
+            let bonChooserSelect = "";
+            if (candidates.length > 1) {
+              let options = candidates.map((c) => {
+                let isSelected = selectedBon.bonreqid && Number(selectedBon.bonreqid) === Number(c.bonreqid);
+                return `<option value="${c.bonreqid}" ${isSelected ? 'selected' : ''}>` +
+                  `Bon: ${esc(c.bonno)} (VLot: ${c.vlot || '-'} · ${esc(c.rtgname || '-')})` +
+                  `</option>`;
+              }).join("");
+              bonChooserSelect = `
+                <div class="d-inline-flex align-items-center ml-2">
+                  <small class="text-muted mr-1 font-weight-bold">Ganti Bon:</small>
+                  <select class="form-control form-control-sm table-bon-select font-weight-bold" data-recipe-id="${id}" data-table-index="${t.table_index}" style="width: auto; max-width: 280px;">
+                    ${options}
+                  </select>
+                </div>
+              `;
+            }
+
+            // Material rows for this table
+            let detailRowsHtml = "";
+            const details = t.details || [];
+            if (details.length > 0) {
+              detailRowsHtml = details.map((d, idx) => {
+                const local = d.local || {};
+                const proint = d.proint || {};
+                const reason = (d.reasons || []).join(", ") || d.status;
+
+                let rowBgClass = "";
+                if (d.status === "SELISIH NILAI") rowBgClass = "table-danger";
+                else if (d.status === "HANYA LOKAL") rowBgClass = "table-warning";
+                else if (d.status === "HANYA PROINT") rowBgClass = "table-info";
+
+                return `
+                  <tr class="${rowBgClass}">
+                    <td class="text-center font-weight-bold text-muted">${idx + 1}</td>
+                    <td><code>${esc(d.kode)}</code></td>
+                    <td><b>${esc(local.name || proint.name || "-")}</b></td>
+                    <td><small class="text-muted">${esc(local.category || proint.category || "-")}</small></td>
+                    <td class="text-right font-weight-bold">${esc(numberDisplay(local.receipe))}</td>
+                    <td class="text-right font-weight-bold">${esc(numberDisplay(proint.qty))}</td>
+                    <td class="text-right">${esc(numberDisplay(local.cf))}</td>
+                    <td class="text-right">${esc(numberDisplay(proint.cf))}</td>
+                    <td class="text-center"><small>${esc(local.uom || proint.uom || "-")}</small></td>
+                    <td>${badge(d.status)}<br><small class="text-muted">${esc(reason)}</small></td>
+                  </tr>
+                `;
+              }).join("");
+            } else {
+              detailRowsHtml = '<tr><td colspan="10" class="text-center py-3 text-muted">Belum ada material yang terhubung dengan Bon ini.</td></tr>';
+            }
+
+            tablesHtml += `
+              <div class="card table-card mb-4">
+                <div class="table-card-header d-flex justify-content-between align-items-center flex-wrap">
+                  <div>
+                    <h6 class="mb-0 font-weight-bold">
+                      <span class="badge badge-primary px-2 py-1 mr-1">Tabel #${t.table_index}</span>
+                      ${esc(t.rtg_code)} - ${esc(t.rtg_name || 'ROUTING')}
+                    </h6>
+                    <small class="text-muted">
+                      Bon Lokal: <b class="text-dark">${esc(t.local_bonno || '-')}</b> | 
+                      Bon ProInt: <b class="${selectedBon.bonno ? 'text-success' : 'text-danger'}">${esc(selectedBon.bonno || 'BELUM TERBIT')}</b> | 
+                      VLot: <b>${t.vlot || '-'}</b>
+                    </small>
+                  </div>
+                  <div class="d-flex align-items-center mt-1 mt-md-0">
+                    ${badge(t.status)}
+                    ${bonChooserSelect}
+                  </div>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped mb-0">
+                      <thead class="thead-light">
+                        <tr>
+                          <th style="width: 35px;" class="text-center">#</th>
+                          <th>Kode ProInt</th>
+                          <th>Nama Material</th>
+                          <th>Kategori</th>
+                          <th class="text-right">Qty Lokal</th>
+                          <th class="text-right">Qty ProInt</th>
+                          <th class="text-right">CF Lokal</th>
+                          <th class="text-right">CF ProInt</th>
+                          <th class="text-center">UOM</th>
+                          <th>Status & Selisih</th>
+                        </tr>
+                      </thead>
+                      <tbody>${detailRowsHtml}</tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+          $("#auditTablesContainer").html(tablesHtml);
         })
-        .fail(error);
+        .fail((xhr) => {
+          $("#auditTablesContainer").html('<div class="alert alert-danger text-center">Gagal memuat detail audit resep.</div>');
+          error(xhr);
+        });
     }
+
     $("#auditFilter").click(() => load(1, true));
     $("#auditCp").keydown((e) => {
       if (e.key === "Enter") load(1, true);
     });
+
+    $("#auditRoute, #auditSource").change(() => load(1, true));
+
     $(document)
       .on("click", ".audit-page", function () {
         load(Number($(this).data("page")), false);
@@ -1279,18 +1472,24 @@ include "../../../includes/sidebar.php";
       .on("click", ".detail-audit", function () {
         detail($(this).data("id"));
       })
-      .on("click", ".choose-bon", function () {
-        detail($(this).data("id"), $(this).data("bon"));
+      .on("change", ".table-bon-select", function () {
+        const recipeId = $(this).data("recipe-id");
+        const tableIndex = $(this).data("table-index");
+        const selectedBonId = $(this).val();
+        let overrides = {};
+        overrides[tableIndex] = selectedBonId;
+        detail(recipeId, overrides);
       });
+
     $("#auditExport").click(async () => {
       let choice = await Swal.fire({
         title: "Pilih Jenis Export",
-        text: "Ringkasan cepat memakai hasil audit yang sudah selesai.",
+        text: "Ringkasan cepat memakai hasil audit yang sudah selesai, atau Beserta Detail untuk audit lengkap per tabel.",
         icon: "question",
         showCancelButton: true,
         showDenyButton: true,
-        confirmButtonText: "Ringkasan Cepat",
-        denyButtonText: "Beserta Detail",
+        confirmButtonText: '<i class="fas fa-bolt mr-1"></i> Ringkasan Cepat',
+        denyButtonText: '<i class="fas fa-list-ul mr-1"></i> Beserta Detail',
         cancelButtonText: "Batal",
       });
       if (choice.isDismissed) return;
@@ -1303,13 +1502,13 @@ include "../../../includes/sidebar.php";
       if (!expected || auditResults.size !== expected) {
         Swal.fire(
           "Audit Belum Selesai",
-          `Tunggu sampai pemeriksaan selesai (${auditResults.size}/${expected}).`,
+          `Tunggu sampai pemeriksaan ProInt selesai (${auditResults.size}/${expected}).`,
           "warning",
         );
         return;
       }
       Swal.fire({
-        title: "Membuat ringkasan...",
+        title: "Membuat ringkasan Excel...",
         allowOutsideClick: false,
         didOpen: () => Swal.showLoading(),
       });
@@ -1328,15 +1527,17 @@ include "../../../includes/sidebar.php";
             url = URL.createObjectURL(blob),
             link = document.createElement("a");
           link.href = url;
-          link.download = "Audit_Ringkasan_Resep_" + Date.now() + ".xlsx";
+          link.download = "Audit_Ringkasan_Resep_V2_" + Date.now() + ".xlsx";
           document.body.appendChild(link);
           link.click();
           link.remove();
           URL.revokeObjectURL(url);
-          Swal.fire("Berhasil", "Ringkasan audit diunduh.", "success");
+          Swal.fire("Berhasil", "Ringkasan audit berhasil diunduh.", "success");
         })
         .catch((e) => Swal.fire("Export Gagal", e.message, "error"));
     });
+
+    loadRoutes();
     initLabelFilter();
     load(1, true);
   });

@@ -1,51 +1,64 @@
 <?php
-// Shared read-only audit logic for local recipe details vs actual ProInt production materials.
+// Shared read-only audit logic for local recipe details vs actual ProInt production materials (V2 Architecture).
 require_once __DIR__ . "/../../../koneksi.php";
 require_once __DIR__ . "/../../../koneksi3.php";
 require_once __DIR__ . "/label_jual_lookup.php";
 
 const RESEP_AUDIT_TOLERANCE = 0.0001;
-function auditAllowedCategory($category): bool
-{
-    $c = strtoupper(trim((string) $category));
-    return str_starts_with($c, "DISPERSE") || str_starts_with($c, "REACTIVE");
-}
+
 function auditNumEqual($a, $b): bool
 {
     return abs((float) $a - (float) $b) <= RESEP_AUDIT_TOLERANCE;
 }
+
+function auditNormalizeUom($value): string
+{
+    $u = strtoupper(trim((string) $value));
+    return in_array($u, ["GR", "G/L"], true) ? "GR" : $u;
+}
+
 function auditSqlError(string $message): RuntimeException
 {
     return new RuntimeException(
         $message . ": " . json_encode(sqlsrv_errors(), JSON_UNESCAPED_UNICODE),
     );
 }
+
 function auditLocalRows(array $filters, int $offset = 0, int $limit = 25): array
 {
     global $conn, $conn3;
     $where = ["NULLIF(LTRIM(RTRIM(r.no_cp)),'') IS NOT NULL", "r.no_cp<>'-'"];
     $params = [];
+
     if (($filters["cp"] ?? "") !== "") {
         $where[] = "r.no_cp LIKE ?";
         $params[] = "%" . $filters["cp"] . "%";
     }
+
     if (($filters["source"] ?? "") === "MANUAL") {
         $where[] = "r.is_manual=1";
     } elseif (($filters["source"] ?? "") === "PROINT") {
         $where[] = "ISNULL(r.is_manual,0)=0";
     }
+
     if (($filters["start"] ?? "") !== "") {
         $where[] = "r.created_at>=?";
         $params[] = $filters["start"] . " 00:00:00";
     }
+
     if (($filters["end"] ?? "") !== "") {
         $where[] = "r.created_at<=?";
         $params[] = $filters["end"] . " 23:59:59";
     }
+
     if (($filters["route"] ?? "") !== "") {
-        $where[] = "LTRIM(RTRIM(ISNULL(r.rtg_code,'-')))=?";
+        $where[] = "EXISTS (
+            SELECT 1 FROM dbo.resep_obat_detail_v2 d
+            WHERE d.id_resep = r.id AND LTRIM(RTRIM(ISNULL(d.rtg_code, '-'))) = ?
+        )";
         $params[] = $filters["route"];
     }
+
     $saleLabel = trim((string) ($filters["label_jual"] ?? ""));
     $hasLabelFilter = $saleLabel !== "";
     if ($hasLabelFilter) {
@@ -77,16 +90,18 @@ function auditLocalRows(array $filters, int $offset = 0, int $limit = 25): array
             WHERE label_cp.no_cp = LTRIM(RTRIM(r.no_cp))
         )";
     }
+
     $ws = implode(" AND ", $where);
     $count = sqlsrv_query(
         $conn,
-        "SELECT COUNT(*) total FROM dbo.resep_obat r WHERE $ws",
+        "SELECT COUNT(*) total FROM dbo.resep_obat_v2 r WHERE $ws",
         $params,
     );
     if (!$count) {
-        throw auditSqlError("Gagal menghitung resep");
+        throw auditSqlError("Gagal menghitung resep V2");
     }
     $total = (int) sqlsrv_fetch_array($count, SQLSRV_FETCH_ASSOC)["total"];
+
     $sql = "SELECT
                 r.id,
                 r.no_cp,
@@ -98,16 +113,21 @@ function auditLocalRows(array $filters, int $offset = 0, int $limit = 25): array
                 r.proint_resephdid,
                 r.vlot,
                 r.created_at,
-                r.created_by
-            FROM dbo.resep_obat r
+                r.created_by,
+                r.kode_warna,
+                r.lot_no,
+                r.weight,
+                r.plan_qty
+            FROM dbo.resep_obat_v2 r
             WHERE $ws
             ORDER BY r.created_at DESC, r.id DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
     $p = array_merge($params, [$offset, $limit]);
     $stmt = sqlsrv_query($conn, $sql, $p);
     if (!$stmt) {
-        throw auditSqlError("Gagal mengambil resep");
+        throw auditSqlError("Gagal mengambil resep V2");
     }
+
     $rows = [];
     while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         $r["created_at"] =
@@ -116,6 +136,39 @@ function auditLocalRows(array $filters, int $offset = 0, int $limit = 25): array
                 : "";
         $rows[] = $r;
     }
+
+    if (!empty($rows)) {
+        // Fetch routing and bon summaries per recipe
+        $recipeIds = array_column($rows, "id");
+        $placeholders = implode(",", array_fill(0, count($recipeIds), "?"));
+        $routesStmt = sqlsrv_query(
+            $conn,
+            "SELECT id_resep, ISNULL(table_index, 1) AS table_index, rtg_code, rtg_name, bonno
+             FROM dbo.resep_obat_detail_v2
+             WHERE id_resep IN ($placeholders)
+             GROUP BY id_resep, ISNULL(table_index, 1), rtg_code, rtg_name, bonno
+             ORDER BY id_resep, ISNULL(table_index, 1)",
+            $recipeIds,
+        );
+        $routesByRecipe = [];
+        if ($routesStmt) {
+            while ($routeRow = sqlsrv_fetch_array($routesStmt, SQLSRV_FETCH_ASSOC)) {
+                $rid = (int) $routeRow["id_resep"];
+                $routesByRecipe[$rid][] = [
+                    "table_index" => (int) $routeRow["table_index"],
+                    "rtg_code" => trim((string) ($routeRow["rtg_code"] ?? "")),
+                    "rtg_name" => trim((string) ($routeRow["rtg_name"] ?? "")),
+                    "bonno" => trim((string) ($routeRow["bonno"] ?? "")),
+                ];
+            }
+        }
+        foreach ($rows as &$recipeRow) {
+            $rid = (int) $recipeRow["id"];
+            $recipeRow["routes_summary"] = $routesByRecipe[$rid] ?? [];
+        }
+        unset($recipeRow);
+    }
+
     $labelsByProductionNumber = recipeSaleLabelsByProductionNumber(
         $conn3,
         array_column($rows, "no_cp"),
@@ -125,17 +178,26 @@ function auditLocalRows(array $filters, int $offset = 0, int $limit = 25): array
         $recipeRow["label_jual"] = $labelsByProductionNumber[$productionNumber] ?? "-";
     }
     unset($recipeRow);
+
     if ($hasLabelFilter) {
         sqlsrv_query($conn, "IF OBJECT_ID('tempdb..#recipe_label_cp') IS NOT NULL DROP TABLE #recipe_label_cp");
     }
     return ["total" => $total, "rows" => $rows];
 }
+
 function auditLocalDetails(int $id): array
 {
     global $conn;
     $s = sqlsrv_query(
         $conn,
         "SELECT
+             id,
+             ISNULL(table_index, 1) AS table_index,
+             sort_order,
+             bonno,
+             rtg_code,
+             rtg_name,
+             vlot,
              kode,
              name,
              category,
@@ -143,18 +205,15 @@ function auditLocalDetails(int $id): array
              uom,
              cf,
              uom_cf,
-             is_manual
-         FROM dbo.resep_obat_detail
+             is_manual,
+             used_type
+         FROM dbo.resep_obat_detail_v2
          WHERE id_resep = ?
-           AND (
-               UPPER(LTRIM(RTRIM(category))) LIKE 'DISPERSE%'
-               OR UPPER(LTRIM(RTRIM(category))) LIKE 'REACTIVE%'
-           )
-         ORDER BY id",
+         ORDER BY ISNULL(table_index, 1) ASC, ISNULL(sort_order, id) ASC, id ASC",
         [$id],
     );
     if (!$s) {
-        throw auditSqlError("Gagal mengambil detail lokal");
+        throw auditSqlError("Gagal mengambil detail lokal V2");
     }
     $r = [];
     while ($x = sqlsrv_fetch_array($s, SQLSRV_FETCH_ASSOC)) {
@@ -162,6 +221,7 @@ function auditLocalDetails(int $id): array
     }
     return $r;
 }
+
 function auditBonCandidates(string $cp): array
 {
     global $conn3;
@@ -179,53 +239,29 @@ function auditBonCandidates(string $cp): array
          JOIN pdbonreq br ON br.productionhdid = ph.productionhdid
          JOIN pdrtgms rt ON rt.rtgmsid = br.rtgmsid
          WHERE ph.prdnmbr = :cp
-           AND rt.rtgcode IN ('06115', '06116', '06119', '06147', '06158', '06161')
          ORDER BY br.bondate DESC, br.bonseq, br.bonreqid",
     );
     $s->execute([":cp" => $cp]);
     return $s->fetchAll(PDO::FETCH_ASSOC);
 }
-function auditChooseBon(array $recipe, array $bons, ?int $bonId = null): array
-{
-    if (!$bons) {
-        return ["status" => "CP TIDAK DITEMUKAN", "bon" => null];
-    }
-    if ($bonId) {
-        foreach ($bons as $b) {
-            if ((int) $b["bonreqid"] === $bonId) {
-                return ["status" => "", "bon" => $b];
-            }
-        }
-        return ["status" => "ROUTING TIDAK COCOK", "bon" => null];
-    }
-    $rt = trim((string) ($recipe["rtg_code"] ?? ""));
-    if ($rt !== "" && $rt !== "-") {
-        foreach ($bons as $b) {
-            if (trim((string) $b["rtgcode"]) === $rt) {
-                return ["status" => "", "bon" => $b];
-            }
-        }
-        return ["status" => "ROUTING TIDAK COCOK", "bon" => null];
-    }
-    return count($bons) === 1
-        ? ["status" => "", "bon" => $bons[0]]
-        : ["status" => "PERLU PILIH BON", "bon" => null];
-}
+
 function auditProintDetails(array $bon): array
 {
     global $conn, $conn3;
     $s = $conn3->prepare(
         "SELECT
-             production_material.prodcode,
-             production_material.prodname,
-             production_material.matqty,
-             unit.uomcode
-         FROM pdproductionmat production_material
-         LEFT JOIN smuom unit ON unit.uomid = production_material.matuomid
-         WHERE production_material.productionhdid = :ph
-           AND production_material.productionrtgid = :pr
-           AND production_material.fgusedtype = 'G'
-         ORDER BY production_material.matseq, production_material.productionmatid",
+             pm.prodcode,
+             pm.prodname,
+             pm.matqty,
+             pm.prodcf,
+             pm.fgusedtype,
+             u.uomcode
+         FROM pdproductionmat pm
+         LEFT JOIN smuom u ON u.uomid = pm.matuomid
+         WHERE pm.productionhdid = :ph
+           AND pm.productionrtgid = :pr
+           AND pm.fgusedtype IN ('G', 'P')
+         ORDER BY pm.matseq, pm.productionmatid",
     );
     $s->execute([
         ":ph" => $bon["productionhdid"],
@@ -234,37 +270,46 @@ function auditProintDetails(array $bon): array
     $rows = $s->fetchAll(PDO::FETCH_ASSOC);
     $out = [];
     $v = (float) $bon["vlot"];
+
     foreach ($rows as $r) {
+        $usedType = strtoupper(trim((string) ($r["fgusedtype"] ?? "G")));
+        if ($usedType === "P") {
+            $cf = (float) ($r["prodcf"] ?? 0);
+            $uom_cf = "%";
+        } else {
+            $cf = $v > 0 ? (float) $r["matqty"] / $v : 0;
+            $uom_cf = "G/L";
+        }
+
+        $prodcode = trim((string) $r["prodcode"]);
         $m = sqlsrv_query(
             $conn,
-            "SELECT TOP 1 kode_obat,nama_obat,group_obat,uom FROM dbo.resep_master_obat WHERE codeprod_proint=?",
-            [$r["prodcode"]],
+            "SELECT TOP 1 kode_obat, nama_obat, group_obat, uom 
+             FROM dbo.resep_master_obat 
+             WHERE codeprod_proint = ? OR kode_obat = ?",
+            [$prodcode, $prodcode],
         );
-        if (!$m) {
-            throw auditSqlError("Gagal mapping master obat");
+        $l = $m ? sqlsrv_fetch_array($m, SQLSRV_FETCH_ASSOC) : null;
+        $category = $l["group_obat"] ?? "PROINT MATERIAL";
+        if ($usedType !== "P" && !empty($l["uom"])) {
+            $uom_cf = $l["uom"];
         }
-        $l = sqlsrv_fetch_array($m, SQLSRV_FETCH_ASSOC);
-        if (!$l || !auditAllowedCategory($l["group_obat"])) {
-            continue;
-        }
+
         $out[] = [
-            "kode" => $l["kode_obat"],
-            "name" => $l["nama_obat"],
-            "category" => $l["group_obat"],
+            "kode" => $prodcode,
+            "name" => trim((string) $r["prodname"]),
+            "category" => $category,
             "qty" => (float) $r["matqty"],
-            "cf" => $v > 0 ? (float) $r["matqty"] / $v : 0,
+            "cf" => $cf,
             "uom" => $r["uomcode"] ?? "",
-            "uom_cf" => $l["uom"] ?? "",
-            "codeprod" => $r["prodcode"],
+            "uom_cf" => $uom_cf,
+            "codeprod" => $prodcode,
+            "used_type" => $usedType,
         ];
     }
     return $out;
 }
-function auditNormalizeUom($value): string
-{
-    $u = strtoupper(trim((string) $value));
-    return in_array($u, ["GR", "G/L"], true) ? "GR" : $u;
-}
+
 function auditCompare(array $local, array $proint): array
 {
     $lm = [];
@@ -275,15 +320,19 @@ function auditCompare(array $local, array $proint): array
     foreach ($proint as $r) {
         $pm[strtoupper(trim((string) $r["kode"]))] = $r;
     }
+
     $keys = array_unique(array_merge(array_keys($lm), array_keys($pm)));
     sort($keys);
+
     $out = [];
     $overall = "COCOK";
     $reasonCounts = [];
+
     foreach ($keys as $k) {
         $l = $lm[$k] ?? null;
         $p = $pm[$k] ?? null;
         $reasons = [];
+
         if (!$l) {
             $st = "HANYA PROINT";
             $reasons[] = "Item hanya ada di ProInt";
@@ -292,16 +341,17 @@ function auditCompare(array $local, array $proint): array
             $reasons[] = "Item hanya ada di lokal";
         } else {
             if (!auditNumEqual($l["receipe"], $p["qty"])) {
-                $reasons[] = "Qty berbeda";
+                $reasons[] = "Qty berbeda (L: " . round((float) $l["receipe"], 4) . " vs P: " . round((float) $p["qty"], 4) . ")";
             }
             if (!auditNumEqual($l["cf"], $p["cf"])) {
-                $reasons[] = "CF berbeda";
+                $reasons[] = "CF berbeda (L: " . round((float) $l["cf"], 4) . " vs P: " . round((float) $p["cf"], 4) . ")";
             }
             if (auditNormalizeUom($l["uom"]) !== auditNormalizeUom($p["uom"])) {
-                $reasons[] = "UOM berbeda";
+                $reasons[] = "UOM berbeda (L: " . $l["uom"] . " vs P: " . $p["uom"] . ")";
             }
             $st = $reasons ? "SELISIH NILAI" : "COCOK";
         }
+
         $out[] = [
             "kode" => $k,
             "local" => $l,
@@ -309,6 +359,7 @@ function auditCompare(array $local, array $proint): array
             "status" => $st,
             "reasons" => $reasons,
         ];
+
         if ($st !== "COCOK") {
             $overall = "BERBEDA";
             foreach ($reasons as $reason) {
@@ -316,235 +367,185 @@ function auditCompare(array $local, array $proint): array
             }
         }
     }
+
     $summary = [];
     foreach ($reasonCounts as $reason => $count) {
         $summary[] = $reason . " (" . $count . ")";
     }
+
     return [
         "status" => $overall,
-        "status_detail" => $summary
-            ? implode(", ", $summary)
-            : "Semua detail cocok",
+        "status_detail" => $summary ? implode(", ", $summary) : "Semua detail cocok",
         "details" => $out,
     ];
 }
-function auditLegacyDetails(array $recipe): array
-{
-    global $conn, $conn3;
 
-    $recipeHeaderId = (int) ($recipe["proint_resephdid"] ?? 0);
-    if (!$recipeHeaderId) {
-        return [];
-    }
-
-    $statement = $conn3->prepare(
-        "SELECT d.materialcode, d.materialname, d.qty, r.rtgcode, u.uomcode
-         FROM pdresepdt d
-         JOIN smproduct p ON p.prodid = d.materialid
-         LEFT JOIN pdrtgms r ON r.rtgmsid = d.rtgmsid
-         LEFT JOIN smuom u ON u.uomid = p.uomid
-         WHERE d.resephdid = :id
-           AND d.rtgdesc IN ('RESEP PADDRY DYESTUFF', 'RESEP OBAT PUTIH')
-         ORDER BY d.rtgseq, d.materialseq",
-    );
-    $statement->execute([":id" => $recipeHeaderId]);
-
-    $output = [];
-    $vlot = (float) ($recipe["vlot"] ?? 0);
-    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $proIntItem) {
-        $localRouteCode = trim((string) ($recipe["rtg_code"] ?? ""));
-        if (
-            $localRouteCode !== "-" &&
-            $localRouteCode !== "" &&
-            trim((string) $proIntItem["rtgcode"]) !== $localRouteCode
-        ) {
-            continue;
-        }
-
-        $mappingStatement = sqlsrv_query(
-            $conn,
-            "SELECT TOP 1 kode_obat, nama_obat, group_obat, uom
-             FROM dbo.resep_master_obat
-             WHERE codeprod_proint = ?
-               AND (UPPER(LTRIM(RTRIM(group_obat))) LIKE 'DISPERSE%'
-                    OR UPPER(LTRIM(RTRIM(group_obat))) LIKE 'REACTIVE%')
-             ORDER BY CASE WHEN kode_obat = RIGHT(?, 5) THEN 0 ELSE 1 END, kode_obat",
-            [$proIntItem["materialcode"], $proIntItem["materialcode"]],
-        );
-        if (!$mappingStatement) {
-            throw auditSqlError("Gagal mapping master obat");
-        }
-
-        $localMapping = sqlsrv_fetch_array(
-            $mappingStatement,
-            SQLSRV_FETCH_ASSOC,
-        );
-        if (!$localMapping) {
-            continue;
-        }
-
-        $cf = (float) $proIntItem["qty"];
-        $output[] = [
-            "kode" => $localMapping["kode_obat"],
-            "name" => $localMapping["nama_obat"],
-            "category" => $localMapping["group_obat"],
-            "qty" => $vlot > 0 ? $vlot * $cf : 0,
-            "cf" => $cf,
-            "uom" => $localMapping["uom"] ?? ($proIntItem["uomcode"] ?? ""),
-            "uom_cf" => $localMapping["uom"] ?? "",
-            "codeprod" => $proIntItem["materialcode"],
-        ];
-    }
-
-    return $output;
-}
-function auditScoreComparison(array $comparison, bool $sameRoute): array
-{
-    $code = 0;
-    $cf = 0;
-    $qty = 0;
-    $penalty = 0;
-    foreach ($comparison["details"] as $d) {
-        if (!$d["local"] || !$d["proint"]) {
-            $penalty++;
-            continue;
-        }
-        $code++;
-        if (auditNumEqual($d["local"]["cf"], $d["proint"]["cf"])) {
-            $cf++;
-        }
-        if (auditNumEqual($d["local"]["receipe"], $d["proint"]["qty"])) {
-            $qty++;
-        }
-    }
-    return [$code, $cf, $qty, -$penalty, $sameRoute ? 1 : 0];
-}
-function auditBestBon(array $recipe, array $bons, array $local): array
-{
-    $best = null;
-    $ties = 0;
-    foreach ($bons as $bon) {
-        $cmp = auditCompare($local, auditProintDetails($bon));
-        $sameRoute =
-            trim((string) ($recipe["rtg_code"] ?? "")) ===
-            trim((string) ($bon["rtgcode"] ?? ""));
-        $score = auditScoreComparison($cmp, $sameRoute);
-        if ($best === null || $score > $best["score"]) {
-            $best = [
-                "bon" => $bon,
-                "comparison" => $cmp,
-                "same_route" => $sameRoute,
-                "score" => $score,
-            ];
-            $ties = 1;
-        } elseif ($score === $best["score"]) {
-            $ties++;
-        }
-    }
-    if ($best) {
-        $best["tie_count"] = $ties;
-    }
-    return $best ?? [];
-}
 function auditRecipe(
     array $recipe,
     ?int $bonId = null,
     bool $findBestBon = false,
+    ?array $tableBonOverrides = null,
 ): array {
-    $local = auditLocalDetails((int) $recipe["id"]);
-    $bons =
-        $findBestBon || $bonId
-            ? auditBonCandidates(trim($recipe["no_cp"]))
-            : [];
-    if ($findBestBon && !$bonId && $bons) {
-        $best = auditBestBon($recipe, $bons, $local);
-        $cmp = $best["comparison"];
-        $sameRoute = $best["same_route"];
-        $status =
-            $cmp["status"] === "COCOK" && !$sameRoute
-                ? "COCOK - ROUTING BERBEDA"
-                : $cmp["status"];
-        $detail =
-            $cmp["status_detail"] .
-            (!$sameRoute
-                ? " | Routing lokal " .
-                    trim((string) $recipe["rtg_code"]) .
-                    ", ProInt " .
-                    trim((string) $best["bon"]["rtgcode"])
-                : "");
-        if (($best["tie_count"] ?? 0) > 1) {
-            $detail .= " | " . $best["tie_count"] . " Bon memiliki skor sama";
-        }
-        return [
-            "recipe" => $recipe,
-            "candidates" => $bons,
-            "selected_bon" => $best["bon"],
-            "source" => "",
-            "status" => $status,
-            "status_detail" => $detail,
-            "details" => $cmp["details"],
-        ];
-    }
-    if ($bonId && $bons) {
-        $choice = auditChooseBon($recipe, $bons, $bonId);
-        if ($choice["bon"]) {
-            $cmp = auditCompare($local, auditProintDetails($choice["bon"]));
-            return [
-                "recipe" => $recipe,
-                "candidates" => $bons,
-                "selected_bon" => $choice["bon"],
-                "source" => "BON DIPILIH",
-                "status" => $cmp["status"],
-                "status_detail" => $cmp["status_detail"],
-                "details" => $cmp["details"],
+    $recipeId = (int) $recipe["id"];
+    $localRows = auditLocalDetails($recipeId);
+    $cp = trim((string) ($recipe["no_cp"] ?? ""));
+    $allBons = $cp !== "" ? auditBonCandidates($cp) : [];
+
+    // Group local rows by table_index
+    $tablesData = [];
+    foreach ($localRows as $r) {
+        $tIdx = (int) ($r["table_index"] ?: 1);
+        if (!isset($tablesData[$tIdx])) {
+            $tablesData[$tIdx] = [
+                "table_index" => $tIdx,
+                "rtg_code" => trim((string) ($r["rtg_code"] ?? "")),
+                "rtg_name" => trim((string) ($r["rtg_name"] ?? "")),
+                "bonno" => trim((string) ($r["bonno"] ?? "")),
+                "vlot" => (float) ($r["vlot"] ?: ($recipe["vlot"] ?? 0)),
+                "items" => [],
             ];
         }
+        $tablesData[$tIdx]["items"][] = $r;
     }
-    $legacy = auditLegacyDetails($recipe);
-    if ($legacy) {
-        $cmp = auditCompare($local, $legacy);
-        return [
-            "recipe" => $recipe,
-            "candidates" => [],
-            "selected_bon" => null,
-            "source" => "RESEP PROINT LAMA",
-            "status" => $cmp["status"],
-            "status_detail" => $cmp["status_detail"],
-            "details" => $cmp["details"],
+
+    $tablesResult = [];
+    $tableStatuses = [];
+    $matchedCount = 0;
+    $totalTables = count($tablesData);
+
+    foreach ($tablesData as $tIdx => $tInfo) {
+        // Candidates for this routing
+        $tCandidates = [];
+        foreach ($allBons as $b) {
+            if ($tInfo["rtg_code"] !== "" && trim((string) $b["rtgcode"]) === $tInfo["rtg_code"]) {
+                $tCandidates[] = $b;
+            }
+        }
+        if (empty($tCandidates)) {
+            $tCandidates = $allBons;
+        }
+
+        // Check override
+        $overrideBonId = null;
+        if ($tableBonOverrides && isset($tableBonOverrides[$tIdx])) {
+            $overrideBonId = (int) $tableBonOverrides[$tIdx];
+        } elseif ($bonId && $totalTables === 1) {
+            $overrideBonId = $bonId;
+        }
+
+        $selectedBon = null;
+        if ($overrideBonId) {
+            foreach ($allBons as $b) {
+                if ((int) $b["bonreqid"] === $overrideBonId) {
+                    $selectedBon = $b;
+                    break;
+                }
+            }
+        } elseif ($tInfo["bonno"] !== "") {
+            foreach ($allBons as $b) {
+                if (trim((string) $b["bonno"]) === $tInfo["bonno"]) {
+                    $selectedBon = $b;
+                    break;
+                }
+            }
+        }
+
+        if (!$selectedBon && !empty($tCandidates)) {
+            $selectedBon = $tCandidates[0];
+        }
+
+        if (!$selectedBon) {
+            $tStatus = "BELUM ADA BON PROINT";
+            $tDetail = "Belum ada Bon permintaan obat di ProInt untuk routing ini";
+            $cmpDetails = [];
+        } else {
+            $prointItems = auditProintDetails($selectedBon);
+            $cmp = auditCompare($tInfo["items"], $prointItems);
+            $tStatus = $cmp["status"];
+            $tDetail = $cmp["status_detail"];
+            $cmpDetails = $cmp["details"];
+            if ($tStatus === "COCOK") {
+                $matchedCount++;
+            }
+        }
+
+        $tableStatuses[] = "T{$tIdx} ({$tInfo['rtg_code']}): $tStatus";
+
+        $tablesResult[] = [
+            "table_index" => $tIdx,
+            "rtg_code" => $tInfo["rtg_code"],
+            "rtg_name" => $tInfo["rtg_name"],
+            "vlot" => $tInfo["vlot"],
+            "local_bonno" => $tInfo["bonno"],
+            "selected_bon" => $selectedBon,
+            "candidates" => $tCandidates,
+            "status" => $tStatus,
+            "status_detail" => $tDetail,
+            "details" => $cmpDetails,
         ];
     }
-    if (!$bons) {
-        $bons = auditBonCandidates(trim($recipe["no_cp"]));
+
+    if ($totalTables === 0) {
+        $overallStatus = "TIDAK ADA DETAIL";
+    } elseif ($matchedCount === $totalTables) {
+        $overallStatus = "COCOK";
+    } elseif ($matchedCount > 0) {
+        $overallStatus = "COCOK SEBAGIAN ($matchedCount/$totalTables)";
+    } else {
+        $allNoBon = true;
+        foreach ($tablesResult as $tr) {
+            if ($tr["status"] !== "BELUM ADA BON PROINT") {
+                $allNoBon = false;
+                break;
+            }
+        }
+        $overallStatus = $allNoBon ? "BELUM ADA BON PROINT" : "BERBEDA";
     }
-    $choice = auditChooseBon($recipe, $bons, $bonId);
-    $base = [
+
+    // Backwards-compatible single-selected_bon for legacy callers
+    $primarySelectedBon = $tablesResult[0]["selected_bon"] ?? null;
+
+    return [
         "recipe" => $recipe,
-        "candidates" => $bons,
-        "selected_bon" => $choice["bon"],
+        "candidates" => $allBons,
+        "selected_bon" => $primarySelectedBon,
         "source" => "BON AKTUAL",
-        "status" => $choice["status"],
-        "status_detail" => $choice["status"],
-        "details" => [],
+        "status" => $overallStatus,
+        "status_detail" => implode(" | ", $tableStatuses),
+        "matched_count" => $matchedCount,
+        "total_tables" => $totalTables,
+        "tables" => $tablesResult,
+        "details" => $tablesResult[0]["details"] ?? [],
     ];
-    if (!$choice["bon"]) {
-        return $base;
-    }
-    $cmp = auditCompare($local, auditProintDetails($choice["bon"]));
-    $base["status"] = $cmp["status"];
-    $base["status_detail"] = $cmp["status_detail"];
-    $base["details"] = $cmp["details"];
-    return $base;
 }
+
 function auditFindRecipe(int $id): ?array
 {
     global $conn;
     $s = sqlsrv_query(
         $conn,
-        "SELECT id,no_cp,cus_color,rtg_code,rtg_name,is_manual,status_resep_lipat,proint_resephdid,vlot,created_at,created_by FROM dbo.resep_obat WHERE id=?",
+        "SELECT
+            id,
+            no_cp,
+            cus_color,
+            rtg_code,
+            rtg_name,
+            is_manual,
+            status_resep_lipat,
+            proint_resephdid,
+            vlot,
+            created_at,
+            created_by,
+            kode_warna,
+            lot_no,
+            weight,
+            plan_qty
+        FROM dbo.resep_obat_v2
+        WHERE id = ?",
         [$id],
     );
     if (!$s) {
-        throw auditSqlError("Gagal mengambil resep");
+        throw auditSqlError("Gagal mengambil resep V2");
     }
     $r = sqlsrv_fetch_array($s, SQLSRV_FETCH_ASSOC);
     if ($r && $r["created_at"] instanceof DateTime) {
