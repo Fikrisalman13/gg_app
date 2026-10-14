@@ -69,9 +69,6 @@ include '../../../includes/sidebar.php';
                     <div class="float-right">
 
                         <?php if ($permissions['CanEdit'] == 1): ?>
-                            <a href="migrate_from_v1.php" class="btn btn-warning btn-sm mr-1">
-                                <i class="fas fa-exchange-alt"></i> Migrasi dari V1
-                            </a>
                             <button type="button" class="btn btn-secondary btn-sm mr-1" id="ppcExperimentBulkSyncOpen">
                                 <i class="fas fa-sync-alt"></i> Sinkronkan Experiment
                             </button>
