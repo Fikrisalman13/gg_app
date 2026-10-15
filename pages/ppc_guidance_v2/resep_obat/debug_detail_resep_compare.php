@@ -233,6 +233,8 @@ function auditBonCandidates(string $cp): array
              br.productionhdid,
              br.productionrtgid,
              br.vlot,
+             br.bonweight,
+             br.planqty,
              rt.rtgcode,
              rt.rtgname
          FROM pdproductionhd ph
@@ -270,16 +272,22 @@ function auditProintDetails(array $bon): array
     $rows = $s->fetchAll(PDO::FETCH_ASSOC);
     $out = [];
     $v = (float) $bon["vlot"];
+    $bw = (float) ($bon["bonweight"] ?? 0);
 
     foreach ($rows as $r) {
         $usedType = strtoupper(trim((string) ($r["fgusedtype"] ?? "G")));
-        if ($usedType === "P") {
-            $cf = (float) ($r["prodcf"] ?? 0);
-            $uom_cf = "%";
-        } else {
-            $cf = $v > 0 ? (float) $r["matqty"] / $v : 0;
-            $uom_cf = "G/L";
+        if ($usedType !== "P") $usedType = "G";
+
+        // Read ProInt's prodcf directly if available (> 0), fallback to calculated
+        $cf = isset($r["prodcf"]) ? (float) $r["prodcf"] : 0;
+        if ($cf <= 0) {
+            if ($usedType === "P") {
+                $cf = $bw > 0 ? (float) $r["matqty"] / ($bw * 10) : 0;
+            } else {
+                $cf = $v > 0 ? (float) $r["matqty"] / $v : 0;
+            }
         }
+        $uom_cf = $usedType === "P" ? "%" : "G/L";
 
         $prodcode = trim((string) $r["prodcode"]);
         $m = sqlsrv_query(

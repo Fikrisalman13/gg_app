@@ -314,7 +314,7 @@ include '../../../includes/sidebar.php';
                                 <div class="form-group row">
                                     <label class="col-sm-4 col-form-label">Plan Qty</label>
                                     <div class="col-sm-8">
-                                        <input type="number" step="0.01" class="form-control" name="plan_qty"
+                                        <input type="number" step="any" class="form-control" name="plan_qty"
                                             id="plan_qty" required <?= ppcResepReadonlyAttr('plan_qty') ?> value="<?= $data['plan_qty'] ?? '3500' ?>">
                                     </div>
                                 </div>
@@ -915,9 +915,9 @@ include '../../../includes/sidebar.php';
 
                 if (routings.length > 0) {
                     let first = routings[0];
-                    if (first.planqty != null) $('#plan_qty').val(Number(first.planqty).toFixed(2));
+                    if (first.planqty != null) $('#plan_qty').val(parseFloat(first.planqty) || 0);
                     if (first.bonweight != null) $('input[name="weight"]').val(Number(first.bonweight).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 }));
-                    if (first.vlot != null) $('#vlot').val(Number(first.vlot).toFixed(2));
+                    if (first.vlot != null) $('#vlot').val(parseFloat(first.vlot) || 0);
 
                     let rtgCodes = routings.map(r => r.rtgcode).filter(Boolean).join(', ');
                     let rtgNames = routings.map(r => r.rtgname).filter(Boolean).join(', ');
@@ -1252,7 +1252,7 @@ include '../../../includes/sidebar.php';
                             <div class="input-group-prepend">
                                 <span class="input-group-text font-weight-bold bg-white text-muted">VLot:</span>
                             </div>
-                            <input type="number" step="0.01" class="form-control table-vlot-input text-right font-weight-bold" value="${vlot.toFixed(2)}" placeholder="0.00">
+                            <input type="number" step="any" class="form-control table-vlot-input text-right font-weight-bold" value="${parseFloat(vlot) || 0}" placeholder="0.00">
                         </div>
                         <button type="button" class="btn btn-primary btn-sm btn-add-row-table mr-2" ${SHOW_DETAIL_ACTIONS ? '' : 'disabled'}>
                             <i class="fas fa-plus mr-1"></i> Tambah Item
