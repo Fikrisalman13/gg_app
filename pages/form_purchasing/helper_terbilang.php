@@ -46,9 +46,24 @@ if (!function_exists('terbilangAngkaPHP')) {
 }
 
 if (!function_exists('getTerbilangLengkapPHP')) {
-    function getTerbilangLengkapPHP($val) {
+    function getTerbilangLengkapPHP($val, $currency = 'IDR') {
         $num = (float)$val;
-        if ($num == 0) return 'Nol rupiah';
+        $currUpper = strtoupper(trim($currency ?: 'IDR'));
+        
+        $unit = 'rupiah';
+        if ($currUpper === 'USD') {
+            $unit = 'dollar';
+        } elseif ($currUpper === 'EUR') {
+            $unit = 'euro';
+        } elseif ($currUpper === 'SGD') {
+            $unit = 'dollar singapura';
+        } elseif ($currUpper === 'JPY') {
+            $unit = 'yen';
+        } elseif ($currUpper !== 'IDR' && $currUpper !== 'RP') {
+            $unit = strtolower($currUpper);
+        }
+
+        if ($num == 0) return 'Nol ' . $unit . '.';
 
         $bagianBulat = floor($num);
         $bagianDesimal = round(($num - $bagianBulat) * 100);
@@ -60,9 +75,9 @@ if (!function_exists('getTerbilangLengkapPHP')) {
 
         if ($bagianDesimal > 0) {
             $desimalKata = trim(terbilangAngkaPHP($bagianDesimal));
-            return $kata . ' koma ' . $desimalKata . ' rupiah.';
+            return $kata . ' koma ' . $desimalKata . ' ' . $unit . '.';
         } else {
-            return $kata . ' rupiah.';
+            return $kata . ' ' . $unit . '.';
         }
     }
 }

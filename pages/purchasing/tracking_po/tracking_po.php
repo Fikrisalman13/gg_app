@@ -467,7 +467,163 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     flex: 1;
 }
 
+/* =========================================================
+   FLOATING ACTION BAR: KONFIRMASI MASSAL DOKUMEN KEMBALI
+   ========================================================= */
+.batch-floating-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1040;
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+}
+.batch-floating-content {
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    padding: 8px 12px 8px 16px;
+    border-radius: 9999px;
+    box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.12);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+.batch-counter-badge {
+    background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+    letter-spacing: 0.2px;
+    flex-shrink: 0;
+}
+.batch-floating-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.18);
+    flex-shrink: 0;
+}
+.btn-batch-cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1 !important;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 14px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-batch-cancel:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5 !important;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+.btn-batch-ttd {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff !important;
+    border: none;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 7px 16px;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(16, 185, 129, 0.35);
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-batch-ttd:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(16, 185, 129, 0.45);
+}
+.btn-batch-belum-ttd {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #ffffff !important;
+    border: none;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 7px 16px;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(245, 158, 11, 0.35);
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-batch-belum-ttd:hover {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(245, 158, 11, 0.45);
+}
+.btn-batch-approve {
+    background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    color: #ffffff !important;
+    border: none;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 7px 18px;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(139, 92, 246, 0.4);
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-batch-approve:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(139, 92, 246, 0.5);
+}
+.batch-mode-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #e2e8f0;
+    display: inline-flex;
+    align-items: center;
+    letter-spacing: 0.3px;
+}
+.row-select-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.row-select-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+#checkAllRows {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
 @media (max-width: 768px) {
+    .batch-floating-bar { width: 95%; max-width: 95%; bottom: 12px; }
+    .batch-floating-content { padding: 10px 14px; border-radius: 18px; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .batch-floating-divider { display: none; }
     .tracking-summary-row {
         flex-direction: column;
         gap: 8px;
@@ -589,6 +745,9 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                         <table id="trackingPoTable" class="table table-hover table-sm mb-0" style="width:100%">
                             <thead>
                                 <tr>
+                                    <th style="width:32px;" class="text-center align-middle">
+                                        <input type="checkbox" id="checkAllRows" title="Pilih Semua yang Belum Dikonfirmasi">
+                                    </th>
                                     <th style="width:35px;" class="text-center">No</th>
                                     <th style="width:95px;" class="text-center">Tgl Kirim</th>
                                     <th style="min-width:140px;">No PO</th>
@@ -898,6 +1057,38 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     </div>
 </div>
 
+<!-- ========================================================================
+     FLOATING ACTION BAR: AKSI MASSAL (KONFIRMASI KEMBALI & APPROVE)
+     ======================================================================== -->
+<div id="batchKonfirmasiFloatingBar" class="batch-floating-bar" style="display: none;">
+    <div class="batch-floating-content">
+        <div class="batch-counter-badge" id="floatingSelectedBadge">
+            <i class="fas fa-layer-group mr-2" style="font-size: 13px;"></i>
+            <span id="floatingSelectedCount" class="mr-1">0</span> PO Terpilih
+        </div>
+        <span id="floatingModeBadge" class="batch-mode-badge d-none d-md-inline-flex" style="display: none;"></span>
+        <div class="batch-floating-divider d-none d-sm-block"></div>
+        <button type="button" class="btn btn-batch-cancel" id="btnCancelBatchSelection" title="Batalkan pilihan">
+            <i class="fas fa-times mr-1"></i> Batal
+        </button>
+        <!-- Group Konfirmasi Kembali (Purchasing) -->
+        <span id="batchGroupKonfirmasi" style="display: inline-flex; gap: 8px;">
+            <button type="button" class="btn btn-batch-ttd" id="btnBatchSudahTTD" title="Konfirmasi semua PO terpilih sudah ditandatangani">
+                <i class="fas fa-check-circle mr-1"></i> Semua Sudah TTD
+            </button>
+            <button type="button" class="btn btn-batch-belum-ttd" id="btnBatchBelumTTD" title="Konfirmasi semua PO terpilih belum ditandatangani">
+                <i class="fas fa-times-circle mr-1"></i> Semua Belum TTD
+            </button>
+        </span>
+        <!-- Group Approve (IT) -->
+        <span id="batchGroupApprove" style="display: none;">
+            <button type="button" class="btn btn-batch-approve" id="btnBatchApprove" title="Approve semua PO terpilih yang sudah ditandatangani">
+                <i class="fas fa-check-double mr-1"></i> Approve Terpilih
+            </button>
+        </span>
+    </div>
+</div>
+
 <?php 
 $footerPath = file_exists($rootPath . '/includes/footer.php') ? ($rootPath . '/includes/footer.php') : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/footer.php');
 include($footerPath); 
@@ -963,8 +1154,106 @@ $(document).ready(function () {
         });
     }
 
+    var loadDataXhr = null;
+    var selectedBatchIds = new Set();
+    var batchMode = null; // null | 'konfirmasi' | 'approve'
+
+    function updateBatchFloatingBar() {
+        var count = selectedBatchIds.size;
+        $('#floatingSelectedCount').text(count);
+
+        if (count > 0) {
+            if (batchMode === 'approve') {
+                $('#batchGroupKonfirmasi').hide();
+                $('#batchGroupApprove').show();
+                $('#floatingModeBadge').html('<i class="fas fa-shield-alt mr-1"></i> Mode Approve IT').show();
+            } else {
+                $('#batchGroupApprove').hide();
+                $('#batchGroupKonfirmasi').show();
+                $('#floatingModeBadge').html('<i class="fas fa-undo mr-1"></i> Mode Konfirmasi Kembali').show();
+            }
+
+            if ($('#batchKonfirmasiFloatingBar').is(':hidden')) {
+                $('#batchKonfirmasiFloatingBar').stop(true, true).fadeIn(250);
+            }
+        } else {
+            $('#batchKonfirmasiFloatingBar').stop(true, true).fadeOut(200);
+            $('#floatingModeBadge').hide();
+            $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
+        }
+    }
+
+    function syncBatchCheckboxes() {
+        if (selectedBatchIds.size === 0) {
+            batchMode = null;
+        }
+
+        var totalMatchEnabled = 0;
+        var checkedMatchCount = 0;
+
+        $('.row-select-checkbox').each(function () {
+            var $cb = $(this);
+            var id = parseInt($cb.val());
+            var status = $cb.data('status');
+            var canKonfirmasi = userPerms.can_confirm && (status === 'Diserahkan' || status === 'Belum Kembali');
+            var canApprove = userPerms.can_approve && status === 'Sudah TTD';
+
+            if (batchMode === null) {
+                if (canKonfirmasi || canApprove) {
+                    $cb.prop('disabled', false).removeAttr('title');
+                } else {
+                    $cb.prop('disabled', true).attr('title', 'Status tidak memenuhi syarat aksi massal');
+                }
+            } else if (batchMode === 'approve') {
+                if (canApprove) {
+                    $cb.prop('disabled', false).removeAttr('title');
+                    totalMatchEnabled++;
+                    if (selectedBatchIds.has(id)) {
+                        checkedMatchCount++;
+                    }
+                } else {
+                    $cb.prop('disabled', true).attr('title', 'Sedang dalam mode Approve (hanya status Sudah TTD)');
+                }
+            } else if (batchMode === 'konfirmasi') {
+                if (canKonfirmasi) {
+                    $cb.prop('disabled', false).removeAttr('title');
+                    totalMatchEnabled++;
+                    if (selectedBatchIds.has(id)) {
+                        checkedMatchCount++;
+                    }
+                } else {
+                    $cb.prop('disabled', true).attr('title', 'Sedang dalam mode Konfirmasi (hanya status Diserahkan / Belum Kembali)');
+                }
+            }
+
+            $cb.prop('checked', selectedBatchIds.has(id));
+        });
+
+        if (totalMatchEnabled > 0 && checkedMatchCount === totalMatchEnabled) {
+            $('#checkAllRows').prop('checked', true).prop('indeterminate', false);
+        } else if (checkedMatchCount > 0) {
+            $('#checkAllRows').prop('checked', false).prop('indeterminate', true);
+        } else {
+            $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
+        }
+
+        updateBatchFloatingBar();
+    }
+
+    function clearBatchSelection() {
+        selectedBatchIds.clear();
+        batchMode = null;
+        $('.row-select-checkbox').prop('checked', false);
+        $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
+        syncBatchCheckboxes();
+    }
+
     // ─── LOAD DATA TABLE ──────────────────────────────────────────────────
     function loadData() {
+        if (loadDataXhr && loadDataXhr.readyState !== 4) {
+            loadDataXhr.abort();
+        }
+
         var params = {
             action: 'load_data',
             date_from: $('#filterDateFrom').val(),
@@ -972,7 +1261,7 @@ $(document).ready(function () {
             filter_status: $('#filterStatus').val()
         };
 
-        $.getJSON(BASE_URL, params, function (res) {
+        loadDataXhr = $.getJSON(BASE_URL, params, function (res) {
             if (res.status !== 'ok') {
                 Swal.fire('Error', res.message || 'Gagal memuat data.', 'error');
                 return;
@@ -980,16 +1269,14 @@ $(document).ready(function () {
 
             userPerms = res.user || userPerms;
 
-            // Destroy existing DataTable
-            if (dataTable) {
-                dataTable.destroy();
+            // Destroy existing DataTable using DataTables API
+            if ($.fn.DataTable.isDataTable('#trackingPoTable')) {
+                $('#trackingPoTable').DataTable().destroy();
                 dataTable = null;
             }
 
             var html = '';
-            if (res.data.length === 0) {
-                html = '<tr><td colspan="9" class="text-center py-3 text-muted">Tidak ada data tracking PO.</td></tr>';
-            } else {
+            if (res.data && res.data.length > 0) {
                 $.each(res.data, function (i, row) {
                     var aksiHtml = '<div class="action-btn-group">';
 
@@ -1016,7 +1303,37 @@ $(document).ready(function () {
 
                     aksiHtml += '</div>';
 
+                    // Checkbox kolom
+                    var canKonfirmasi = userPerms.can_confirm && (row.status === 'Diserahkan' || row.status === 'Belum Kembali');
+                    var canApprove = userPerms.can_approve && row.status === 'Sudah TTD';
+                    var isEligible = false;
+                    var checkTitle = '';
+
+                    if (batchMode === 'approve') {
+                        isEligible = canApprove;
+                        checkTitle = isEligible ? '' : 'Sedang dalam mode Approve (hanya status Sudah TTD)';
+                    } else if (batchMode === 'konfirmasi') {
+                        isEligible = canKonfirmasi;
+                        checkTitle = isEligible ? '' : 'Sedang dalam mode Konfirmasi (hanya status Diserahkan / Belum Kembali)';
+                    } else {
+                        isEligible = canKonfirmasi || canApprove;
+                        checkTitle = isEligible ? '' : 'Status tidak dapat diproses aksi massal';
+                    }
+
+                    var isChecked = selectedBatchIds.has(parseInt(row.detail_id));
+                    var checkAttr = '';
+                    if (!isEligible) {
+                        checkAttr = 'disabled title="' + checkTitle + '"';
+                    } else if (isChecked) {
+                        checkAttr = 'checked';
+                    }
+
+                    var checkCol = '<td class="text-center align-middle">' +
+                        '<input type="checkbox" class="row-select-checkbox" value="' + row.detail_id + '" ' + checkAttr + ' data-ponmbr="' + row.ponmbr + '" data-status="' + row.status + '">' +
+                        '</td>';
+
                     html += '<tr>' +
+                        checkCol +
                         '<td class="text-center">' + row.no + '</td>' +
                         '<td class="text-center">' + row.tanggal_kirim + '</td>' +
                         '<td><span class="po-badge-code">' + row.ponmbr + '</span></td>' +
@@ -1030,28 +1347,222 @@ $(document).ready(function () {
                 });
             }
 
+            // Set tbody content
             $('#trackingPoBody').html(html);
 
-            // Init DataTable
+            // Init DataTable dengan destroy: true
             dataTable = $('#trackingPoTable').DataTable({
+                destroy: true,
                 order: [],
                 responsive: true,
                 pageLength: 25,
+                columnDefs: [
+                    { targets: [0, -1], orderable: false, searchable: false }
+                ],
+                drawCallback: function () {
+                    syncBatchCheckboxes();
+                },
                 language: {
                     processing: "Memproses...",
                     lengthMenu: "Tampilkan _MENU_ data per halaman",
                     zeroRecords: "Tidak ada data tracking PO ditemukan",
+                    emptyTable: "Tidak ada data tracking PO tersedia",
                     info: "Menampilkan _START_ - _END_ dari _TOTAL_ data",
-                    infoEmpty: "Tidak ada data tersedia",
+                    infoEmpty: "Menampilkan 0 data",
                     infoFiltered: "(disaring dari _MAX_ total data)",
                     search: "Cari:",
                     paginate: { first: "Pertama", last: "Terakhir", next: "›", previous: "‹" }
                 }
             });
-        }).fail(function () {
+
+            syncBatchCheckboxes();
+        }).fail(function (jqXHR, textStatus) {
+            if (textStatus === 'abort') return;
             Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
         });
     }
+
+    // ─── BATCH SELECTION & ACTION HANDLERS ─────────────────────────────────
+    $(document).on('change', '#checkAllRows', function () {
+        var isChecked = $(this).prop('checked');
+        if (!isChecked) {
+            clearBatchSelection();
+            return;
+        }
+
+        // Determine target mode if not yet active
+        var targetMode = batchMode;
+        if (!targetMode) {
+            var currentFilter = $('#filterStatus').val();
+            if (currentFilter === 'Sudah TTD') {
+                targetMode = 'approve';
+            } else if (currentFilter === 'Diserahkan' || currentFilter === 'Belum Kembali') {
+                targetMode = 'konfirmasi';
+            } else {
+                // Semua Status: priority by role
+                if (userPerms.can_approve && !userPerms.can_confirm) {
+                    targetMode = 'approve';
+                } else if (userPerms.can_confirm && !userPerms.can_approve) {
+                    targetMode = 'konfirmasi';
+                } else {
+                    var countSudahTTD = $('.row-select-checkbox[data-status="Sudah TTD"]').length;
+                    var countDiserahkan = $('.row-select-checkbox[data-status="Diserahkan"], .row-select-checkbox[data-status="Belum Kembali"]').length;
+                    if (countSudahTTD > 0 && countDiserahkan === 0) {
+                        targetMode = 'approve';
+                    } else {
+                        targetMode = 'konfirmasi';
+                    }
+                }
+            }
+        }
+
+        batchMode = targetMode;
+
+        $('.row-select-checkbox').each(function () {
+            var $cb = $(this);
+            var id = parseInt($cb.val());
+            var status = $cb.data('status');
+            var matches = false;
+
+            if (targetMode === 'approve') {
+                matches = (status === 'Sudah TTD' && userPerms.can_approve);
+            } else if (targetMode === 'konfirmasi') {
+                matches = ((status === 'Diserahkan' || status === 'Belum Kembali') && userPerms.can_confirm);
+            }
+
+            if (matches) {
+                selectedBatchIds.add(id);
+                $cb.prop('checked', true);
+            }
+        });
+
+        syncBatchCheckboxes();
+    });
+
+    $(document).on('change', '.row-select-checkbox', function () {
+        var id = parseInt($(this).val());
+        var status = $(this).data('status');
+
+        if ($(this).prop('checked')) {
+            if (selectedBatchIds.size === 0) {
+                if (status === 'Sudah TTD') {
+                    batchMode = 'approve';
+                } else {
+                    batchMode = 'konfirmasi';
+                }
+            }
+            selectedBatchIds.add(id);
+        } else {
+            selectedBatchIds.delete(id);
+            if (selectedBatchIds.size === 0) {
+                batchMode = null;
+            }
+        }
+        syncBatchCheckboxes();
+    });
+
+    $(document).on('click', '#btnCancelBatchSelection', function () {
+        clearBatchSelection();
+    });
+
+    function submitBatchKonfirmasi(isSigned) {
+        if (selectedBatchIds.size === 0) return;
+
+        var $btnTtd = $('#btnBatchSudahTTD');
+        var $btnBelum = $('#btnBatchBelumTTD');
+        var $btnCancel = $('#btnCancelBatchSelection');
+
+        $btnTtd.prop('disabled', true);
+        $btnBelum.prop('disabled', true);
+        $btnCancel.prop('disabled', true);
+
+        if (isSigned === 1) {
+            $btnTtd.html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
+        } else {
+            $btnBelum.html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
+        }
+
+        $.post(BASE_URL, {
+            action: 'batch_konfirmasi_kembali',
+            detail_ids: Array.from(selectedBatchIds),
+            is_signed: isSigned
+        }, function (res) {
+            if (res.status === 'ok') {
+                clearBatchSelection();
+                loadData();
+                loadSummary();
+            } else {
+                Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
+            }
+        }, 'json').fail(function () {
+            Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+        }).always(function () {
+            $btnTtd.prop('disabled', false).html('<i class="fas fa-check-circle mr-1"></i> Semua Sudah TTD');
+            $btnBelum.prop('disabled', false).html('<i class="fas fa-times-circle mr-1"></i> Semua Belum TTD');
+            $btnCancel.prop('disabled', false);
+        });
+    }
+
+    $(document).on('click', '#btnBatchSudahTTD', function () {
+        submitBatchKonfirmasi(1);
+    });
+
+    $(document).on('click', '#btnBatchBelumTTD', function () {
+        submitBatchKonfirmasi(0);
+    });
+
+    function submitBatchApprove() {
+        if (selectedBatchIds.size === 0) return;
+        var count = selectedBatchIds.size;
+
+        Swal.fire({
+            title: 'Konfirmasi Approve',
+            html: 'Apakah Anda yakin ingin meng-approve <b>' + count + '</b> dokumen PO yang sudah ditandatangani?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check-double mr-1"></i> Ya, Approve',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#8b5cf6',
+            cancelButtonColor: '#64748b'
+        }).then(function (result) {
+            if (!result.isConfirmed) return;
+
+            var $btn = $('#btnBatchApprove');
+            var $btnCancel = $('#btnCancelBatchSelection');
+
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
+            $btnCancel.prop('disabled', true);
+
+            $.post(BASE_URL, {
+                action: 'batch_approve',
+                detail_ids: Array.from(selectedBatchIds)
+            }, function (res) {
+                if (res.status === 'ok') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil!',
+                        text: res.message || (count + ' PO berhasil di-approve.'),
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    clearBatchSelection();
+                    loadData();
+                    loadSummary();
+                } else {
+                    Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
+                }
+            }, 'json').fail(function () {
+                Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Approve Terpilih');
+                $btnCancel.prop('disabled', false);
+            });
+        });
+    }
+
+    $(document).on('click', '#btnBatchApprove', function () {
+        submitBatchApprove();
+    });
 
     // ─── INITIAL LOAD ─────────────────────────────────────────────────────
     loadSummary();
@@ -1059,11 +1570,12 @@ $(document).ready(function () {
 
     // ─── FILTER EVENTS ────────────────────────────────────────────────────
     $('#filterDateFrom, #filterDateTo').on('change', function () {
+        clearBatchSelection();
         loadData();
         loadSummary();
     });
     $('#filterStatus').on('change', function () {
-        // Deactivate card highlights
+        clearBatchSelection();
         $('.tracking-stat-card').removeClass('active');
         var val = $(this).val();
         if (val) {
@@ -1075,6 +1587,7 @@ $(document).ready(function () {
 
     // ─── CARD FILTER CLICK ────────────────────────────────────────────────
     $(document).on('click', '.tracking-stat-card', function () {
+        clearBatchSelection();
         var clickedStatus = $(this).data('status');
         if (activeCardFilter === clickedStatus) {
             // Toggle off
@@ -1092,6 +1605,7 @@ $(document).ready(function () {
 
     // ─── RESET FILTER ─────────────────────────────────────────────────────
     $('#btnResetFilter').on('click', function () {
+        clearBatchSelection();
         $('#filterDateFrom').val('');
         $('#filterDateTo').val('');
         $('#filterStatus').val('');
@@ -1435,40 +1949,26 @@ $(document).ready(function () {
             return;
         }
 
-        var signText = isSigned === '1' ? 'Sudah Ditandatangani' : 'Belum Ditandatangani';
+        var $btn = $('#btnSubmitKonfirmasi');
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
 
-        Swal.fire({
-            title: 'Konfirmasi',
-            html: 'Konfirmasi dokumen sudah kembali dengan status: <strong>' + signText + '</strong>?',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check mr-1"></i> Ya, Konfirmasi',
-            cancelButtonText: 'Batal',
-            confirmButtonColor: '#f59e0b'
-        }).then(function (result) {
-            if (result.isConfirmed) {
-                $('#btnSubmitKonfirmasi').prop('disabled', true);
-
-                $.post(BASE_URL, {
-                    action: 'konfirmasi_kembali',
-                    detail_id: detailId,
-                    is_signed: isSigned,
-                    catatan: catatan
-                }, function (res) {
-                    if (res.status === 'ok') {
-                        Swal.fire('Berhasil!', res.message, 'success');
-                        $('#modalKonfirmasiKembali').modal('hide');
-                        loadData();
-                        loadSummary();
-                    } else {
-                        Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
-                    }
-                }, 'json').fail(function () {
-                    Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
-                }).always(function () {
-                    $('#btnSubmitKonfirmasi').prop('disabled', false);
-                });
+        $.post(BASE_URL, {
+            action: 'konfirmasi_kembali',
+            detail_id: detailId,
+            is_signed: isSigned,
+            catatan: catatan
+        }, function (res) {
+            if (res.status === 'ok') {
+                $('#modalKonfirmasiKembali').modal('hide');
+                loadData();
+                loadSummary();
+            } else {
+                Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
             }
+        }, 'json').fail(function () {
+            Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+        }).always(function () {
+            $btn.prop('disabled', false).html('<i class="fas fa-check mr-1"></i> Konfirmasi');
         });
     });
 

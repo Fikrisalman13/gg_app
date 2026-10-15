@@ -566,9 +566,23 @@ $dueDefault = date('Y-m-d', strtotime('+1 day'));
         return hasil.trim();
     }
 
-    function getTerbilangLengkap(val) {
+    function getTerbilangLengkap(val, curr) {
         var num = parseFloat(val) || 0;
-        if (num === 0) return 'Nol rupiah';
+        var c = (curr || $('#codCurrency').val() || 'IDR').toUpperCase().trim();
+        var unit = 'rupiah';
+        if (c === 'USD') {
+            unit = 'dollar';
+        } else if (c === 'EUR') {
+            unit = 'euro';
+        } else if (c === 'SGD') {
+            unit = 'dollar singapura';
+        } else if (c === 'JPY') {
+            unit = 'yen';
+        } else if (c !== 'IDR' && c !== 'RP') {
+            unit = c.toLowerCase();
+        }
+
+        if (num === 0) return 'Nol ' + unit + '.';
 
         var bagianBulat = Math.floor(num);
         var bagianDesimal = Math.round((num - bagianBulat) * 100);
@@ -580,16 +594,21 @@ $dueDefault = date('Y-m-d', strtotime('+1 day'));
 
         if (bagianDesimal > 0) {
             var desimalKata = terbilangAngka(bagianDesimal).toLowerCase();
-            return kata + ' koma ' + desimalKata + ' rupiah.';
+            return kata + ' koma ' + desimalKata + ' ' + unit + '.';
         } else {
-            return kata + ' rupiah.';
+            return kata + ' ' + unit + '.';
         }
     }
 
-    // Format angka ke format mata uang (contoh: 720,720.72)
-    function formatCurrency(num) {
+    // Format angka ke format mata uang (contoh: IDR -> Rp 63.500,00 | USD -> USD 63,500.00)
+    function formatCurrency(num, curr) {
         var n = parseFloat(num) || 0;
-        return 'Rp ' + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var c = (curr || $('#codCurrency').val() || 'IDR').toUpperCase().trim();
+        if (c === 'IDR' || c === 'RP') {
+            return 'Rp ' + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        } else {
+            return c + ' ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
     }
 
     // Tambah Baris Baru ke Tabel Item
@@ -671,10 +690,11 @@ $dueDefault = date('Y-m-d', strtotime('+1 day'));
         });
 
         // Set label & hidden inputs
-        $('#labelSubTotal').text(formatCurrency(total));
+        var mainCurr = $('#codCurrency').val() || 'IDR';
+        $('#labelSubTotal').text(formatCurrency(total, mainCurr));
         $('#codSubtotalInput').val(total.toFixed(2));
 
-        var terbilangTxt = getTerbilangLengkap(total);
+        var terbilangTxt = getTerbilangLengkap(total, mainCurr);
         $('#labelTerbilang').text(terbilangTxt);
         $('#codTerbilangInput').val(terbilangTxt);
 

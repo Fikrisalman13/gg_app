@@ -694,7 +694,82 @@ switch ($action) {
         break;
 
     // =====================================================================
-    // APPROVE - IT approve PO yang sudah TTD (UI only, logika lintas DB nanti)
+    // BATCH KONFIRMASI KEMBALI - Konfirmasi banyak PO sekaligus
+    // =====================================================================
+    case 'batch_konfirmasi_kembali':
+        if (!$currentUser['can_confirm']) {
+            echo json_encode(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk konfirmasi.']);
+            exit;
+        }
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+
+        $detailIds = $_POST['detail_ids'] ?? [];
+        if (is_string($detailIds)) {
+            $detailIds = json_decode($detailIds, true) ?: explode(',', $detailIds);
+        }
+        $detailIds = array_values(array_unique(array_filter(array_map('intval', (array)$detailIds), function($v) { return $v > 0; })));
+
+        if (empty($detailIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 PO untuk dikonfirmasi.']);
+            exit;
+        }
+
+        $isSigned = (int)($_POST['is_signed'] ?? 0); // 1 = sudah TTD, 0 = belum TTD
+        $newStatus = $isSigned ? 'Sudah TTD' : 'Sudah Kembali';
+        $today = date('Y-m-d');
+        $successCount = 0;
+
+        foreach ($detailIds as $dId) {
+            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+                INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
+            if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+                continue;
+            }
+
+            $oldStatus = trim($rCurrent['status']);
+            $ponmbr = trim($rCurrent['ponmbr']);
+
+            // Hanya proses yang statusnya 'Diserahkan'
+            if ($oldStatus !== 'Diserahkan') {
+                continue;
+            }
+
+            $sqlUpdate = "UPDATE dbo.tracking_po_detail 
+                          SET status = ?, is_signed = ?, tanggal_kembali = ?, 
+                              konfirmasi_oleh = ?, konfirmasi_at = GETDATE()
+                          WHERE id = ?";
+            $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
+                $newStatus, $isSigned, $today,
+                $currentUser['formatted'],
+                $dId
+            ]);
+
+            if ($stmtUpdate) {
+                $ketLog = $isSigned
+                    ? "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali dan SUDAH ditandatangani."
+                    : "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali tapi BELUM ditandatangani.";
+
+                sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                    VALUES (?, 'Konfirmasi Kembali', ?, ?, ?, GETDATE(), ?)", [
+                    $dId, $oldStatus, $newStatus, $currentUser['formatted'], $ketLog
+                ]);
+                $successCount++;
+            }
+        }
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => "{$successCount} PO berhasil dikonfirmasi sebagai {$newStatus}.",
+            'count' => $successCount
+        ]);
+        break;
+
+    // =====================================================================
+    // APPROVE - IT approve PO yang sudah TTD (Sinkronisasi ke ERP PostgreSQL & SQL Server)
     // =====================================================================
     case 'approve':
         if (!$currentUser['can_approve']) {
@@ -703,6 +778,10 @@ switch ($action) {
         }
         if (!$tableReady) {
             echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+        if (!isset($conn3) || !$conn3) {
+            echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database ERP (PostgreSQL) tidak tersedia.']);
             exit;
         }
 
@@ -729,30 +808,188 @@ switch ($action) {
             exit;
         }
 
-        // Update status ke Approved
+        date_default_timezone_set('Asia/Jakarta');
+        $approveDate = date('Y-m-d H:i:s');
+        $approveBy = 'DAVID';
+
+        // 1. Update ke database ERP PostgreSQL (prpohd)
+        try {
+            $conn3->beginTransaction();
+
+            $sqlErp = "UPDATE prpohd 
+                          SET fgstatus    = 'V', 
+                              approvedate = :approvedate, 
+                              approveby   = :approveby 
+                        WHERE TRIM(ponmbr) = :ponmbr";
+            $stmtErp = $conn3->prepare($sqlErp);
+            $stmtErp->execute([
+                ':approvedate' => $approveDate,
+                ':approveby'   => $approveBy,
+                ':ponmbr'      => $ponmbr
+            ]);
+
+            if ($stmtErp->rowCount() === 0) {
+                $conn3->rollBack();
+                echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} tidak ditemukan atau gagal diupdate di database ERP."]);
+                exit;
+            }
+
+            $conn3->commit();
+        } catch (Exception $e) {
+            if ($conn3->inTransaction()) {
+                $conn3->rollBack();
+            }
+            echo json_encode(['status' => 'error', 'message' => 'Gagal update database ERP: ' . $e->getMessage()]);
+            exit;
+        }
+
+        // 2. Update status ke Approved di database SQL Server lokal
         $sqlApprove = "UPDATE dbo.tracking_po_detail 
                        SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
                        WHERE id = ?";
         $stmtApprove = sqlsrv_query($conn, $sqlApprove, [$currentUser['formatted'], $detailId]);
 
         if (!$stmtApprove) {
-            echo json_encode(['status' => 'error', 'message' => 'Gagal meng-approve: ' . print_r(sqlsrv_errors(), true)]);
+            // Rollback ERP jika update SQL Server gagal
+            try {
+                $conn3->beginTransaction();
+                $rollbackErp = $conn3->prepare("UPDATE prpohd SET fgstatus = 'O', approvedate = NULL, approveby = NULL WHERE TRIM(ponmbr) = :ponmbr");
+                $rollbackErp->execute([':ponmbr' => $ponmbr]);
+                $conn3->commit();
+            } catch (Exception $ex) {}
+
+            echo json_encode(['status' => 'error', 'message' => 'Gagal meng-approve di database tracking: ' . print_r(sqlsrv_errors(), true)]);
             exit;
         }
 
-        // Insert log
+        // 3. Insert log
         sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
             VALUES (?, 'Approve', ?, 'Approved', ?, GETDATE(), ?)", [
             $detailId, $oldStatus, $currentUser['formatted'],
-            "PO {$ponmbr} di-approve oleh IT."
+            "PO {$ponmbr} di-approve oleh IT (ERP diupdate fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
         ]);
-
-        // TODO: Logika lintas database akan ditambahkan di sini nanti
-        // Placeholder untuk proses approval ke sistem lain
 
         echo json_encode([
             'status' => 'ok',
-            'message' => "PO {$ponmbr} berhasil di-approve."
+            'message' => "PO {$ponmbr} berhasil di-approve di sistem Tracking & ERP."
+        ]);
+        break;
+
+    // =====================================================================
+    // BATCH APPROVE - IT approve banyak PO sekaligus (Sinkronisasi ke ERP PostgreSQL & SQL Server)
+    // =====================================================================
+    case 'batch_approve':
+        if (!$currentUser['can_approve']) {
+            echo json_encode(['status' => 'error', 'message' => 'Hanya IT dan Admin yang dapat meng-approve PO.']);
+            exit;
+        }
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+        if (!isset($conn3) || !$conn3) {
+            echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database ERP (PostgreSQL) tidak tersedia.']);
+            exit;
+        }
+
+        $detailIds = $_POST['detail_ids'] ?? [];
+        if (is_string($detailIds)) {
+            $detailIds = json_decode($detailIds, true) ?: explode(',', $detailIds);
+        }
+        $detailIds = array_values(array_unique(array_filter(array_map('intval', (array)$detailIds), function($v) { return $v > 0; })));
+
+        if (empty($detailIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 PO untuk di-approve.']);
+            exit;
+        }
+
+        date_default_timezone_set('Asia/Jakarta');
+        $approveDate = date('Y-m-d H:i:s');
+        $approveBy = 'DAVID';
+
+        $successCount = 0;
+        $failedPos = [];
+
+        // Prepare ERP statement once
+        $sqlErp = "UPDATE prpohd 
+                      SET fgstatus    = 'V', 
+                          approvedate = :approvedate, 
+                          approveby   = :approveby 
+                    WHERE TRIM(ponmbr) = :ponmbr";
+        $stmtErp = $conn3->prepare($sqlErp);
+
+        foreach ($detailIds as $dId) {
+            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+                INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
+            if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+                continue;
+            }
+
+            $oldStatus = trim($rCurrent['status']);
+            $ponmbr = trim($rCurrent['ponmbr']);
+
+            // Hanya proses yang statusnya 'Sudah TTD'
+            if ($oldStatus !== 'Sudah TTD') {
+                continue;
+            }
+
+            // 1. Update ke ERP
+            $erpSuccess = false;
+            try {
+                $stmtErp->execute([
+                    ':approvedate' => $approveDate,
+                    ':approveby'   => $approveBy,
+                    ':ponmbr'      => $ponmbr
+                ]);
+                if ($stmtErp->rowCount() > 0) {
+                    $erpSuccess = true;
+                } else {
+                    $failedPos[] = "PO {$ponmbr} (tidak ditemukan di ERP)";
+                }
+            } catch (Exception $e) {
+                $failedPos[] = "PO {$ponmbr} (error ERP: " . $e->getMessage() . ")";
+            }
+
+            if (!$erpSuccess) {
+                continue;
+            }
+
+            // 2. Update ke SQL Server lokal
+            $sqlApprove = "UPDATE dbo.tracking_po_detail 
+                           SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
+                           WHERE id = ?";
+            $stmtApprove = sqlsrv_query($conn, $sqlApprove, [$currentUser['formatted'], $dId]);
+
+            if ($stmtApprove) {
+                sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                    VALUES (?, 'Approve', ?, 'Approved', ?, GETDATE(), ?)", [
+                    $dId, $oldStatus, $currentUser['formatted'],
+                    "Approve massal: PO {$ponmbr} di-approve oleh IT (ERP fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
+                ]);
+                $successCount++;
+            } else {
+                // Rollback ERP jika update SQL Server lokal gagal
+                try {
+                    $rollbackErp = $conn3->prepare("UPDATE prpohd SET fgstatus = 'O', approvedate = NULL, approveby = NULL WHERE TRIM(ponmbr) = :ponmbr");
+                    $rollbackErp->execute([':ponmbr' => $ponmbr]);
+                } catch (Exception $ex) {}
+                $failedPos[] = "PO {$ponmbr} (gagal simpan status lokal)";
+            }
+        }
+
+        $msg = "{$successCount} PO berhasil di-approve di sistem Tracking & ERP.";
+        if (!empty($failedPos)) {
+            $msg .= " Catatan: " . count($failedPos) . " PO gagal diproses: " . implode(', ', array_slice($failedPos, 0, 5));
+            if (count($failedPos) > 5) {
+                $msg .= ", dll.";
+            }
+        }
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => $msg,
+            'count' => $successCount
         ]);
         break;
 

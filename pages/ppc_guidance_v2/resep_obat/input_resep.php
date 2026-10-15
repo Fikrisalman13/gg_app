@@ -529,7 +529,10 @@ include '../../../includes/sidebar.php';
             </div>
             <div class="modal-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <p class="text-muted m-0 small">No CP memiliki beberapa bon. Centang satu atau beberapa routing yang akan digunakan:</p>
+                    <p class="text-muted m-0 small">
+                        <i class="fas fa-info-circle mr-1 text-primary"></i> 
+                        Centang routing dan <b>seret</b> <i class="fas fa-grip-vertical text-muted"></i> atau tombol panah untuk mengatur urutan <b>Tabel #1, #2, dst.</b> di form resep:
+                    </p>
                     <div class="btn-group btn-group-xs">
                         <button type="button" class="btn btn-xs btn-outline-primary" id="btnSelectAllBons"><i class="fas fa-check-double mr-1"></i>Pilih Semua</button>
                         <button type="button" class="btn btn-xs btn-outline-secondary" id="btnUnselectAllBons"><i class="fas fa-times mr-1"></i>Batal Semua</button>
@@ -597,6 +600,38 @@ include '../../../includes/sidebar.php';
     tr.sortable-drag { box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
     /* Indicate draggable state */
     .table-drag-handle:active, .row-drag-handle:active { cursor: grabbing; }
+
+    /* Drag handle for bon choices in modal */
+    .bon-drag-handle {
+        cursor: grab;
+        color: #adb5bd;
+        font-size: 1.1rem;
+        padding: 6px 6px;
+        transition: color 0.15s;
+        user-select: none;
+    }
+    .bon-drag-handle:hover { color: #007bff; }
+    .bon-drag-handle:active { cursor: grabbing; }
+    .bon-choice-item.sortable-ghost {
+        opacity: 0.45;
+        border: 2px dashed #007bff !important;
+        background: #e8f4ff !important;
+    }
+    .bon-choice-item.sortable-drag {
+        box-shadow: 0 8px 20px rgba(0,123,255,0.2) !important;
+        opacity: 1;
+        background: #fff !important;
+    }
+    .bon-choice-item {
+        transition: background-color 0.15s, border-color 0.15s;
+    }
+    .bon-choice-item:hover {
+        border-color: #b8daff !important;
+    }
+    .bon-reorder-buttons button {
+        line-height: 1;
+        font-size: 0.65rem;
+    }
 </style>
 
 <script>
@@ -849,31 +884,103 @@ include '../../../includes/sidebar.php';
             Swal.fire({ icon: 'error', title: 'Error', html: message });
         }
 
-        function updateBonSelectionCount() {
-            let checkedCount = $('#listBonCp .chk-bon-choice:checked').length;
+        let bonSortable = null;
+
+        function updateBonOrderBadges() {
+            let tableIndex = 1;
+            let checkedCount = 0;
+            $('#listBonCp .bon-choice-item').each(function () {
+                let $item = $(this);
+                let $chk = $item.find('.chk-bon-choice');
+                let $badge = $item.find('.bon-order-badge');
+
+                if ($chk.is(':checked')) {
+                    $badge.removeClass('badge-secondary').addClass('badge-primary')
+                          .html(`<i class="fas fa-table mr-1"></i>Tabel #${tableIndex}`);
+                    $item.removeClass('bg-light text-muted');
+                    tableIndex++;
+                    checkedCount++;
+                } else {
+                    $badge.removeClass('badge-primary').addClass('badge-secondary')
+                          .html('<i class="fas fa-minus mr-1"></i>Dilewati');
+                    $item.addClass('bg-light text-muted');
+                }
+            });
+
             $('#countSelectedBons').text(checkedCount);
             $('#btnApplySelectedBons').prop('disabled', checkedCount === 0);
         }
 
+        function initBonSortable() {
+            if (bonSortable) {
+                bonSortable.destroy();
+                bonSortable = null;
+            }
+            let el = document.getElementById('listBonCp');
+            if (el && typeof Sortable !== 'undefined') {
+                bonSortable = Sortable.create(el, {
+                    handle: '.bon-drag-handle',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    dragClass: 'sortable-drag',
+                    onEnd: function () {
+                        updateBonOrderBadges();
+                    }
+                });
+            }
+        }
+
         $(document).on('change', '#listBonCp .chk-bon-choice', function () {
-            updateBonSelectionCount();
+            updateBonOrderBadges();
+        });
+
+        // Click on info area toggles checkbox
+        $(document).on('click', '#listBonCp .bon-info-click-area', function (e) {
+            let $chk = $(this).closest('.bon-choice-item').find('.chk-bon-choice');
+            $chk.prop('checked', !$chk.is(':checked')).trigger('change');
+        });
+
+        // Move Up button
+        $(document).on('click', '.btn-move-bon-up', function (e) {
+            e.stopPropagation();
+            let $item = $(this).closest('.bon-choice-item');
+            let $prev = $item.prev('.bon-choice-item');
+            if ($prev.length) {
+                $item.insertBefore($prev);
+                updateBonOrderBadges();
+            }
+        });
+
+        // Move Down button
+        $(document).on('click', '.btn-move-bon-down', function (e) {
+            e.stopPropagation();
+            let $item = $(this).closest('.bon-choice-item');
+            let $next = $item.next('.bon-choice-item');
+            if ($next.length) {
+                $item.insertAfter($next);
+                updateBonOrderBadges();
+            }
         });
 
         $('#btnSelectAllBons').on('click', function () {
             $('#listBonCp .chk-bon-choice').prop('checked', true);
-            updateBonSelectionCount();
+            updateBonOrderBadges();
         });
 
         $('#btnUnselectAllBons').on('click', function () {
             $('#listBonCp .chk-bon-choice').prop('checked', false);
-            updateBonSelectionCount();
+            updateBonOrderBadges();
         });
 
         $('#btnApplySelectedBons').on('click', function () {
             let noCp = $('#modal-pilih-bon').data('no-cp');
             let selectedIds = [];
-            $('#listBonCp .chk-bon-choice:checked').each(function () {
-                selectedIds.push($(this).val());
+            // Preserve current visual DOM order
+            $('#listBonCp .bon-choice-item').each(function () {
+                let $chk = $(this).find('.chk-bon-choice');
+                if ($chk.is(':checked')) {
+                    selectedIds.push($chk.val());
+                }
             });
             if (selectedIds.length === 0) return;
             $('#modal-pilih-bon').modal('hide');
@@ -969,23 +1076,52 @@ include '../../../includes/sidebar.php';
                     let html = candidates.map(function (bon) {
                         let date = bon.bondate ? String(bon.bondate).substring(0, 10) : '-';
                         let machineLabel = bon.machine_name ? `<span class="badge badge-light border text-dark ml-2"><i class="fas fa-cogs mr-1 text-secondary"></i>Mesin: ${escapeCpHtml(bon.machine_name)}</span>` : '';
-                        return `<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3 mb-2 rounded border bon-choice-item" style="cursor: pointer;">
+                        return `
+                        <div class="list-group-item d-flex align-items-center py-2 px-3 mb-2 rounded border bon-choice-item shadow-sm bg-white" data-bon-id="${Number(bon.bonreqid)}">
+                            <!-- Drag Handle -->
+                            <div class="bon-drag-handle mr-2 text-muted" title="Seret untuk mengubah urutan tabel">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+
+                            <!-- Position Badge -->
+                            <div class="bon-order-badge-container mr-2" style="min-width: 90px;">
+                                <span class="badge badge-primary font-weight-bold bon-order-badge px-2 py-1" style="font-size: 0.8rem;">
+                                    <i class="fas fa-table mr-1"></i>Tabel #1
+                                </span>
+                            </div>
+
+                            <!-- Checkbox -->
                             <div class="mr-3">
                                 <input type="checkbox" class="chk-bon-choice" value="${Number(bon.bonreqid)}" style="transform: scale(1.3); cursor: pointer;" checked>
                             </div>
-                            <div class="flex-grow-1">
+
+                            <!-- Bon Information (Clickable to Toggle Checkbox) -->
+                            <div class="flex-grow-1 bon-info-click-area" style="cursor: pointer;" title="Klik untuk pilih / batal">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <strong class="text-primary font-weight-bold">Bon No - ${escapeCpHtml(bon.bonno || '-')}</strong>
                                     <span class="badge badge-secondary">${escapeCpHtml(date)}</span>
                                 </div>
-                                <div class="font-weight-bold text-dark mt-1">${escapeCpHtml((bon.rtgcode || '') + ' - ' + (bon.rtgname || ''))} ${machineLabel}</div>
+                                <div class="font-weight-bold text-dark mt-1">
+                                    ${escapeCpHtml((bon.rtgcode || '') + ' - ' + (bon.rtgname || ''))} ${machineLabel}
+                                </div>
                                 <small class="text-muted">VLot: <b>${escapeCpHtml(bon.vlot || '0')}</b></small>
                             </div>
-                        </label>`;
+
+                            <!-- Up/Down Action Buttons -->
+                            <div class="ml-2 d-flex flex-column bon-reorder-buttons">
+                                <button type="button" class="btn btn-xs btn-outline-secondary btn-move-bon-up mb-1" title="Geser ke Atas">
+                                    <i class="fas fa-chevron-up"></i>
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary btn-move-bon-down" title="Geser ke Bawah">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                        </div>`;
                     }).join('');
                     $('#listBonCp').html(html);
                     $('#modal-pilih-bon').data('no-cp', noCp).modal('show');
-                    updateBonSelectionCount();
+                    initBonSortable();
+                    updateBonOrderBadges();
                 })
                 .fail(function (xhr, status) { if (status !== 'abort') { Swal.close(); showCpError(xhr); } })
                 .always(function () { cpLookupRequest = null; });
@@ -1240,7 +1376,7 @@ include '../../../includes/sidebar.php';
                 <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap py-2">
                     <div class="d-flex align-items-center flex-wrap">
                         <span class="table-drag-handle" title="Seret untuk ubah urutan tabel"><i class="fas fa-grip-vertical"></i></span>
-                        <span class="badge badge-primary mr-2 font-weight-bold">Tabel #${tIdx}</span>
+                        <span class="badge badge-primary mr-2 font-weight-bold table-order-badge">Tabel #${tIdx}</span>
                         <h6 class="card-title font-weight-bold m-0 text-navy">${escapeCpHtml(titleLabel)} ${bonBadge} ${machineBadge}</h6>
                         <input type="hidden" class="table-meta-rtg-code" value="${escapeCpHtml(rtgCode)}">
                         <input type="hidden" class="table-meta-rtg-name" value="${escapeCpHtml(rtgName)}">
@@ -1285,7 +1421,7 @@ include '../../../includes/sidebar.php';
                             ${CAN_SEE_PRICE ? `
                             <tfoot>
                                 <tr class="bg-light">
-                                    <td colspan="${SHOW_DETAIL_ACTIONS ? 7 : 6}" class="text-right font-weight-bold align-middle">Subtotal Tabel #${tIdx}</td>
+                                    <td colspan="${SHOW_DETAIL_ACTIONS ? 7 : 6}" class="text-right font-weight-bold align-middle table-subtotal-label">Subtotal Tabel #${tIdx}</td>
                                     <td colspan="2" class="align-middle">
                                         <input type="text" class="form-control-plaintext font-weight-bold text-right table-subtotal" readonly value="Rp 0">
                                     </td>
@@ -1317,6 +1453,16 @@ include '../../../includes/sidebar.php';
             return $card;
         }
 
+        function reindexRoutingTableCards() {
+            $('#routingTablesContainer .routing-card').each(function (index) {
+                let order = index + 1;
+                $(this).find('.table-order-badge').text('Tabel #' + order);
+                $(this).find('.table-subtotal-label').text('Subtotal Tabel #' + order);
+                $(this).find('.table-order-input').val(order);
+                $(this).find('.routing-table tbody tr.detail-item-row .item-table-index').val(order);
+            });
+        }
+
         // Init SortableJS for routing card containers (table level)
         Sortable.create(document.getElementById('routingTablesContainer'), {
             handle: '.table-drag-handle',
@@ -1324,6 +1470,7 @@ include '../../../includes/sidebar.php';
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
             onEnd: function() {
+                reindexRoutingTableCards();
                 calcAll();
             }
         });
@@ -1714,6 +1861,7 @@ include '../../../includes/sidebar.php';
             }).then((result) => {
                 if (result.isConfirmed) {
                     $card.remove();
+                    reindexRoutingTableCards();
                     calcAll();
                     setResepSource('MANUAL');
                 }
@@ -1763,6 +1911,7 @@ include '../../../includes/sidebar.php';
                 if (result.isConfirmed) {
                     let $card = createRoutingTable(result.value);
                     for (let i = 0; i < 3; i++) addRowToTable($card);
+                    reindexRoutingTableCards();
                     setResepSource('MANUAL');
                     calcAll();
                 }
@@ -1867,6 +2016,7 @@ include '../../../includes/sidebar.php';
                 });
                 itemsInTable.forEach(d => addRowToTable($card, d));
             }
+            reindexRoutingTableCards();
             setTimeout(calcAll, 500);
         <?php else: ?>
             // Default 1 table with 5 empty rows for new recipe

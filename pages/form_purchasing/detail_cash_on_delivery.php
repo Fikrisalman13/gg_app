@@ -65,7 +65,25 @@ $subtotal = floatval($data['subtotal'] ?? 0);
 $currency = htmlspecialchars($data['currency'] ?? 'IDR');
 
 require_once __DIR__ . '/helper_terbilang.php';
-$displayTerbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal) : (!empty($data['terbilang']) ? $data['terbilang'] : '-');
+$displayTerbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal, $currency) : (!empty($data['terbilang']) ? $data['terbilang'] : '-');
+
+if (!function_exists('formatMataUangCOD')) {
+    function formatMataUangCOD($num, $curr = 'IDR') {
+        $num = floatval($num);
+        $c = strtoupper(trim($curr ?: 'IDR'));
+        if ($c === 'IDR' || $c === 'RP') {
+            $hasDec = fmod($num, 1) != 0;
+            if ($hasDec) {
+                return 'Rp ' . number_format($num, 2, ',', '.');
+            } else {
+                return 'Rp ' . number_format($num, 0, ',', '.') . ',-';
+            }
+        } else {
+            // Standar US untuk USD / Valas: koma ribuan, titik desimal 2 digit
+            return $c . ' ' . number_format($num, 2, '.', ',');
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -378,10 +396,8 @@ $displayTerbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal) : (!empt
                     <?php foreach ($items as $idx => $it): ?>
                         <?php
                             $dppNum = floatval($it['dpp'] ?? 0);
-                            $formattedDpp = 'Rp ' . number_format($dppNum, 2, ',', '.') . ',-';
-                            if (strpos($formattedDpp, ',00,-') !== false) {
-                                $formattedDpp = str_replace(',00,-', ',-', $formattedDpp);
-                            }
+                            $rowCurr = !empty($it['curr']) ? trim($it['curr']) : $currency;
+                            $formattedDpp = formatMataUangCOD($dppNum, $rowCurr);
                         ?>
                         <tr>
                             <td class="center font-weight-bold"><?= $idx + 1 ?></td>
@@ -397,7 +413,7 @@ $displayTerbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal) : (!empt
                         <td>-</td>
                         <td class="center">D</td>
                         <td class="center"><?= $currency ?></td>
-                        <td class="right">Rp 0,-</td>
+                        <td class="right font-weight-bold"><?= formatMataUangCOD(0, $currency) ?></td>
                     </tr>
                 <?php endif; ?>
             </tbody>
@@ -405,7 +421,7 @@ $displayTerbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal) : (!empt
                 <tr>
                     <td colspan="4" class="right font-weight-bold" style="border: 1px solid #000; padding-right: 15px;">Total:</td>
                     <td class="right font-weight-bold" style="border: 1px solid #000;">
-                        Rp <?= number_format($subtotal, 2, ',', '.') ?>,-
+                        <?= formatMataUangCOD($subtotal, $currency) ?>
                     </td>
                 </tr>
             </tfoot>

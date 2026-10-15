@@ -41,7 +41,7 @@ $due_date = !empty($_POST['due_date']) ? $_POST['due_date'] : null;
 $items_json = $_POST['items_json'] ?? '[]';
 $subtotal = floatval($_POST['subtotal'] ?? 0);
 require_once __DIR__ . '/helper_terbilang.php';
-$terbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal) : trim($_POST['terbilang'] ?? '');
+$terbilang = ($subtotal > 0) ? getTerbilangLengkapPHP($subtotal, $currency) : trim($_POST['terbilang'] ?? '');
 $dibuat_oleh = trim($_POST['dibuat_oleh'] ?? '');
 $dicek_oleh = trim($_POST['dicek_oleh'] ?? '');
 $updated_by = $_SESSION['UserName'] ?? 'system';
