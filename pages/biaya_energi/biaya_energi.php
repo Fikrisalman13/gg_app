@@ -114,12 +114,6 @@ $menuGroups = [
             ],
             [
                 'title' => 'KWH Listrik',
-                'subtitle' => 'Pencatatan ampere, perhitungan KWH otomatis, dan total biaya',
-                'file' => '/gg_app/pages/biaya_energi/kwh_listrik/kwh_listrik.php',
-                'icon' => 'fa-bolt'
-            ],
-            [
-                'title' => 'KWH Listrik 2',
                 'subtitle' => 'Pencatatan KWH meter harian per mesin dan total biaya',
                 'file' => '/gg_app/pages/biaya_energi/kwh_listrik2/kwh_listrik2.php',
                 'icon' => 'fa-bolt'

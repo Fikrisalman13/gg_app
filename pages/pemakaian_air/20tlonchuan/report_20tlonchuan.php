@@ -31,19 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $rows = [];
 if ($errorMsg === '') {
-    $sql = "SELECT CAST(h.periode AS DATE) AS tanggal,
-                   CAST(d.jam AS INT) AS jam,
-                   ISNULL(SUM(CASE WHEN d.jenis='AIR' THEN d.nilai_ton ELSE 0 END),0) AS jumlah_air_ton,
-                   ISNULL(SUM(CASE WHEN d.jenis='STEAM' THEN d.nilai_ton ELSE 0 END),0) AS jumlah_steam_ton
-            FROM dbo.pmlonchuan_hdr h
-            INNER JOIN dbo.pmlonchuan_dtl d ON d.hdr_id = h.id
-            WHERE CAST(h.periode AS DATE) BETWEEN ? AND ?
-            GROUP BY CAST(h.periode AS DATE), CAST(d.jam AS INT)
-            ORDER BY CAST(h.periode AS DATE) ASC,
-                     CASE
-                       WHEN CAST(d.jam AS INT) >= 9 THEN CAST(d.jam AS INT) - 9
-                       ELSE CAST(d.jam AS INT) + 15
-                     END ASC";
+    $sql = "SELECT CAST(tanggal AS DATE) AS tanggal, *
+            FROM dbo.air_steam_20tlonchuan_harian
+            WHERE CAST(tanggal AS DATE) BETWEEN ? AND ?
+            ORDER BY CAST(tanggal AS DATE) ASC, id ASC";
     $stmt = sqlsrv_query($conn, $sql, [$start, $end]);
     if ($stmt === false) $errorMsg = 'Gagal mengambil data report: ' . print_r(sqlsrv_errors(), true);
     else {
@@ -51,63 +42,26 @@ if ($errorMsg === '') {
             $dateObj = $r['tanggal'] ?? null;
             $dateKey = ($dateObj instanceof DateTime) ? $dateObj->format('Y-m-d') : date('Y-m-d', strtotime((string)$dateObj));
             $r['tanggal'] = $dateKey;
-            $r['jam'] = isset($r['jam']) ? (int)$r['jam'] : null;
             $rows[] = $r;
         }
         sqlsrv_free_stmt($stmt);
     }
 }
 
-$groupedRows = [];
+$airKeys = ['air_awal_ton','air_akhir_ton','air_total_pemakaian_ton','air_rata_rata_per_jam_ton'];
+$steamKeys = ['steam_awal_ton','steam_akhir_ton','steam_total_pemakaian_ton','steam_rata_rata_per_jam_ton'];
+$totAir = array_fill_keys($airKeys, 0);
+$totSteam = array_fill_keys($steamKeys, 0);
 foreach ($rows as $r) {
-    $dateKey = (string)($r['tanggal'] ?? '');
-    if ($dateKey === '') continue;
-    if (!isset($groupedRows[$dateKey])) {
-        $groupedRows[$dateKey] = [
-            'tanggal' => $dateKey,
-            'rows' => [],
-            'tot_air' => 0,
-            'tot_steam' => 0,
-            'avg_air' => 0,
-            'avg_steam' => 0,
-        ];
-    }
-    $air = (float)($r['jumlah_air_ton'] ?? 0);
-    $steam = (float)($r['jumlah_steam_ton'] ?? 0);
-    $groupedRows[$dateKey]['rows'][] = [
-        'jam' => $r['jam'] ?? null,
-        'jumlah_air_ton' => $air,
-        'jumlah_steam_ton' => $steam,
-    ];
+    foreach ($airKeys as $k) $totAir[$k] += (float)($r[$k] ?? 0);
+    foreach ($steamKeys as $k) $totSteam[$k] += (float)($r[$k] ?? 0);
 }
-foreach ($groupedRows as &$g) {
-    $dayCount = count($g['rows']);
-    if ($dayCount > 0) {
-        $firstRow = $g['rows'][0];
-        $lastRow = $g['rows'][$dayCount - 1];
-        $g['tot_air'] = ((float)($lastRow['jumlah_air_ton'] ?? 0)) - ((float)($firstRow['jumlah_air_ton'] ?? 0));
-        $g['tot_steam'] = ((float)($lastRow['jumlah_steam_ton'] ?? 0)) - ((float)($firstRow['jumlah_steam_ton'] ?? 0));
-    } else {
-        $g['tot_air'] = 0;
-        $g['tot_steam'] = 0;
-    }
-    $g['avg_air'] = $dayCount > 0 ? ($g['tot_air'] / $dayCount) : 0;
-    $g['avg_steam'] = $dayCount > 0 ? ($g['tot_steam'] / $dayCount) : 0;
-}
-unset($g);
+$rowCount = count($rows);
+$avgAir = []; foreach ($airKeys as $k) $avgAir[$k] = $rowCount > 0 ? ($totAir[$k] / $rowCount) : 0;
+$avgSteam = []; foreach ($steamKeys as $k) $avgSteam[$k] = $rowCount > 0 ? ($totSteam[$k] / $rowCount) : 0;
 
-$fmtNum = function ($val, $dec = 2) {
-    if (!is_numeric($val)) return '';
-    $str = number_format((float)$val, $dec, '.', ',');
-    return rtrim(rtrim($str, '0'), '.');
-};
-$fmtDay = function ($ymd) { return $ymd ? date('d/m/Y', strtotime($ymd)) : ''; };
-$fmtHour = function ($jam) {
-    if ($jam === null || $jam === '' || !is_numeric($jam)) return '';
-    $j = (int)$jam;
-    if ($j < 0 || $j > 23) return '';
-    return str_pad((string)$j, 2, '0', STR_PAD_LEFT) . ':00';
-};
+$fmtNum = function ($val, $dec = 2) { if (!is_numeric($val)) return ''; return number_format((float)$val, $dec, '.', ','); };
+$fmtDay = function ($ymd) { return $ymd ? date('j', strtotime($ymd)) : ''; };
 
 $monthMap = ['January'=>'JANUARI','February'=>'FEBRUARI','March'=>'MARET','April'=>'APRIL','May'=>'MEI','June'=>'JUNI','July'=>'JULI','August'=>'AGUSTUS','September'=>'SEPTEMBER','October'=>'OKTOBER','November'=>'NOVEMBER','December'=>'DESEMBER'];
 $monthEn = date('F', strtotime($start));
@@ -119,7 +73,7 @@ $monthLabel = ($monthMap[$monthEn] ?? strtoupper($monthEn)) . ' ' . date('Y', st
   <div class="container-fluid">
     <div class="row align-items-center">
       <div class="col-sm-6">
-        <h1 class="m-0">REPORT AIR dan STEAM 20 TON LONCHUAN</h1>
+        <h1 class="m-0">REPORT AIR DAN STEAM 20 TON LONCHUAN</h1>
       </div>
       <div class="col-sm-6 text-right">
         <a href="/gg_app/pages/pemakaian_air/20tlonchuan/20tlonchuan.php" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-left"></i> Kembali</a>
@@ -164,54 +118,61 @@ $monthLabel = ($monthMap[$monthEn] ?? strtoupper($monthEn)) . ' ' . date('Y', st
           <h3 class="card-title"><i class="fas fa-list mr-1"></i> Detail Report</h3>
         </div>
         <style>
-          .tlc-wrap{overflow-x:auto;background:#f0f0f0;padding:8px;border:1px solid #cfcfcf}
-          .tlc-report{border-collapse:collapse;border-spacing:0;font-size:13px;min-width:700px;background:#fff}
-          .tlc-report th,.tlc-report td{border:2px solid #111;text-align:center;vertical-align:middle;padding:2px 6px;white-space:nowrap;line-height:1.1}
-          .tlc-report .head{background:#b7cae2;font-weight:700}
-          .tlc-report .sub{background:#f3e2e2;font-weight:700}
-          .tlc-report .date{background:#dbe2cf;font-weight:700}
-          .tlc-report .date-day{font-size:16px}
-          .tlc-report .data{background:#b8c7d9}
-          .tlc-report .sum td{background:#ece9d6 !important;font-weight:700}
-          .tlc-report .sum-label{text-align:left;padding-left:10px}
+          .t20-wrap{overflow-x:auto;background:#f0f0f0;padding:8px;border:1px solid #cfcfcf}
+          .t20-report{border-collapse:collapse;border-spacing:0;font-size:11px;min-width:1500px;background:#fff}
+          .t20-report th,.t20-report td{border:1px solid #000;text-align:center;vertical-align:middle;padding:2px 4px;white-space:nowrap}
+          .t20-report .head{background:#b7cae2;font-weight:700}
+          .t20-report .sub{background:#f3e2e2;font-weight:700}
+          .t20-report .date{background:#e6edd9;font-weight:700}
+          .t20-report .data{background:#c4d5e9}
+          .t20-report .sum td{background:#ece9d6 !important;font-weight:700}
         </style>
         <div class="card-body p-2">
-          <div class="tlc-wrap">
-            <table class="table table-sm tlc-report">
+          <div class="t20-wrap">
+            <table class="table table-sm t20-report">
               <thead>
                 <tr>
-                  <th class="head" colspan="4">BERDASARKAN LAJU SESAAT BOILER LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
+                  <th class="head" colspan="6">METER AIR BOILER STEAM 20 TON LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
+                  <th style="border:none;background:#f0f0f0"></th>
+                  <th class="head" colspan="6">METER STEAM BOILER STEAM 20 TON LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
                 </tr>
                 <tr>
-                  <th class="sub">Tanggal</th><th class="sub">Jam</th><th class="sub">Jumlah Air (ton)</th><th class="sub">Jumlah Steam (ton)</th>
+                  <th class="sub">Tanggal</th><th class="sub">Awal</th><th class="sub">Akhir</th><th class="sub">Total</th><th class="sub">Rata/Jam</th><th class="sub">KET</th>
+                  <th style="border:none;background:#f0f0f0"></th>
+                  <th class="sub">Tanggal</th><th class="sub">Awal</th><th class="sub">Akhir</th><th class="sub">Total</th><th class="sub">Rata/Jam</th><th class="sub">KET</th>
                 </tr>
               </thead>
               <tbody>
-                <?php if (empty($groupedRows)): ?>
-                  <tr><td colspan="4">Tidak ada data pada rentang tanggal ini.</td></tr>
-                <?php else: foreach ($groupedRows as $day): ?>
-                  <?php $dayRows = $day['rows']; $dayRowCount = count($dayRows); ?>
-                  <?php foreach ($dayRows as $idx => $r): ?>
-                    <tr>
-                      <?php if ($idx === 0): ?>
-                        <td class="date date-day" rowspan="<?= (int)$dayRowCount ?>"><?= htmlspecialchars($fmtDay($day['tanggal'])) ?></td>
-                      <?php endif; ?>
-                      <td class="date"><?= htmlspecialchars($fmtHour($r['jam'] ?? null)) ?></td>
-                      <td class="data"><?= htmlspecialchars($fmtNum($r['jumlah_air_ton'])) ?></td>
-                      <td class="data"><?= htmlspecialchars($fmtNum($r['jumlah_steam_ton'])) ?></td>
-                    </tr>
-                  <?php endforeach; ?>
+                <?php if (empty($rows)): ?>
+                  <tr><td colspan="13">Tidak ada data pada rentang tanggal ini.</td></tr>
+                <?php else: foreach ($rows as $r): ?>
+                  <tr>
+                    <td class="date"><?= htmlspecialchars($fmtDay($r['tanggal'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['air_awal_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['air_akhir_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['air_total_pemakaian_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['air_rata_rata_per_jam_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars((string)($r['air_ket'] ?? '')) ?></td>
+                    <td style="border:none;background:#f0f0f0"></td>
+                    <td class="date"><?= htmlspecialchars($fmtDay($r['tanggal'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['steam_awal_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['steam_akhir_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['steam_total_pemakaian_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars($fmtNum($r['steam_rata_rata_per_jam_ton'])) ?></td>
+                    <td class="data"><?= htmlspecialchars((string)($r['steam_ket'] ?? '')) ?></td>
+                  </tr>
+                <?php endforeach; ?>
                   <tr class="sum">
-                    <td class="sum-label" colspan="2">TOTAL/HARI</td>
-                    <td><?= htmlspecialchars($fmtNum($day['tot_air'])) ?></td>
-                    <td><?= htmlspecialchars($fmtNum($day['tot_steam'])) ?></td>
+                    <td>TOTAL</td><td><?= htmlspecialchars($fmtNum($totAir['air_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_rata_rata_per_jam_ton'])) ?></td><td></td>
+                    <td style="border:none;background:#f0f0f0"></td>
+                    <td>TOTAL</td><td><?= htmlspecialchars($fmtNum($totSteam['steam_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_rata_rata_per_jam_ton'])) ?></td><td></td>
                   </tr>
                   <tr class="sum">
-                    <td class="sum-label" colspan="2">RATA-RATA/HARI</td>
-                    <td><?= htmlspecialchars($fmtNum($day['avg_air'])) ?></td>
-                    <td><?= htmlspecialchars($fmtNum($day['avg_steam'])) ?></td>
+                    <td>RATA-RATA</td><td><?= htmlspecialchars($fmtNum($avgAir['air_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_rata_rata_per_jam_ton'])) ?></td><td></td>
+                    <td style="border:none;background:#f0f0f0"></td>
+                    <td>RATA-RATA</td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_rata_rata_per_jam_ton'])) ?></td><td></td>
                   </tr>
-                <?php endforeach; endif; ?>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
@@ -220,4 +181,5 @@ $monthLabel = ($monthMap[$monthEn] ?? strtoupper($monthEn)) . ' ' . date('Y', st
     <?php endif; ?>
   </div></section>
 </div>
+
 <?php include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/footer.php'); ?>

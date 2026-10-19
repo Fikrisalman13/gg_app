@@ -69,6 +69,9 @@ include '../../../includes/sidebar.php';
                     <div class="float-right">
 
                         <?php if ($permissions['CanEdit'] == 1): ?>
+                            <a href="../edit_otomatis/index.php" class="btn btn-warning btn-sm mr-1 text-dark font-weight-bold" title="Edit Otomatis susunan routing & item resep">
+                                <i class="fas fa-magic mr-1"></i> Edit Otomatis
+                            </a>
                             <button type="button" class="btn btn-secondary btn-sm mr-1" id="ppcExperimentBulkSyncOpen">
                                 <i class="fas fa-sync-alt"></i> Sinkronkan Experiment
                             </button>

@@ -9,87 +9,70 @@ $menuId = 230;
 $permissions = getPermissions($conn, $_SESSION['GroupId'] ?? 0, $menuId);
 if (!empty($permissions) && isset($permissions['CanAdd']) && $permissions['CanAdd'] != 1) { echo json_encode(['success'=>false,'message'=>'Anda tidak memiliki hak menambah data.']); exit; }
 
-function numOrNull($v){
-    $v = trim((string)$v);
-    if ($v === '') return null;
-    $v = preg_replace('/[^0-9.,]/','',$v);
-    if ($v === '') return null;
-    if (strpos($v,'.') !== false) {
-        $a = str_replace(',','',$v);
-        return is_numeric($a) ? (float)$a : null;
-    }
-    $f = str_replace('.','',$v);
-    $f = str_replace(',','.',$f);
-    return is_numeric($f) ? (float)$f : null;
+function n($v){
+    $v=trim((string)$v);
+    if($v==='') return 0;
+    $v=preg_replace('/[^0-9.,]/','',$v);
+    if($v==='') return 0;
+    if(strpos($v,'.')!==false){ $a=str_replace(',','',$v); if(is_numeric($a)) return (float)$a; }
+    $f=str_replace('.','',$v); $f=str_replace(',','.',$f);
+    return is_numeric($f)?(float)$f:0;
 }
 
 $id = intval($_POST['id'] ?? 0);
 $tanggal = trim($_POST['tanggal'] ?? '');
-$note = trim($_POST['note'] ?? '');
+$cutOff = trim($_POST['cut_off_jam'] ?? '09:00');
 if ($tanggal === '') { echo json_encode(['success'=>false,'message'=>'Tanggal wajib diisi.']); exit; }
+if (!preg_match('/^\d{2}:\d{2}$/', $cutOff)) $cutOff = '09:00';
 
-$jamArr = $_POST['jam'] ?? [];
-$airArr = $_POST['air'] ?? [];
-$steamArr = $_POST['steam'] ?? [];
+$airAwal = n($_POST['air_awal_ton'] ?? '0');
+$airAkhir = n($_POST['air_akhir_ton'] ?? '0');
+$steamAwal = n($_POST['steam_awal_ton'] ?? '0');
+$steamAkhir = n($_POST['steam_akhir_ton'] ?? '0');
+$airKet = trim($_POST['air_ket'] ?? '');
+$steamKet = trim($_POST['steam_ket'] ?? '');
 
-sqlsrv_begin_transaction($conn);
-try {
-    $hdrId = 0;
-    if ($id > 0) {
-        $upd = sqlsrv_query($conn, "UPDATE dbo.pmlonchuan_hdr SET periode=?, note=?, updated_by=?, updated_at=GETDATE() WHERE id=?", [$tanggal, $note, $_SESSION['UserName'], $id]);
-        if ($upd === false) throw new Exception('Gagal memperbarui header.');
-        if ($upd) sqlsrv_free_stmt($upd);
-        $hdrId = $id;
+$airTotal = $airAkhir - $airAwal;
+$steamTotal = $steamAkhir - $steamAwal;
+if ($airTotal < 0) { echo json_encode(['success'=>false,'message'=>'Air akhir tidak boleh lebih kecil dari air awal.']); exit; }
+if ($steamTotal < 0) { echo json_encode(['success'=>false,'message'=>'Steam akhir tidak boleh lebih kecil dari steam awal.']); exit; }
+
+$airRata = $airTotal / 24;
+$steamRata = $steamTotal / 24;
+
+if ($id > 0) {
+    $sql = "UPDATE dbo.air_steam_20tlonchuan_harian
+            SET air_awal_ton=?, air_akhir_ton=?, air_total_pemakaian_ton=?, air_rata_rata_per_jam_ton=?, air_ket=?,
+                steam_awal_ton=?, steam_akhir_ton=?, steam_total_pemakaian_ton=?, steam_rata_rata_per_jam_ton=?, steam_ket=?,
+                cut_off_jam=?, updateby=?, updateat=GETDATE()
+            WHERE id=?";
+    $params = [$airAwal,$airAkhir,$airTotal,$airRata,$airKet,$steamAwal,$steamAkhir,$steamTotal,$steamRata,$steamKet,$cutOff,$_SESSION['UserName'],$id];
+    $msg = 'Data berhasil diperbarui.';
+} else {
+    $cek = sqlsrv_query($conn, "SELECT TOP 1 id FROM dbo.air_steam_20tlonchuan_harian WHERE tanggal=?", [$tanggal]);
+    $row = $cek ? sqlsrv_fetch_array($cek, SQLSRV_FETCH_ASSOC) : null;
+    if ($cek) sqlsrv_free_stmt($cek);
+
+    if ($row) {
+        $sql = "UPDATE dbo.air_steam_20tlonchuan_harian
+                SET air_awal_ton=?, air_akhir_ton=?, air_total_pemakaian_ton=?, air_rata_rata_per_jam_ton=?, air_ket=?,
+                    steam_awal_ton=?, steam_akhir_ton=?, steam_total_pemakaian_ton=?, steam_rata_rata_per_jam_ton=?, steam_ket=?,
+                    cut_off_jam=?, updateby=?, updateat=GETDATE()
+                WHERE id=?";
+        $params = [$airAwal,$airAkhir,$airTotal,$airRata,$airKet,$steamAwal,$steamAkhir,$steamTotal,$steamRata,$steamKet,$cutOff,$_SESSION['UserName'],$row['id']];
+        $msg = 'Data berhasil diperbarui.';
     } else {
-        $cek = sqlsrv_query($conn, "SELECT TOP 1 id FROM dbo.pmlonchuan_hdr WHERE periode=?", [$tanggal]);
-        $row = $cek ? sqlsrv_fetch_array($cek, SQLSRV_FETCH_ASSOC) : null;
-        if ($cek) sqlsrv_free_stmt($cek);
-
-        if ($row) {
-            $hdrId = (int)$row['id'];
-            $upd = sqlsrv_query($conn, "UPDATE dbo.pmlonchuan_hdr SET note=?, updated_by=?, updated_at=GETDATE() WHERE id=?", [$note, $_SESSION['UserName'], $hdrId]);
-            if ($upd === false) throw new Exception('Gagal memperbarui header.');
-            if ($upd) sqlsrv_free_stmt($upd);
-        } else {
-            $ins = sqlsrv_query($conn, "INSERT INTO dbo.pmlonchuan_hdr (periode, created_at, created_by, note) OUTPUT INSERTED.id VALUES (?,?,?,?)", [$tanggal, date('Y-m-d H:i:s'), $_SESSION['UserName'], $note]);
-            if ($ins === false) throw new Exception('Gagal menyimpan header.');
-            $row = sqlsrv_fetch_array($ins, SQLSRV_FETCH_ASSOC);
-            if ($ins) sqlsrv_free_stmt($ins);
-            $hdrId = (int)($row['id'] ?? 0);
-        }
+        $sql = "INSERT INTO dbo.air_steam_20tlonchuan_harian (
+                    tanggal, air_awal_ton, air_akhir_ton, air_total_pemakaian_ton, air_rata_rata_per_jam_ton, air_ket,
+                    steam_awal_ton, steam_akhir_ton, steam_total_pemakaian_ton, steam_rata_rata_per_jam_ton, steam_ket,
+                    cut_off_jam, creatby
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        $params = [$tanggal,$airAwal,$airAkhir,$airTotal,$airRata,$airKet,$steamAwal,$steamAkhir,$steamTotal,$steamRata,$steamKet,$cutOff,$_SESSION['UserName']];
+        $msg = 'Data berhasil disimpan.';
     }
-
-    if ($hdrId <= 0) throw new Exception('ID header tidak valid.');
-
-    $del = sqlsrv_query($conn, "DELETE FROM dbo.pmlonchuan_dtl WHERE hdr_id=?", [$hdrId]);
-    if ($del === false) throw new Exception('Gagal membersihkan detail lama.');
-    if ($del) sqlsrv_free_stmt($del);
-
-    $insertSql = "INSERT INTO dbo.pmlonchuan_dtl (hdr_id, tgl, jam, jenis, nilai_ton, created_by) VALUES (?,?,?,?,?,?)";
-
-    $count = is_array($jamArr) ? count($jamArr) : 0;
-    for ($i=0; $i<$count; $i++) {
-        $jam = isset($jamArr[$i]) ? (int)$jamArr[$i] : null;
-        if ($jam === null || $jam < 0 || $jam > 23) continue;
-
-        $airVal = numOrNull($airArr[$i] ?? '');
-        $steamVal = numOrNull($steamArr[$i] ?? '');
-
-        if ($airVal !== null) {
-            $ins = sqlsrv_query($conn, $insertSql, [$hdrId, $tanggal, $jam, 'AIR', $airVal, $_SESSION['UserName']]);
-            if ($ins === false) throw new Exception('Gagal menyimpan detail AIR.');
-            if ($ins) sqlsrv_free_stmt($ins);
-        }
-        if ($steamVal !== null) {
-            $ins = sqlsrv_query($conn, $insertSql, [$hdrId, $tanggal, $jam, 'STEAM', $steamVal, $_SESSION['UserName']]);
-            if ($ins === false) throw new Exception('Gagal menyimpan detail STEAM.');
-            if ($ins) sqlsrv_free_stmt($ins);
-        }
-    }
-
-    sqlsrv_commit($conn);
-    echo json_encode(['success'=>true,'message'=>'Data berhasil disimpan.']);
-} catch (Exception $e) {
-    sqlsrv_rollback($conn);
-    echo json_encode(['success'=>false,'message'=>$e->getMessage()]);
 }
+
+$stmt = sqlsrv_query($conn, $sql, $params);
+if ($stmt === false) { echo json_encode(['success'=>false,'message'=>'Gagal menyimpan data: ' . print_r(sqlsrv_errors(), true)]); exit; }
+if ($stmt) sqlsrv_free_stmt($stmt);
+echo json_encode(['success'=>true,'message'=>$msg]);

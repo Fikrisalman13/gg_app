@@ -20,15 +20,24 @@ $endDate = trim($_POST['end_date'] ?? '');
 
 $where = "WHERE 1=1";
 $params = [];
-if ($startDate !== '') { $where .= " AND CAST(h.periode AS DATE) >= ?"; $params[] = $startDate; }
-if ($endDate !== '') { $where .= " AND CAST(h.periode AS DATE) <= ?"; $params[] = $endDate; }
+if ($startDate !== '') { $where .= " AND CAST(x.tanggal AS DATE) >= ?"; $params[] = $startDate; }
+if ($endDate !== '') { $where .= " AND CAST(x.tanggal AS DATE) <= ?"; $params[] = $endDate; }
 if ($search !== '') {
-    $where .= " AND (CONVERT(VARCHAR(10), h.periode, 120) LIKE ? OR h.note LIKE ? OR COALESCE(h.updated_by, h.created_by, '') LIKE ?)";
+    $where .= " AND (
+        CONVERT(VARCHAR(10), x.tanggal, 120) LIKE ?
+        OR CONVERT(VARCHAR(50), x.air_awal_ton) LIKE ?
+        OR CONVERT(VARCHAR(50), x.air_akhir_ton) LIKE ?
+        OR CONVERT(VARCHAR(50), x.steam_awal_ton) LIKE ?
+        OR CONVERT(VARCHAR(50), x.steam_akhir_ton) LIKE ?
+        OR x.air_ket LIKE ?
+        OR x.steam_ket LIKE ?
+        OR COALESCE(x.updateby, x.creatby, '') LIKE ?
+    )";
     $sp = "%{$search}%";
-    $params = array_merge($params, [$sp, $sp, $sp]);
+    $params = array_merge($params, [$sp,$sp,$sp,$sp,$sp,$sp,$sp,$sp]);
 }
 
-$baseFrom = "FROM dbo.pmlonchuan_hdr h";
+$baseFrom = "FROM dbo.air_steam_20tlonchuan_harian x";
 
 $countAllStmt = sqlsrv_query($conn, "SELECT COUNT(*) AS total " . $baseFrom);
 $totalRecords = 0;
@@ -40,26 +49,23 @@ $totalFiltered = 0;
 if ($countFilteredStmt && ($r = sqlsrv_fetch_array($countFilteredStmt, SQLSRV_FETCH_ASSOC))) $totalFiltered = (int)$r['total'];
 if ($countFilteredStmt) sqlsrv_free_stmt($countFilteredStmt);
 
-$sql = "SELECT h.id, h.periode, h.note,
-               COALESCE(h.updated_by, h.created_by, '') AS created_by,
-               ISNULL(SUM(CASE WHEN d.jenis='AIR' THEN d.nilai_ton ELSE 0 END), 0) AS jumlah_air_ton,
-               ISNULL(SUM(CASE WHEN d.jenis='STEAM' THEN d.nilai_ton ELSE 0 END), 0) AS jumlah_steam_ton
-        FROM dbo.pmlonchuan_hdr h
-        LEFT JOIN dbo.pmlonchuan_dtl d ON d.hdr_id = h.id
-        $where
-        GROUP BY h.id, h.periode, h.note, h.created_by, h.updated_by
-        ORDER BY CAST(h.periode AS DATE) DESC, h.id DESC
+$sql = "SELECT x.id, x.tanggal, x.air_awal_ton, x.air_akhir_ton, x.air_total_pemakaian_ton, x.air_rata_rata_per_jam_ton, x.air_ket,
+               x.steam_awal_ton, x.steam_akhir_ton, x.steam_total_pemakaian_ton, x.steam_rata_rata_per_jam_ton, x.steam_ket,
+               CONVERT(VARCHAR(5), x.cut_off_jam, 108) AS cut_off_jam,
+               COALESCE(x.updateby, x.creatby, '') AS created_by
+        " . $baseFrom . " " . $where . "
+        ORDER BY CAST(x.tanggal AS DATE) DESC, x.id DESC
         OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 $dataParams = $params; $dataParams[] = $start; $dataParams[] = $length;
 $stmt = sqlsrv_query($conn, $sql, $dataParams);
 if ($stmt === false) {
-    echo json_encode(['draw'=>$draw,'recordsTotal'=>0,'recordsFiltered'=>0,'data'=>[],'error'=>'Gagal mengambil data.']);
+    echo json_encode(['draw'=>$draw,'recordsTotal'=>0,'recordsFiltered'=>0,'data'=>[],'error'=>'Gagal mengambil data: ' . print_r(sqlsrv_errors(), true)]);
     exit;
 }
 
 $data = [];
 while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-    $tgl = $row['periode'];
+    $tgl = $row['tanggal'];
     if ($tgl instanceof DateTime) { $tanggalRaw = $tgl->format('Y-m-d'); $tanggalFmt = $tgl->format('d-m-Y'); }
     else { $tanggalRaw = (string)$tgl; $tanggalFmt = $tanggalRaw !== '' ? date('d-m-Y', strtotime($tanggalRaw)) : ''; }
 
@@ -67,9 +73,17 @@ while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         'id' => $row['id'] ?? null,
         'tanggal' => $tanggalRaw,
         'tanggal_formatted' => $tanggalFmt,
-        'jumlah_air_ton' => $row['jumlah_air_ton'] ?? 0,
-        'jumlah_steam_ton' => $row['jumlah_steam_ton'] ?? 0,
-        'note' => $row['note'] ?? '',
+        'air_awal_ton' => $row['air_awal_ton'] ?? 0,
+        'air_akhir_ton' => $row['air_akhir_ton'] ?? 0,
+        'air_total_pemakaian_ton' => $row['air_total_pemakaian_ton'] ?? 0,
+        'air_rata_rata_per_jam_ton' => $row['air_rata_rata_per_jam_ton'] ?? 0,
+        'air_ket' => $row['air_ket'] ?? '',
+        'steam_awal_ton' => $row['steam_awal_ton'] ?? 0,
+        'steam_akhir_ton' => $row['steam_akhir_ton'] ?? 0,
+        'steam_total_pemakaian_ton' => $row['steam_total_pemakaian_ton'] ?? 0,
+        'steam_rata_rata_per_jam_ton' => $row['steam_rata_rata_per_jam_ton'] ?? 0,
+        'steam_ket' => $row['steam_ket'] ?? '',
+        'cut_off_jam' => $row['cut_off_jam'] ?? '09:00',
         'created_by' => $row['created_by'] ?? ''
     ];
 }

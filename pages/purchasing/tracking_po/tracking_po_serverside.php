@@ -136,24 +136,28 @@ switch ($action) {
         // Build WHERE clause
         $where = "h.is_deleted = 0";
         $params = [];
+        $tglExpr = "ISNULL(d.tanggal_kirim, h.tanggal_kirim)";
+        $effDateExpr = "CASE WHEN d.status = 'Tunggu Tanggal Penyerahan' THEN CAST(h.created_at AS DATE) ELSE ISNULL(d.tanggal_kirim, h.tanggal_kirim) END";
 
         if (!empty($filterDateFrom) && !empty($filterDateTo)) {
-            $where .= " AND h.tanggal_kirim BETWEEN ? AND ?";
+            $where .= " AND {$effDateExpr} BETWEEN ? AND ?";
             $params[] = $filterDateFrom;
             $params[] = $filterDateTo;
         } elseif (!empty($filterDateFrom)) {
-            $where .= " AND h.tanggal_kirim >= ?";
+            $where .= " AND {$effDateExpr} >= ?";
             $params[] = $filterDateFrom;
         } elseif (!empty($filterDateTo)) {
-            $where .= " AND h.tanggal_kirim <= ?";
+            $where .= " AND {$effDateExpr} <= ?";
             $params[] = $filterDateTo;
         }
 
         // Status filter - "Belum Kembali" is virtual (Diserahkan + tanggal < today)
         if ($filterStatus === 'Belum Kembali') {
-            $where .= " AND d.status = 'Diserahkan' AND h.tanggal_kirim < CAST(GETDATE() AS DATE)";
+            $where .= " AND d.status = 'Diserahkan' AND {$tglExpr} < CAST(GETDATE() AS DATE)";
         } elseif ($filterStatus === 'Diserahkan') {
-            $where .= " AND d.status = 'Diserahkan' AND h.tanggal_kirim >= CAST(GETDATE() AS DATE)";
+            $where .= " AND d.status = 'Diserahkan' AND ({$tglExpr} >= CAST(GETDATE() AS DATE) OR {$tglExpr} IS NULL)";
+        } elseif ($filterStatus === 'Tunggu Tanggal Penyerahan') {
+            $where .= " AND d.status = 'Tunggu Tanggal Penyerahan'";
         } elseif (!empty($filterStatus)) {
             $where .= " AND d.status = ?";
             $params[] = $filterStatus;
@@ -162,11 +166,11 @@ switch ($action) {
         $sql = "SELECT d.id AS detail_id, d.header_id, d.ponmbr, d.pohdid, d.povendorname, 
                        d.podate, d.status, d.is_signed, d.tanggal_kembali, 
                        d.konfirmasi_oleh, d.konfirmasi_at, d.approved_by, d.approved_at, d.catatan,
-                       h.tanggal_kirim, h.diserahkan_oleh, h.created_at
+                       {$tglExpr} AS tanggal_kirim, h.diserahkan_oleh, h.created_at
                 FROM dbo.tracking_po_detail d
                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id
                 WHERE {$where}
-                ORDER BY h.tanggal_kirim DESC, d.id DESC";
+                ORDER BY {$effDateExpr} DESC, d.id DESC";
 
         $stmt = sqlsrv_query($conn, $sql, $params);
         $data = [];
@@ -183,15 +187,18 @@ switch ($action) {
                     $tanggalKirim = $row['tanggal_kirim'] instanceof DateTimeInterface
                         ? $row['tanggal_kirim']->format('Y-m-d')
                         : (string)$row['tanggal_kirim'];
-                    if ($tanggalKirim < $todayStr) {
+                    if (!empty($tanggalKirim) && $tanggalKirim < $todayStr) {
                         $displayStatus = 'Belum Kembali';
                     }
                 }
 
                 // Format dates
-                $tglKirim = $row['tanggal_kirim'] instanceof DateTimeInterface
-                    ? $row['tanggal_kirim']->format('d/m/Y')
-                    : (!empty($row['tanggal_kirim']) ? date('d/m/Y', strtotime($row['tanggal_kirim'])) : '-');
+                $tglKirim = '-';
+                if (!empty($row['tanggal_kirim'])) {
+                    $tglKirim = $row['tanggal_kirim'] instanceof DateTimeInterface
+                        ? $row['tanggal_kirim']->format('d/m/Y')
+                        : date('d/m/Y', strtotime($row['tanggal_kirim']));
+                }
 
                 $tglPo = $row['podate'] instanceof DateTimeInterface
                     ? $row['podate']->format('d/m/Y')
@@ -220,6 +227,7 @@ switch ($action) {
                     'tanggal_kembali'  => $tglKembali,
                     'konfirmasi_oleh'  => $row['konfirmasi_oleh'] ? trim($row['konfirmasi_oleh']) : null,
                     'approved_by'      => $row['approved_by'] ? trim($row['approved_by']) : null,
+                    'is_approved_erp'  => !empty($row['approved_by']),
                     'catatan'          => $row['catatan'] ? trim($row['catatan']) : null,
                 ];
             }
@@ -239,45 +247,93 @@ switch ($action) {
         break;
 
     // =====================================================================
-    // GET SUMMARY - Hitung angka untuk summary cards
+    // GET SUMMARY - Hitung angka untuk summary cards (sesuai filter tanggal)
     // =====================================================================
     case 'get_summary':
         if (!$tableReady) {
-            echo json_encode(['status' => 'ok', 'summary' => ['diserahkan' => 0, 'belum_kembali' => 0, 'sudah_ttd' => 0, 'approved' => 0]]);
+            echo json_encode(['status' => 'ok', 'summary' => ['tunggu_penyerahan' => 0, 'diserahkan' => 0, 'belum_kembali' => 0, 'sudah_ttd' => 0, 'approved' => 0]]);
             exit;
         }
 
-        $todayStr = date('Y-m-d');
-        $summary = ['diserahkan' => 0, 'belum_kembali' => 0, 'sudah_ttd' => 0, 'approved' => 0];
+        $filterDateFrom = trim($_GET['date_from'] ?? '');
+        $filterDateTo = trim($_GET['date_to'] ?? '');
 
-        // Diserahkan hari ini (status Diserahkan + tanggal_kirim = hari ini)
-        $q1 = sqlsrv_query($conn, "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
-            INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
-            WHERE h.is_deleted = 0 AND d.status = 'Diserahkan' AND h.tanggal_kirim = CAST(GETDATE() AS DATE)");
+        $tglExpr = "ISNULL(d.tanggal_kirim, h.tanggal_kirim)";
+        $tglCreated = "CAST(h.created_at AS DATE)";
+
+        $hasDateFilter = false;
+        $dateCondDetail = "";
+        $dateCondTunggu = "";
+        $dateParams = [];
+
+        if (!empty($filterDateFrom) && !empty($filterDateTo)) {
+            $hasDateFilter = true;
+            $dateCondDetail = " AND {$tglExpr} BETWEEN ? AND ?";
+            $dateCondTunggu = " AND {$tglCreated} BETWEEN ? AND ?";
+            $dateParams = [$filterDateFrom, $filterDateTo];
+        } elseif (!empty($filterDateFrom)) {
+            $hasDateFilter = true;
+            $dateCondDetail = " AND {$tglExpr} >= ?";
+            $dateCondTunggu = " AND {$tglCreated} >= ?";
+            $dateParams = [$filterDateFrom];
+        } elseif (!empty($filterDateTo)) {
+            $hasDateFilter = true;
+            $dateCondDetail = " AND {$tglExpr} <= ?";
+            $dateCondTunggu = " AND {$tglCreated} <= ?";
+            $dateParams = [$filterDateTo];
+        }
+
+        $summary = ['tunggu_penyerahan' => 0, 'diserahkan' => 0, 'belum_kembali' => 0, 'sudah_kembali' => 0, 'sudah_ttd' => 0, 'approved' => 0];
+
+        // 1. Tunggu Tanggal Penyerahan (pakai tanggal dibuat)
+        $sql0 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                 WHERE h.is_deleted = 0 AND d.status = 'Tunggu Tanggal Penyerahan'" . $dateCondTunggu;
+        $q0 = sqlsrv_query($conn, $sql0, $dateParams);
+        if ($q0 && ($r0 = sqlsrv_fetch_array($q0, SQLSRV_FETCH_ASSOC))) {
+            $summary['tunggu_penyerahan'] = (int)$r0['cnt'];
+        }
+
+        // 2. Diserahkan (konsisten: diserahkan yang tanggal kirim >= hari ini)
+        if ($hasDateFilter) {
+            $sql1 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                     INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                     WHERE h.is_deleted = 0 AND d.status = 'Diserahkan' AND ({$tglExpr} >= CAST(GETDATE() AS DATE) OR {$tglExpr} IS NULL)" . $dateCondDetail;
+            $q1 = sqlsrv_query($conn, $sql1, $dateParams);
+        } else {
+            $sql1 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                     INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                     WHERE h.is_deleted = 0 AND d.status = 'Diserahkan' AND {$tglExpr} = CAST(GETDATE() AS DATE)";
+            $q1 = sqlsrv_query($conn, $sql1);
+        }
         if ($q1 && ($r1 = sqlsrv_fetch_array($q1, SQLSRV_FETCH_ASSOC))) {
             $summary['diserahkan'] = (int)$r1['cnt'];
         }
 
-        // Belum Kembali (status Diserahkan + tanggal_kirim < hari ini)
-        $q2 = sqlsrv_query($conn, "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
-            INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
-            WHERE h.is_deleted = 0 AND d.status = 'Diserahkan' AND h.tanggal_kirim < CAST(GETDATE() AS DATE)");
+        // 3. Belum Kembali (status Diserahkan + tgl_kirim < hari ini)
+        $sql2 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                 WHERE h.is_deleted = 0 AND d.status = 'Diserahkan' AND {$tglExpr} < CAST(GETDATE() AS DATE)" . $dateCondDetail;
+        $q2 = sqlsrv_query($conn, $sql2, $dateParams);
         if ($q2 && ($r2 = sqlsrv_fetch_array($q2, SQLSRV_FETCH_ASSOC))) {
             $summary['belum_kembali'] = (int)$r2['cnt'];
         }
 
-        // Sudah TTD
-        $q3 = sqlsrv_query($conn, "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
-            INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
-            WHERE h.is_deleted = 0 AND d.status = 'Sudah TTD'");
+        // 4. Sudah Kembali (Belum TTD)
+        $sql3 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                 WHERE h.is_deleted = 0 AND d.status = 'Sudah Kembali'" . $dateCondDetail;
+        $q3 = sqlsrv_query($conn, $sql3, $dateParams);
         if ($q3 && ($r3 = sqlsrv_fetch_array($q3, SQLSRV_FETCH_ASSOC))) {
-            $summary['sudah_ttd'] = (int)$r3['cnt'];
+            $summary['sudah_kembali'] = (int)$r3['cnt'];
+            $summary['sudah_ttd'] = (int)$r3['cnt']; // fallback alias
         }
 
-        // Approved
-        $q4 = sqlsrv_query($conn, "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
-            INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
-            WHERE h.is_deleted = 0 AND d.status = 'Approved'");
+        // 5. Approved
+        $sql4 = "SELECT COUNT(*) AS cnt FROM dbo.tracking_po_detail d 
+                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                 WHERE h.is_deleted = 0 AND d.status = 'Approved'" . $dateCondDetail;
+        $q4 = sqlsrv_query($conn, $sql4, $dateParams);
         if ($q4 && ($r4 = sqlsrv_fetch_array($q4, SQLSRV_FETCH_ASSOC))) {
             $summary['approved'] = (int)$r4['cnt'];
         }
@@ -517,7 +573,7 @@ switch ($action) {
             exit;
         }
 
-        $tanggalKirim = trim($_POST['tanggal_kirim'] ?? date('Y-m-d'));
+        $tanggalKirim = trim($_POST['tanggal_kirim'] ?? '');
         $poItems = json_decode($_POST['po_items'] ?? '[]', true);
 
         if (empty($poItems) || !is_array($poItems)) {
@@ -525,10 +581,21 @@ switch ($action) {
             exit;
         }
 
-        // Validasi format tanggal
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalKirim)) {
-            echo json_encode(['status' => 'error', 'message' => 'Format tanggal kirim tidak valid.']);
-            exit;
+        // Tentukan apakah ada tanggal kirim atau status Tunggu Tanggal Penyerahan
+        $hasTanggal = false;
+        $dbTanggalKirim = null;
+        $initialStatus = 'Tunggu Tanggal Penyerahan';
+        $logKeterangan = 'PO dicatat dalam tracking (Tunggu Tanggal Penyerahan)';
+
+        if (!empty($tanggalKirim)) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalKirim)) {
+                echo json_encode(['status' => 'error', 'message' => 'Format tanggal kirim tidak valid (YYYY-MM-DD).']);
+                exit;
+            }
+            $hasTanggal = true;
+            $dbTanggalKirim = $tanggalKirim;
+            $initialStatus = 'Diserahkan';
+            $logKeterangan = 'PO diserahkan ke direktur pada ' . $tanggalKirim;
         }
 
         // Cek duplikat: apakah ada PO yang sudah pernah diserahkan dan belum Approved
@@ -556,7 +623,7 @@ switch ($action) {
                       OUTPUT INSERTED.id
                       VALUES (?, ?, ?, GETDATE())";
         $stmtHeader = sqlsrv_query($conn, $sqlHeader, [
-            $tanggalKirim,
+            $dbTanggalKirim,
             $currentUser['formatted'],
             $currentUser['user']
         ]);
@@ -587,10 +654,10 @@ switch ($action) {
             $vendor = trim($item['povendorname'] ?? '-');
             $podate = !empty($item['podate_raw']) ? $item['podate_raw'] : null;
 
-            $sqlDetail = "INSERT INTO dbo.tracking_po_detail (header_id, ponmbr, pohdid, povendorname, podate, status, created_at)
+            $sqlDetail = "INSERT INTO dbo.tracking_po_detail (header_id, ponmbr, pohdid, povendorname, podate, tanggal_kirim, status, created_at)
                           OUTPUT INSERTED.id
-                          VALUES (?, ?, ?, ?, ?, 'Diserahkan', GETDATE())";
-            $stmtDetail = sqlsrv_query($conn, $sqlDetail, [$headerId, $ponmbr, $pohdid, $vendor, $podate]);
+                          VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())";
+            $stmtDetail = sqlsrv_query($conn, $sqlDetail, [$headerId, $ponmbr, $pohdid, $vendor, $podate, $dbTanggalKirim, $initialStatus]);
 
             if ($stmtDetail) {
                 // Get detail ID for log
@@ -602,25 +669,106 @@ switch ($action) {
                 // Insert log
                 if ($detailId > 0) {
                     sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-                        VALUES (?, 'Diserahkan', NULL, 'Diserahkan', ?, GETDATE(), ?)", [
+                        VALUES (?, ?, NULL, ?, ?, GETDATE(), ?)", [
                         $detailId,
+                        ($hasTanggal ? 'Diserahkan' : 'Catat Tracking'),
+                        $initialStatus,
                         $currentUser['formatted'],
-                        'PO diserahkan ke direktur pada ' . $tanggalKirim
+                        $logKeterangan
                     ]);
                 }
                 $insertedCount++;
             }
         }
 
+        $suksesMsg = $hasTanggal 
+            ? "{$insertedCount} PO berhasil dicatat sebagai diserahkan."
+            : "{$insertedCount} PO berhasil dicatat dengan status Tunggu Tanggal Penyerahan.";
+
         echo json_encode([
             'status' => 'ok',
-            'message' => "{$insertedCount} PO berhasil dicatat sebagai diserahkan.",
+            'message' => $suksesMsg,
             'header_id' => $headerId
         ]);
         break;
 
     // =====================================================================
-    // KONFIRMASI KEMBALI - Purchasing konfirmasi PO sudah kembali + TTD
+    // SET TANGGAL PENYERAHAN - Input tanggal penyerahan menyusul
+    // =====================================================================
+    case 'set_tanggal_penyerahan':
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+
+        $tanggalPenyerahan = trim($_POST['tanggal_penyerahan'] ?? $_POST['tanggal_kirim'] ?? '');
+        if (empty($tanggalPenyerahan) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalPenyerahan)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format tanggal penyerahan tidak valid (YYYY-MM-DD).']);
+            exit;
+        }
+
+        $detailIds = $_POST['detail_ids'] ?? [];
+        if (empty($detailIds) && !empty($_POST['detail_id'])) {
+            $detailIds = [(int)$_POST['detail_id']];
+        }
+        if (is_string($detailIds)) {
+            $detailIds = json_decode($detailIds, true) ?: explode(',', $detailIds);
+        }
+        $detailIds = array_values(array_unique(array_filter(array_map('intval', (array)$detailIds), function($v) { return $v > 0; })));
+
+        if (empty($detailIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 PO untuk diinput tanggal penyerahannya.']);
+            exit;
+        }
+
+        $successCount = 0;
+        foreach ($detailIds as $dId) {
+            $qCurrent = sqlsrv_query($conn, "SELECT d.id, d.header_id, d.status, d.ponmbr, h.tanggal_kirim AS header_tgl 
+                FROM dbo.tracking_po_detail d 
+                INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
+            if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+                continue;
+            }
+
+            $oldStatus = trim($rCurrent['status']);
+            $ponmbr = trim($rCurrent['ponmbr']);
+            $headerId = (int)$rCurrent['header_id'];
+
+            // Update tanggal_kirim pada detail dan ubah status selalu menjadi Diserahkan
+            $sqlUpd = "UPDATE dbo.tracking_po_detail 
+                       SET tanggal_kirim = ?, status = 'Diserahkan'
+                       WHERE id = ?";
+            $stmtUpd = sqlsrv_query($conn, $sqlUpd, [$tanggalPenyerahan, $dId]);
+
+            if ($stmtUpd) {
+                // Update header jika header tanggal_kirim masih NULL
+                if (empty($rCurrent['header_tgl'])) {
+                    sqlsrv_query($conn, "UPDATE dbo.tracking_po_header SET tanggal_kirim = ? WHERE id = ? AND tanggal_kirim IS NULL", [$tanggalPenyerahan, $headerId]);
+                }
+
+                // Log aktivitas
+                sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                    VALUES (?, 'Set Tanggal Penyerahan', ?, 'Diserahkan', ?, GETDATE(), ?)", [
+                    $dId, $oldStatus, $currentUser['formatted'],
+                    "Tanggal penyerahan diinput ({$tanggalPenyerahan}), status berubah menjadi Diserahkan."
+                ]);
+
+                $successCount++;
+            }
+        }
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => "{$successCount} PO berhasil diupdate tanggal penyerahannya dan statusnya menjadi Diserahkan.",
+            'count' => $successCount
+        ]);
+        break;
+
+    // =====================================================================
+    // KONFIRMASI KEMBALI - Purchasing konfirmasi PO sudah kembali
+    // Jika is_signed = 1: AUTO APPROVE ke ERP PostgreSQL & status -> Approved
+    // Jika is_signed = 0: status -> Sudah Kembali (bisa diserahkan kembali)
     // =====================================================================
     case 'konfirmasi_kembali':
         if (!$currentUser['can_confirm']) {
@@ -642,7 +790,7 @@ switch ($action) {
         }
 
         // Cek status saat ini
-        $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+        $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.approved_by FROM dbo.tracking_po_detail d 
             INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
             WHERE d.id = ? AND h.is_deleted = 0", [$detailId]);
         if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
@@ -652,45 +800,127 @@ switch ($action) {
 
         $oldStatus = trim($rCurrent['status']);
         $ponmbr = trim($rCurrent['ponmbr']);
+        $today = date('Y-m-d');
 
         if ($oldStatus !== 'Diserahkan') {
             echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} tidak dalam status Diserahkan (status saat ini: {$oldStatus})."]);
             exit;
         }
 
-        $newStatus = $isSigned ? 'Sudah TTD' : 'Sudah Kembali';
-        $today = date('Y-m-d');
+        if ($isSigned) {
+            // ─── AUTO APPROVE: Dokumen kembali & sudah TTD ───────────────────
+            if (!isset($conn3) || !$conn3) {
+                echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database ERP (PostgreSQL) tidak tersedia untuk Auto Approve.']);
+                exit;
+            }
 
-        $sqlUpdate = "UPDATE dbo.tracking_po_detail 
-                      SET status = ?, is_signed = ?, tanggal_kembali = ?, 
-                          konfirmasi_oleh = ?, konfirmasi_at = GETDATE(), catatan = ?
-                      WHERE id = ?";
-        $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
-            $newStatus, $isSigned, $today,
-            $currentUser['formatted'], $catatan,
-            $detailId
-        ]);
+            date_default_timezone_set('Asia/Jakarta');
+            $approveDate = date('Y-m-d H:i:s');
+            $approveBy = 'DAVID';
 
-        if (!$stmtUpdate) {
-            echo json_encode(['status' => 'error', 'message' => 'Gagal mengupdate status: ' . print_r(sqlsrv_errors(), true)]);
-            exit;
+            // 1. Update ke database ERP PostgreSQL (prpohd)
+            try {
+                $conn3->beginTransaction();
+
+                $sqlErp = "UPDATE prpohd 
+                              SET fgstatus    = 'V', 
+                                  approvedate = :approvedate, 
+                                  approveby   = :approveby 
+                            WHERE TRIM(ponmbr) = :ponmbr";
+                $stmtErp = $conn3->prepare($sqlErp);
+                $stmtErp->execute([
+                    ':approvedate' => $approveDate,
+                    ':approveby'   => $approveBy,
+                    ':ponmbr'      => $ponmbr
+                ]);
+
+                if ($stmtErp->rowCount() === 0) {
+                    $conn3->rollBack();
+                    echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} tidak ditemukan atau gagal di-approve di database ERP."]);
+                    exit;
+                }
+
+                $conn3->commit();
+            } catch (Exception $e) {
+                if ($conn3->inTransaction()) {
+                    $conn3->rollBack();
+                }
+                echo json_encode(['status' => 'error', 'message' => 'Gagal Auto Approve ke database ERP: ' . $e->getMessage()]);
+                exit;
+            }
+
+            // 2. Update status ke Approved di database SQL Server lokal
+            $sqlUpdate = "UPDATE dbo.tracking_po_detail 
+                          SET status = 'Approved', is_signed = 1, tanggal_kembali = ?, 
+                              konfirmasi_oleh = ?, konfirmasi_at = GETDATE(), 
+                              approved_by = ?, approved_at = GETDATE(), catatan = ?
+                          WHERE id = ?";
+            $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
+                $today,
+                $currentUser['formatted'],
+                $currentUser['formatted'],
+                $catatan,
+                $detailId
+            ]);
+
+            if (!$stmtUpdate) {
+                // Rollback ERP jika update SQL Server lokal gagal
+                try {
+                    $conn3->beginTransaction();
+                    $rollbackErp = $conn3->prepare("UPDATE prpohd SET fgstatus = 'O', approvedate = NULL, approveby = NULL WHERE TRIM(ponmbr) = :ponmbr");
+                    $rollbackErp->execute([':ponmbr' => $ponmbr]);
+                    $conn3->commit();
+                } catch (Exception $ex) {}
+
+                echo json_encode(['status' => 'error', 'message' => 'Gagal mengupdate status tracking: ' . print_r(sqlsrv_errors(), true)]);
+                exit;
+            }
+
+            // 3. Insert Log
+            $ketLog = "Dokumen PO {$ponmbr} sudah kembali dan ditandatangani. Auto Approved di ERP (fgstatus='V', approveby='{$approveBy}').";
+            if (!empty($catatan)) $ketLog .= " Catatan: {$catatan}";
+
+            sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                VALUES (?, 'Konfirmasi Kembali', ?, 'Approved', ?, GETDATE(), ?)", [
+                $detailId, $oldStatus, $currentUser['formatted'], $ketLog
+            ]);
+
+            echo json_encode([
+                'status' => 'ok',
+                'message' => "PO {$ponmbr} berhasil dikonfirmasi dan Auto Approved di ERP."
+            ]);
+        } else {
+            // ─── BELUM DITANDATANGANI: Status menjadi 'Sudah Kembali' ────────
+            $sqlUpdate = "UPDATE dbo.tracking_po_detail 
+                          SET status = 'Sudah Kembali', is_signed = 0, tanggal_kembali = ?, 
+                              konfirmasi_oleh = ?, konfirmasi_at = GETDATE(), catatan = ?
+                          WHERE id = ?";
+            $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
+                $today,
+                $currentUser['formatted'],
+                $catatan,
+                $detailId
+            ]);
+
+            if (!$stmtUpdate) {
+                echo json_encode(['status' => 'error', 'message' => 'Gagal mengupdate status: ' . print_r(sqlsrv_errors(), true)]);
+                exit;
+            }
+
+            // Insert Log
+            $ketLog = "Dokumen PO {$ponmbr} sudah kembali tapi BELUM ditandatangani.";
+            if (!empty($catatan)) $ketLog .= " Catatan: {$catatan}";
+
+            sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                VALUES (?, 'Konfirmasi Kembali', ?, 'Sudah Kembali', ?, GETDATE(), ?)", [
+                $detailId, $oldStatus, $currentUser['formatted'], $ketLog
+            ]);
+
+            echo json_encode([
+                'status' => 'ok',
+                'message' => "PO {$ponmbr} berhasil dikonfirmasi: Sudah Kembali (Belum TTD)."
+            ]);
         }
-
-        // Insert log
-        $ketLog = $isSigned
-            ? "Dokumen PO {$ponmbr} sudah kembali dan SUDAH ditandatangani."
-            : "Dokumen PO {$ponmbr} sudah kembali tapi BELUM ditandatangani.";
-        if (!empty($catatan)) $ketLog .= " Catatan: {$catatan}";
-
-        sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-            VALUES (?, 'Konfirmasi Kembali', ?, ?, ?, GETDATE(), ?)", [
-            $detailId, $oldStatus, $newStatus, $currentUser['formatted'], $ketLog
-        ]);
-
-        echo json_encode([
-            'status' => 'ok',
-            'message' => "PO {$ponmbr} berhasil dikonfirmasi: {$newStatus}."
-        ]);
         break;
 
     // =====================================================================
@@ -718,12 +948,254 @@ switch ($action) {
         }
 
         $isSigned = (int)($_POST['is_signed'] ?? 0); // 1 = sudah TTD, 0 = belum TTD
-        $newStatus = $isSigned ? 'Sudah TTD' : 'Sudah Kembali';
         $today = date('Y-m-d');
         $successCount = 0;
 
+        if ($isSigned) {
+            // Auto Approve Massal ke ERP PostgreSQL
+            if (!isset($conn3) || !$conn3) {
+                echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database ERP tidak tersedia untuk Auto Approve.']);
+                exit;
+            }
+
+            date_default_timezone_set('Asia/Jakarta');
+            $approveDate = date('Y-m-d H:i:s');
+            $approveBy = 'DAVID';
+
+            foreach ($detailIds as $dId) {
+                $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.approved_by FROM dbo.tracking_po_detail d 
+                    INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                    WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
+                if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+                    continue;
+                }
+
+                $oldStatus = trim($rCurrent['status']);
+                $ponmbr = trim($rCurrent['ponmbr']);
+
+                if ($oldStatus !== 'Diserahkan') {
+                    continue;
+                }
+
+                // Update ERP
+                try {
+                    $conn3->beginTransaction();
+                    $stmtErp = $conn3->prepare("UPDATE prpohd SET fgstatus = 'V', approvedate = :approvedate, approveby = :approveby WHERE TRIM(ponmbr) = :ponmbr");
+                    $stmtErp->execute([
+                        ':approvedate' => $approveDate,
+                        ':approveby'   => $approveBy,
+                        ':ponmbr'      => $ponmbr
+                    ]);
+                    if ($stmtErp->rowCount() === 0) {
+                        $conn3->rollBack();
+                        continue;
+                    }
+                    $conn3->commit();
+                } catch (Exception $e) {
+                    if ($conn3->inTransaction()) {
+                        $conn3->rollBack();
+                    }
+                    continue;
+                }
+
+                $sqlUpdate = "UPDATE dbo.tracking_po_detail 
+                              SET status = 'Approved', is_signed = 1, tanggal_kembali = ?, 
+                                  konfirmasi_oleh = ?, konfirmasi_at = GETDATE(), 
+                                  approved_by = ?, approved_at = GETDATE()
+                              WHERE id = ?";
+                $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
+                    $today,
+                    $currentUser['formatted'],
+                    $currentUser['formatted'],
+                    $dId
+                ]);
+
+                if ($stmtUpdate) {
+                    $ketLog = "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali dan ditandatangani. Auto Approved di ERP (fgstatus='V', approveby='{$approveBy}').";
+                    sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                        VALUES (?, 'Konfirmasi Kembali', ?, 'Approved', ?, GETDATE(), ?)", [
+                        $dId, $oldStatus, $currentUser['formatted'], $ketLog
+                    ]);
+                    $successCount++;
+                } else {
+                    // Rollback ERP jika update SQL Server gagal
+                    try {
+                        $conn3->beginTransaction();
+                        $rollbackErp = $conn3->prepare("UPDATE prpohd SET fgstatus = 'O', approvedate = NULL, approveby = NULL WHERE TRIM(ponmbr) = :ponmbr");
+                        $rollbackErp->execute([':ponmbr' => $ponmbr]);
+                        $conn3->commit();
+                    } catch (Exception $ex) {}
+                }
+            }
+
+            echo json_encode([
+                'status' => 'ok',
+                'message' => "{$successCount} PO berhasil dikonfirmasi dan Auto Approved di ERP.",
+                'count' => $successCount
+            ]);
+        } else {
+            // Konfirmasi massal belum TTD -> status menjadi 'Sudah Kembali'
+            foreach ($detailIds as $dId) {
+                $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+                    INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+                    WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
+                if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+                    continue;
+                }
+
+                $oldStatus = trim($rCurrent['status']);
+                $ponmbr = trim($rCurrent['ponmbr']);
+
+                if ($oldStatus !== 'Diserahkan') {
+                    continue;
+                }
+
+                $sqlUpdate = "UPDATE dbo.tracking_po_detail 
+                              SET status = 'Sudah Kembali', is_signed = 0, tanggal_kembali = ?, 
+                                  konfirmasi_oleh = ?, konfirmasi_at = GETDATE()
+                              WHERE id = ?";
+                $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
+                    $today,
+                    $currentUser['formatted'],
+                    $dId
+                ]);
+
+                if ($stmtUpdate) {
+                    $ketLog = "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali tapi BELUM ditandatangani.";
+                    sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                        VALUES (?, 'Konfirmasi Kembali', ?, 'Sudah Kembali', ?, GETDATE(), ?)", [
+                        $dId, $oldStatus, $currentUser['formatted'], $ketLog
+                    ]);
+                    $successCount++;
+                }
+            }
+
+            echo json_encode([
+                'status' => 'ok',
+                'message' => "{$successCount} PO berhasil dikonfirmasi sebagai Sudah Kembali.",
+                'count' => $successCount
+            ]);
+        }
+        break;
+
+    // =====================================================================
+    // SERAHKAN KEMBALI - Purchasing serahkan kembali PO ke Direktur
+    // Khusus PO berstatus 'Sudah Kembali' (kembali belum ditandatangani)
+    // =====================================================================
+    case 'serahkan_kembali':
+        if (!$currentUser['can_confirm']) {
+            echo json_encode(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk menyerahkan kembali PO.']);
+            exit;
+        }
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+
+        $detailId = (int)($_POST['detail_id'] ?? 0);
+        $tanggalPenyerahan = trim($_POST['tanggal_penyerahan'] ?? '');
+        $catatan = trim($_POST['catatan'] ?? '');
+
+        if ($detailId <= 0) {
+            echo json_encode(['status' => 'error', 'message' => 'ID detail tidak valid.']);
+            exit;
+        }
+
+        if (empty($tanggalPenyerahan)) {
+            $tanggalPenyerahan = date('Y-m-d');
+        } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalPenyerahan)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format tanggal penyerahan tidak valid (harus YYYY-MM-DD).']);
+            exit;
+        }
+
+        // Cek status saat ini
+        $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.catatan FROM dbo.tracking_po_detail d 
+            INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
+            WHERE d.id = ? AND h.is_deleted = 0", [$detailId]);
+        if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
+            echo json_encode(['status' => 'error', 'message' => 'Data PO tidak ditemukan.']);
+            exit;
+        }
+
+        $oldStatus = trim($rCurrent['status']);
+        $ponmbr = trim($rCurrent['ponmbr']);
+
+        if ($oldStatus !== 'Sudah Kembali') {
+            echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} tidak dalam status 'Sudah Kembali' (status saat ini: {$oldStatus})."]);
+            exit;
+        }
+
+        $catatanUpdate = !empty($catatan) ? $catatan : $rCurrent['catatan'];
+
+        $sqlUpd = "UPDATE dbo.tracking_po_detail 
+                   SET status = 'Diserahkan', 
+                       tanggal_kirim = ?, 
+                       tanggal_kembali = NULL, 
+                       konfirmasi_oleh = NULL, 
+                       konfirmasi_at = NULL, 
+                       is_signed = 0,
+                       catatan = ?
+                   WHERE id = ?";
+        $stmtUpd = sqlsrv_query($conn, $sqlUpd, [$tanggalPenyerahan, $catatanUpdate, $detailId]);
+
+        if (!$stmtUpd) {
+            echo json_encode(['status' => 'error', 'message' => 'Gagal menyerahkan kembali PO: ' . print_r(sqlsrv_errors(), true)]);
+            exit;
+        }
+
+        $tglFmt = date('d/m/Y', strtotime($tanggalPenyerahan));
+        $ketLog = "PO {$ponmbr} diserahkan kembali ke Direktur pada tanggal {$tglFmt}.";
+        if (!empty($catatan)) $ketLog .= " Catatan: {$catatan}";
+
+        sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+            VALUES (?, 'Serahkan Kembali', 'Sudah Kembali', 'Diserahkan', ?, GETDATE(), ?)", [
+            $detailId, $currentUser['formatted'], $ketLog
+        ]);
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => "PO {$ponmbr} berhasil diserahkan kembali ke Direktur (status menjadi Diserahkan)."
+        ]);
+        break;
+
+    // =====================================================================
+    // BATCH SERAHKAN KEMBALI - Serahkan kembali banyak PO sekaligus
+    // =====================================================================
+    case 'batch_serahkan_kembali':
+        if (!$currentUser['can_confirm']) {
+            echo json_encode(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk aksi ini.']);
+            exit;
+        }
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+
+        $detailIds = $_POST['detail_ids'] ?? [];
+        if (is_string($detailIds)) {
+            $detailIds = json_decode($detailIds, true) ?: explode(',', $detailIds);
+        }
+        $detailIds = array_values(array_unique(array_filter(array_map('intval', (array)$detailIds), function($v) { return $v > 0; })));
+
+        if (empty($detailIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 PO untuk diserahkan kembali.']);
+            exit;
+        }
+
+        $tanggalPenyerahan = trim($_POST['tanggal_penyerahan'] ?? '');
+        if (empty($tanggalPenyerahan)) {
+            $tanggalPenyerahan = date('Y-m-d');
+        } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalPenyerahan)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format tanggal penyerahan tidak valid (harus YYYY-MM-DD).']);
+            exit;
+        }
+
+        $catatan = trim($_POST['catatan'] ?? '');
+        $tglFmt = date('d/m/Y', strtotime($tanggalPenyerahan));
+        $successCount = 0;
+
         foreach ($detailIds as $dId) {
-            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.catatan FROM dbo.tracking_po_detail d 
                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
                 WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
             if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
@@ -733,29 +1205,30 @@ switch ($action) {
             $oldStatus = trim($rCurrent['status']);
             $ponmbr = trim($rCurrent['ponmbr']);
 
-            // Hanya proses yang statusnya 'Diserahkan'
-            if ($oldStatus !== 'Diserahkan') {
+            if ($oldStatus !== 'Sudah Kembali') {
                 continue;
             }
 
-            $sqlUpdate = "UPDATE dbo.tracking_po_detail 
-                          SET status = ?, is_signed = ?, tanggal_kembali = ?, 
-                              konfirmasi_oleh = ?, konfirmasi_at = GETDATE()
-                          WHERE id = ?";
-            $stmtUpdate = sqlsrv_query($conn, $sqlUpdate, [
-                $newStatus, $isSigned, $today,
-                $currentUser['formatted'],
-                $dId
-            ]);
+            $catatanUpdate = !empty($catatan) ? $catatan : $rCurrent['catatan'];
 
-            if ($stmtUpdate) {
-                $ketLog = $isSigned
-                    ? "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali dan SUDAH ditandatangani."
-                    : "Konfirmasi massal: Dokumen PO {$ponmbr} sudah kembali tapi BELUM ditandatangani.";
+            $sqlUpd = "UPDATE dbo.tracking_po_detail 
+                       SET status = 'Diserahkan', 
+                           tanggal_kirim = ?, 
+                           tanggal_kembali = NULL, 
+                           konfirmasi_oleh = NULL, 
+                           konfirmasi_at = NULL, 
+                           is_signed = 0,
+                           catatan = ?
+                       WHERE id = ?";
+            $stmtUpd = sqlsrv_query($conn, $sqlUpd, [$tanggalPenyerahan, $catatanUpdate, $dId]);
+
+            if ($stmtUpd) {
+                $ketLog = "Penyerahan kembali massal: PO {$ponmbr} diserahkan kembali ke Direktur pada tanggal {$tglFmt}.";
+                if (!empty($catatan)) $ketLog .= " Catatan: {$catatan}";
 
                 sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-                    VALUES (?, 'Konfirmasi Kembali', ?, ?, ?, GETDATE(), ?)", [
-                    $dId, $oldStatus, $newStatus, $currentUser['formatted'], $ketLog
+                    VALUES (?, 'Serahkan Kembali', 'Sudah Kembali', 'Diserahkan', ?, GETDATE(), ?)", [
+                    $dId, $currentUser['formatted'], $ketLog
                 ]);
                 $successCount++;
             }
@@ -763,13 +1236,13 @@ switch ($action) {
 
         echo json_encode([
             'status' => 'ok',
-            'message' => "{$successCount} PO berhasil dikonfirmasi sebagai {$newStatus}.",
+            'message' => "{$successCount} PO berhasil diserahkan kembali ke Direktur (status menjadi Diserahkan).",
             'count' => $successCount
         ]);
         break;
 
     // =====================================================================
-    // APPROVE - IT approve PO yang sudah TTD (Sinkronisasi ke ERP PostgreSQL & SQL Server)
+    // APPROVE - IT approve PO yang sudah TTD atau Tunggu Tanggal Penyerahan
     // =====================================================================
     case 'approve':
         if (!$currentUser['can_approve']) {
@@ -792,7 +1265,7 @@ switch ($action) {
         }
 
         // Cek status saat ini
-        $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+        $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.approved_by FROM dbo.tracking_po_detail d 
             INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
             WHERE d.id = ? AND h.is_deleted = 0", [$detailId]);
         if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
@@ -803,8 +1276,13 @@ switch ($action) {
         $oldStatus = trim($rCurrent['status']);
         $ponmbr = trim($rCurrent['ponmbr']);
 
-        if ($oldStatus !== 'Sudah TTD') {
-            echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} harus berstatus 'Sudah TTD' untuk di-approve (status saat ini: {$oldStatus})."]);
+        if (!empty($rCurrent['approved_by'])) {
+            echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} sudah pernah di-approve."]);
+            exit;
+        }
+
+        if (!in_array($oldStatus, ['Sudah TTD', 'Tunggu Tanggal Penyerahan'])) {
+            echo json_encode(['status' => 'error', 'message' => "PO {$ponmbr} harus berstatus 'Sudah TTD' atau 'Tunggu Tanggal Penyerahan' untuk di-approve (status saat ini: {$oldStatus})."]);
             exit;
         }
 
@@ -843,10 +1321,20 @@ switch ($action) {
             exit;
         }
 
-        // 2. Update status ke Approved di database SQL Server lokal
-        $sqlApprove = "UPDATE dbo.tracking_po_detail 
-                       SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
-                       WHERE id = ?";
+        // 2. Update status di database SQL Server lokal
+        // Jika Sudah TTD -> status jadi Approved. Jika Tunggu Tanggal Penyerahan -> status tetap Tunggu Tanggal Penyerahan (namun tercatat approved_by)
+        if ($oldStatus === 'Sudah TTD') {
+            $sqlApprove = "UPDATE dbo.tracking_po_detail 
+                           SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
+                           WHERE id = ?";
+            $targetStatus = 'Approved';
+        } else {
+            $sqlApprove = "UPDATE dbo.tracking_po_detail 
+                           SET approved_by = ?, approved_at = GETDATE()
+                           WHERE id = ?";
+            $targetStatus = 'Tunggu Tanggal Penyerahan';
+        }
+
         $stmtApprove = sqlsrv_query($conn, $sqlApprove, [$currentUser['formatted'], $detailId]);
 
         if (!$stmtApprove) {
@@ -863,15 +1351,23 @@ switch ($action) {
         }
 
         // 3. Insert log
+        $logKet = ($oldStatus === 'Sudah TTD')
+            ? "PO {$ponmbr} di-approve oleh IT (ERP diupdate fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
+            : "PO {$ponmbr} berstatus Tunggu Tanggal Penyerahan telah di-approve oleh IT di ERP (fgstatus='V'). Status tetap Tunggu Tanggal Penyerahan hingga diserahkan fisik.";
+
         sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-            VALUES (?, 'Approve', ?, 'Approved', ?, GETDATE(), ?)", [
-            $detailId, $oldStatus, $currentUser['formatted'],
-            "PO {$ponmbr} di-approve oleh IT (ERP diupdate fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
+            VALUES (?, 'Approve', ?, ?, ?, GETDATE(), ?)", [
+            $detailId, $oldStatus, $targetStatus, $currentUser['formatted'],
+            $logKet
         ]);
+
+        $respMsg = ($oldStatus === 'Sudah TTD')
+            ? "PO {$ponmbr} berhasil di-approve di sistem Tracking & ERP."
+            : "PO {$ponmbr} berhasil di-approve di sistem ERP (status tetap Tunggu Tanggal Penyerahan sampai dokumen fisik diserahkan).";
 
         echo json_encode([
             'status' => 'ok',
-            'message' => "PO {$ponmbr} berhasil di-approve di sistem Tracking & ERP."
+            'message' => $respMsg
         ]);
         break;
 
@@ -919,7 +1415,7 @@ switch ($action) {
         $stmtErp = $conn3->prepare($sqlErp);
 
         foreach ($detailIds as $dId) {
-            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr FROM dbo.tracking_po_detail d 
+            $qCurrent = sqlsrv_query($conn, "SELECT d.status, d.ponmbr, d.approved_by FROM dbo.tracking_po_detail d 
                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id 
                 WHERE d.id = ? AND h.is_deleted = 0", [$dId]);
             if (!$qCurrent || !($rCurrent = sqlsrv_fetch_array($qCurrent, SQLSRV_FETCH_ASSOC))) {
@@ -929,8 +1425,11 @@ switch ($action) {
             $oldStatus = trim($rCurrent['status']);
             $ponmbr = trim($rCurrent['ponmbr']);
 
-            // Hanya proses yang statusnya 'Sudah TTD'
-            if ($oldStatus !== 'Sudah TTD') {
+            // Hanya proses yang statusnya 'Sudah TTD' atau 'Tunggu Tanggal Penyerahan' dan belum pernah di-approve
+            if (!in_array($oldStatus, ['Sudah TTD', 'Tunggu Tanggal Penyerahan'])) {
+                continue;
+            }
+            if (!empty($rCurrent['approved_by'])) {
                 continue;
             }
 
@@ -956,16 +1455,29 @@ switch ($action) {
             }
 
             // 2. Update ke SQL Server lokal
-            $sqlApprove = "UPDATE dbo.tracking_po_detail 
-                           SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
-                           WHERE id = ?";
+            if ($oldStatus === 'Sudah TTD') {
+                $sqlApprove = "UPDATE dbo.tracking_po_detail 
+                               SET status = 'Approved', approved_by = ?, approved_at = GETDATE()
+                               WHERE id = ?";
+                $targetStatus = 'Approved';
+            } else {
+                $sqlApprove = "UPDATE dbo.tracking_po_detail 
+                               SET approved_by = ?, approved_at = GETDATE()
+                               WHERE id = ?";
+                $targetStatus = 'Tunggu Tanggal Penyerahan';
+            }
+
             $stmtApprove = sqlsrv_query($conn, $sqlApprove, [$currentUser['formatted'], $dId]);
 
             if ($stmtApprove) {
+                $logKet = ($oldStatus === 'Sudah TTD')
+                    ? "Approve massal: PO {$ponmbr} di-approve oleh IT (ERP fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
+                    : "Approve massal: PO {$ponmbr} (Tunggu Tanggal Penyerahan) di-approve oleh IT di ERP fgstatus='V'.";
+
                 sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-                    VALUES (?, 'Approve', ?, 'Approved', ?, GETDATE(), ?)", [
-                    $dId, $oldStatus, $currentUser['formatted'],
-                    "Approve massal: PO {$ponmbr} di-approve oleh IT (ERP fgstatus='V', approvedate={$approveDate}, approveby={$approveBy})."
+                    VALUES (?, 'Approve', ?, ?, ?, GETDATE(), ?)", [
+                    $dId, $oldStatus, $targetStatus, $currentUser['formatted'],
+                    $logKet
                 ]);
                 $successCount++;
             } else {
@@ -1055,6 +1567,83 @@ switch ($action) {
         echo json_encode([
             'status' => 'ok',
             'message' => "Data tracking untuk PO {$ponmbr} berhasil dihapus."
+        ]);
+        break;
+
+    // =====================================================================
+    // BATCH DELETE TRACKING - Hapus banyak data tracking PO sekaligus
+    // =====================================================================
+    case 'batch_delete_tracking':
+        if (!$currentUser['can_delete']) {
+            echo json_encode(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk menghapus data tracking PO.']);
+            exit;
+        }
+        if (!$tableReady) {
+            echo json_encode(['status' => 'error', 'message' => 'Tabel tracking_po belum tersedia.']);
+            exit;
+        }
+
+        $detailIds = $_POST['detail_ids'] ?? [];
+        if (is_string($detailIds)) {
+            $detailIds = json_decode($detailIds, true) ?: explode(',', $detailIds);
+        }
+        $detailIds = array_values(array_unique(array_filter(array_map('intval', (array)$detailIds), function($v) { return $v > 0; })));
+
+        if (empty($detailIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 data tracking PO untuk dihapus.']);
+            exit;
+        }
+
+        $deletedCount = 0;
+        $skippedApprovedCount = 0;
+        $affectedHeaderIds = [];
+
+        foreach ($detailIds as $dId) {
+            $qDetail = sqlsrv_query($conn, "SELECT d.id, d.header_id, d.ponmbr, d.status 
+                FROM dbo.tracking_po_detail d 
+                WHERE d.id = ?", [$dId]);
+            if (!$qDetail || !($rDetail = sqlsrv_fetch_array($qDetail, SQLSRV_FETCH_ASSOC))) {
+                continue;
+            }
+
+            $status = trim($rDetail['status']);
+            $headerId = (int)$rDetail['header_id'];
+
+            // Jika status sudah Approved dan bukan Admin, lewati
+            if ($status === 'Approved' && !$currentUser['is_admin']) {
+                $skippedApprovedCount++;
+                continue;
+            }
+
+            $stmtDel = sqlsrv_query($conn, "DELETE FROM dbo.tracking_po_detail WHERE id = ?", [$dId]);
+            if ($stmtDel) {
+                $deletedCount++;
+                if ($headerId > 0) {
+                    $affectedHeaderIds[$headerId] = true;
+                }
+            }
+        }
+
+        // Bersihkan header yang sekarang sudah tidak memiliki detail
+        foreach (array_keys($affectedHeaderIds) as $hId) {
+            $qRemain = sqlsrv_query($conn, "SELECT COUNT(*) AS total FROM dbo.tracking_po_detail WHERE header_id = ?", [$hId]);
+            if ($qRemain && ($rRemain = sqlsrv_fetch_array($qRemain, SQLSRV_FETCH_ASSOC))) {
+                if ((int)$rRemain['total'] === 0) {
+                    sqlsrv_query($conn, "DELETE FROM dbo.tracking_po_header WHERE id = ?", [$hId]);
+                }
+            }
+        }
+
+        $msg = "{$deletedCount} data tracking PO berhasil dihapus.";
+        if ($skippedApprovedCount > 0) {
+            $msg .= " ({$skippedApprovedCount} data berstatus 'Approved' dilewati karena hanya Administrator yang dapat menghapusnya).";
+        }
+
+        echo json_encode([
+            'status' => 'ok',
+            'message' => $msg,
+            'deleted_count' => $deletedCount,
+            'skipped_count' => $skippedApprovedCount
         ]);
         break;
 

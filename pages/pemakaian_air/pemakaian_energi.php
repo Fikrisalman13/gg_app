@@ -86,8 +86,14 @@ $menus = [
     ],
     [
         'title' => 'Air dan Steam 20 Ton Lonchuan',
-        'subtitle' => 'Input per jam dan rekap harian laju sesaat boiler Lonchuan',
+        'subtitle' => 'Pemakaian meter air boiler dan meter steam boiler area 20 ton Lonchuan',
         'file' => '/gg_app/pages/pemakaian_air/20tlonchuan/20tlonchuan.php',
+        'icon' => 'fa-fire'
+    ],
+    [
+        'title' => 'Air dan Steam 20 Ton Lonchuan V2',
+        'subtitle' => 'Pemakaian meter air boiler dan meter steam boiler area 20 ton Lonchuan',
+        'file' => '/gg_app/pages/pemakaian_air/20tlonchuan_v2/20tlonchuan.php',
         'icon' => 'fa-fire'
     ],
     [

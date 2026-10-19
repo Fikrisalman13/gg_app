@@ -12,19 +12,8 @@ if (!empty($permissions) && isset($permissions['CanDelete']) && $permissions['Ca
 $id = intval($_POST['id'] ?? 0);
 if ($id <= 0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
 
-sqlsrv_begin_transaction($conn);
-try {
-    $delDtl = sqlsrv_query($conn, "DELETE FROM dbo.pmlonchuan_dtl WHERE hdr_id=?", [$id]);
-    if ($delDtl === false) throw new Exception('Gagal menghapus detail.');
-    if ($delDtl) sqlsrv_free_stmt($delDtl);
+$stmt = sqlsrv_query($conn, "DELETE FROM dbo.air_steam_20tlonchuan_harian WHERE id=?", [$id]);
+if ($stmt === false) { echo json_encode(['success'=>false,'message'=>'Gagal menghapus data: ' . print_r(sqlsrv_errors(), true)]); exit; }
+if ($stmt) sqlsrv_free_stmt($stmt);
 
-    $delHdr = sqlsrv_query($conn, "DELETE FROM dbo.pmlonchuan_hdr WHERE id=?", [$id]);
-    if ($delHdr === false) throw new Exception('Gagal menghapus header.');
-    if ($delHdr) sqlsrv_free_stmt($delHdr);
-
-    sqlsrv_commit($conn);
-    echo json_encode(['success'=>true,'message'=>'Data berhasil dihapus.']);
-} catch (Exception $e) {
-    sqlsrv_rollback($conn);
-    echo json_encode(['success'=>false,'message'=>$e->getMessage()]);
-}
+echo json_encode(['success'=>true,'message'=>'Data berhasil dihapus.']);

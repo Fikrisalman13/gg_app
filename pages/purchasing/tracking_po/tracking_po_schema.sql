@@ -16,7 +16,7 @@ IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[tr
 BEGIN
     CREATE TABLE [dbo].[tracking_po_header] (
         [id]              BIGINT IDENTITY(1,1) NOT NULL,
-        [tanggal_kirim]   DATE NOT NULL CONSTRAINT [DF_tracking_po_header_tanggal_kirim] DEFAULT (CAST(GETDATE() AS DATE)),
+        [tanggal_kirim]   DATE NULL,
         [diserahkan_oleh] NVARCHAR(200) NOT NULL,
         [created_by]      VARCHAR(100) NULL,
         [created_at]      DATETIME NOT NULL CONSTRAINT [DF_tracking_po_header_created_at] DEFAULT (GETDATE()),
@@ -36,7 +36,7 @@ GO
 -- ------------------------------------------------------------------------------
 -- 2. TABEL DETAIL: dbo.tracking_po_detail
 -- Menyimpan detail per-PO yang diserahkan dalam batch pengiriman
--- Status: Diserahkan, Sudah Kembali, Sudah TTD, Approved
+-- Status: Tunggu Tanggal Penyerahan, Diserahkan, Sudah Kembali, Sudah TTD, Approved
 -- Note: "Belum Kembali" bukan status di DB, melainkan status otomatis di UI
 --       (Diserahkan yang tanggal_kirim < hari ini dan belum dikonfirmasi kembali)
 -- ------------------------------------------------------------------------------
@@ -49,6 +49,7 @@ BEGIN
         [pohdid]          INT NULL,
         [povendorname]    NVARCHAR(255) NULL,
         [podate]          DATE NULL,
+        [tanggal_kirim]   DATE NULL,
         [status]          VARCHAR(50) NOT NULL CONSTRAINT [DF_tracking_po_detail_status] DEFAULT ('Diserahkan'),
         [is_signed]       BIT NOT NULL CONSTRAINT [DF_tracking_po_detail_is_signed] DEFAULT (0),
         [tanggal_kembali] DATE NULL,
@@ -127,3 +128,13 @@ GO
 
 PRINT '=== Schema Tracking PO selesai. ===';
 GO
+
+-- ------------------------------------------------------------------------------
+-- 5. QUERY MIGRASI (Jika tabel sudah ada sebelumnya di server production)
+-- ------------------------------------------------------------------------------
+-- ALTER TABLE [dbo].[tracking_po_header] ALTER COLUMN [tanggal_kirim] DATE NULL;
+-- IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[tracking_po_detail]') AND name = 'tanggal_kirim')
+-- BEGIN
+--     ALTER TABLE [dbo].[tracking_po_detail] ADD [tanggal_kirim] DATE NULL;
+-- END
+-- GO

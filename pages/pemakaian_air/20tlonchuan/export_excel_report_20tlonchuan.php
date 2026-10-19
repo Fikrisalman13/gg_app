@@ -9,74 +9,35 @@ requireView($conn, $menuId);
 $start = trim($_POST['start_date'] ?? date('Y-m-01'));
 $end = trim($_POST['end_date'] ?? date('Y-m-d'));
 
-$sql = "SELECT CAST(h.periode AS DATE) AS tanggal,
-               CAST(d.jam AS INT) AS jam,
-               ISNULL(SUM(CASE WHEN d.jenis='AIR' THEN d.nilai_ton ELSE 0 END),0) AS jumlah_air_ton,
-               ISNULL(SUM(CASE WHEN d.jenis='STEAM' THEN d.nilai_ton ELSE 0 END),0) AS jumlah_steam_ton
-        FROM dbo.pmlonchuan_hdr h
-        INNER JOIN dbo.pmlonchuan_dtl d ON d.hdr_id = h.id
-        WHERE CAST(h.periode AS DATE) BETWEEN ? AND ?
-        GROUP BY CAST(h.periode AS DATE), CAST(d.jam AS INT)
-        ORDER BY CAST(h.periode AS DATE) ASC,
-                 CASE
-                   WHEN CAST(d.jam AS INT) >= 9 THEN CAST(d.jam AS INT) - 9
-                   ELSE CAST(d.jam AS INT) + 15
-                 END ASC";
+$sql = "SELECT CAST(tanggal AS DATE) AS tanggal, *
+        FROM dbo.air_steam_20tlonchuan_harian
+        WHERE CAST(tanggal AS DATE) BETWEEN ? AND ?
+        ORDER BY CAST(tanggal AS DATE) ASC, id ASC";
 $stmt = sqlsrv_query($conn, $sql, [$start, $end]);
 $rows = [];
 if ($stmt) {
     while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         $dateObj = $r['tanggal'] ?? null;
         $r['tanggal'] = ($dateObj instanceof DateTime) ? $dateObj->format('Y-m-d') : date('Y-m-d', strtotime((string)$dateObj));
-        $r['jam'] = isset($r['jam']) ? (int)$r['jam'] : null;
         $rows[] = $r;
     }
     sqlsrv_free_stmt($stmt);
 }
 
-$groupedRows = [];
+$airKeys = ['air_awal_ton','air_akhir_ton','air_total_pemakaian_ton','air_rata_rata_per_jam_ton'];
+$steamKeys = ['steam_awal_ton','steam_akhir_ton','steam_total_pemakaian_ton','steam_rata_rata_per_jam_ton'];
+$totAir = array_fill_keys($airKeys, 0);
+$totSteam = array_fill_keys($steamKeys, 0);
 foreach ($rows as $r) {
-    $dateKey = (string)($r['tanggal'] ?? '');
-    if ($dateKey === '') continue;
-    if (!isset($groupedRows[$dateKey])) {
-        $groupedRows[$dateKey] = [
-            'tanggal' => $dateKey,
-            'rows' => [],
-            'tot_air' => 0,
-            'tot_steam' => 0,
-            'avg_air' => 0,
-            'avg_steam' => 0,
-        ];
-    }
-    $air = (float)($r['jumlah_air_ton'] ?? 0);
-    $steam = (float)($r['jumlah_steam_ton'] ?? 0);
-    $groupedRows[$dateKey]['rows'][] = [
-        'jam' => $r['jam'] ?? null,
-        'jumlah_air_ton' => $air,
-        'jumlah_steam_ton' => $steam,
-    ];
-    $groupedRows[$dateKey]['tot_air'] += $air;
-    $groupedRows[$dateKey]['tot_steam'] += $steam;
+    foreach ($airKeys as $k) $totAir[$k] += (float)($r[$k] ?? 0);
+    foreach ($steamKeys as $k) $totSteam[$k] += (float)($r[$k] ?? 0);
 }
-foreach ($groupedRows as &$g) {
-    $dayCount = count($g['rows']);
-    $g['avg_air'] = $dayCount > 0 ? ($g['tot_air'] / $dayCount) : 0;
-    $g['avg_steam'] = $dayCount > 0 ? ($g['tot_steam'] / $dayCount) : 0;
-}
-unset($g);
+$rowCount = count($rows);
+$avgAir = []; foreach ($airKeys as $k) $avgAir[$k] = $rowCount > 0 ? ($totAir[$k] / $rowCount) : 0;
+$avgSteam = []; foreach ($steamKeys as $k) $avgSteam[$k] = $rowCount > 0 ? ($totSteam[$k] / $rowCount) : 0;
 
-$fmtNum = function ($val, $dec = 2) {
-    if (!is_numeric($val)) return '';
-    $str = number_format((float)$val, $dec, '.', ',');
-    return rtrim(rtrim($str, '0'), '.');
-};
+$fmtNum = function ($val, $dec = 2) { return number_format((float)$val, $dec, '.', ','); };
 $fmtDay = function ($ymd) { return $ymd ? date('j', strtotime($ymd)) : ''; };
-$fmtHour = function ($jam) {
-    if ($jam === null || $jam === '' || !is_numeric($jam)) return '';
-    $j = (int)$jam;
-    if ($j < 0 || $j > 23) return '';
-    return str_pad((string)$j, 2, '0', STR_PAD_LEFT) . ':00';
-};
 
 $monthMap = ['January'=>'JANUARI','February'=>'FEBRUARI','March'=>'MARET','April'=>'APRIL','May'=>'MEI','June'=>'JUNI','July'=>'JULI','August'=>'AGUSTUS','September'=>'SEPTEMBER','October'=>'OKTOBER','November'=>'NOVEMBER','December'=>'DESEMBER'];
 $monthEn = date('F', strtotime($start));
@@ -93,56 +54,59 @@ header("Expires: 0");
   <meta charset="UTF-8">
   <style>
     table { border-collapse: collapse; font-size: 11px; }
-    th, td { border: 2px solid #111; padding: 2px 6px; text-align: center; vertical-align: middle; white-space: nowrap; }
+    th, td { border: 1px solid #000; padding: 3px 5px; text-align: center; white-space: nowrap; }
     .head { background: #b7cae2; font-weight: 700; }
     .sub { background: #f3e2e2; font-weight: 700; }
-    .date { background: #dbe2cf; font-weight: 700; }
-    .data { background: #b8c7d9; }
+    .date { background: #e6edd9; font-weight: 700; }
+    .data { background: #c4d5e9; }
     .sum td { background: #ece9d6 !important; font-weight: 700; }
-    .sum-label { text-align: left; padding-left: 8px; }
   </style>
 </head>
 <body>
 <table>
   <thead>
     <tr>
-      <th class="head" colspan="4">BERDASARKAN LAJU SESAAT BOILER LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
+      <th class="head" colspan="6">METER AIR BOILER STEAM 20 TON LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
+      <th style="border:none;background:#fff"></th>
+      <th class="head" colspan="6">METER STEAM BOILER STEAM 20 TON LONCHUAN - <?= htmlspecialchars($monthLabel) ?></th>
     </tr>
     <tr>
-      <th class="sub">Tanggal</th>
-      <th class="sub">Jam</th>
-      <th class="sub">Jumlah Air (ton)</th>
-      <th class="sub">Jumlah Steam (ton)</th>
+      <th class="sub">Tanggal</th><th class="sub">Awal</th><th class="sub">Akhir</th><th class="sub">Total</th><th class="sub">Rata/Jam</th><th class="sub">KET</th>
+      <th style="border:none;background:#fff"></th>
+      <th class="sub">Tanggal</th><th class="sub">Awal</th><th class="sub">Akhir</th><th class="sub">Total</th><th class="sub">Rata/Jam</th><th class="sub">KET</th>
     </tr>
   </thead>
   <tbody>
-    <?php if (empty($groupedRows)): ?>
-      <tr><td colspan="4">Tidak ada data pada rentang tanggal ini.</td></tr>
-    <?php else: foreach ($groupedRows as $day): ?>
-      <?php $dayRows = $day['rows']; $dayRowCount = count($dayRows); ?>
-      <?php foreach ($dayRows as $idx => $r): ?>
-        <tr>
-          <?php if ($idx === 0): ?>
-            <td class="date" rowspan="<?= (int)$dayRowCount ?>"><?= htmlspecialchars($fmtDay($day['tanggal'])) ?></td>
-          <?php endif; ?>
-          <td class="date"><?= htmlspecialchars($fmtHour($r['jam'] ?? null)) ?></td>
-          <td class="data"><?= htmlspecialchars($fmtNum($r['jumlah_air_ton'])) ?></td>
-          <td class="data"><?= htmlspecialchars($fmtNum($r['jumlah_steam_ton'])) ?></td>
-        </tr>
-      <?php endforeach; ?>
+    <?php if (empty($rows)): ?>
+      <tr><td colspan="13">Tidak ada data pada rentang tanggal ini.</td></tr>
+    <?php else: foreach ($rows as $r): ?>
+      <tr>
+        <td class="date"><?= htmlspecialchars($fmtDay($r['tanggal'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['air_awal_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['air_akhir_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['air_total_pemakaian_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['air_rata_rata_per_jam_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars((string)($r['air_ket'] ?? '')) ?></td>
+        <td style="border:none;background:#fff"></td>
+        <td class="date"><?= htmlspecialchars($fmtDay($r['tanggal'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['steam_awal_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['steam_akhir_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['steam_total_pemakaian_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars($fmtNum($r['steam_rata_rata_per_jam_ton'])) ?></td>
+        <td class="data"><?= htmlspecialchars((string)($r['steam_ket'] ?? '')) ?></td>
+      </tr>
+    <?php endforeach; ?>
       <tr class="sum">
-        <td class="sum-label">TOTAL/HARI</td>
-        <td></td>
-        <td><?= htmlspecialchars($fmtNum($day['tot_air'])) ?></td>
-        <td><?= htmlspecialchars($fmtNum($day['tot_steam'])) ?></td>
+        <td>TOTAL</td><td><?= htmlspecialchars($fmtNum($totAir['air_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totAir['air_rata_rata_per_jam_ton'])) ?></td><td></td>
+        <td style="border:none;background:#fff"></td>
+        <td>TOTAL</td><td><?= htmlspecialchars($fmtNum($totSteam['steam_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($totSteam['steam_rata_rata_per_jam_ton'])) ?></td><td></td>
       </tr>
       <tr class="sum">
-        <td class="sum-label">RATA-RATA/HARI</td>
-        <td></td>
-        <td><?= htmlspecialchars($fmtNum($day['avg_air'])) ?></td>
-        <td><?= htmlspecialchars($fmtNum($day['avg_steam'])) ?></td>
+        <td>RATA-RATA</td><td><?= htmlspecialchars($fmtNum($avgAir['air_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgAir['air_rata_rata_per_jam_ton'])) ?></td><td></td>
+        <td style="border:none;background:#fff"></td>
+        <td>RATA-RATA</td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_awal_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_akhir_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_total_pemakaian_ton'])) ?></td><td><?= htmlspecialchars($fmtNum($avgSteam['steam_rata_rata_per_jam_ton'])) ?></td><td></td>
       </tr>
-    <?php endforeach; endif; ?>
+    <?php endif; ?>
   </tbody>
 </table>
 </body>

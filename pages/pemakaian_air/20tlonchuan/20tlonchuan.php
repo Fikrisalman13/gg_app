@@ -24,7 +24,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
   <div class="container-fluid">
     <div class="row align-items-center">
       <div class="col-sm-6">
-        <h1>Air dan Steam 20 Ton Lonchuan</h1>
+        <h1>METER AIR DAN STEAM 20 TON LONCHUAN</h1>
       </div>
       <div class="col-sm-6 text-right">
         <a href="/gg_app/pages/pemakaian_air/pemakaian_energi.php" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-left"></i> Kembali</a>
@@ -36,10 +36,11 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     <div class="container-fluid">
       <div class="card card-primary">
         <div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white d-flex align-items-center">
-          <h3 class="card-title"><i class="fas fa-list mr-1"></i> Data Laju Sesaat Boiler Lonchuan</h3>
+          <h3 class="card-title"><i class="fas fa-list mr-1"></i> Data Meter Air & Steam 20 Ton Lonchuan</h3>
           <div class="d-flex ml-auto" style="gap:8px;">
             <a href="report_20tlonchuan.php" class="btn btn-info btn-sm"><i class="fas fa-file-alt"></i> Detail Report</a>
             <?php if (!empty($permissions['CanAdd']) && $permissions['CanAdd'] == 1): ?>
+              <a href="migrate_20tlonchuan.php" class="btn btn-secondary btn-sm" title="Migrasi data historis dari tabel lama"><i class="fas fa-database"></i> Migrasi Data Lama</a>
               <a href="#" class="btn btn-success btn-sm" id="btnTambahData"><i class="fas fa-plus"></i> Tambah Data</a>
             <?php endif; ?>
           </div>
@@ -55,9 +56,15 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
               <tr>
                 <th>No</th>
                 <th>Tanggal</th>
-                <th>Jumlah Air (ton)</th>
-                <th>Jumlah Steam (ton)</th>
-                <th>Note</th>
+                <th>Air Awal (ton)</th>
+                <th>Air Akhir (ton)</th>
+                <th>Air Total (ton)</th>
+                <th>Air Rata/Jam</th>
+                <th>Steam Awal (ton)</th>
+                <th>Steam Akhir (ton)</th>
+                <th>Steam Total (ton)</th>
+                <th>Steam Rata/Jam</th>
+                <th>Cut Off</th>
                 <th>Created By</th>
                 <th>Aksi</th>
               </tr>
@@ -73,20 +80,23 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 </div>
 
 <style>
-  .tlc-input-table{border-collapse:collapse;width:100%;min-width:800px}
-  .tlc-input-table th,.tlc-input-table td{border:1px solid #c9ced4;padding:5px 6px;text-align:center;vertical-align:middle}
-  .tlc-input-table .head{background:#b7cae2;font-weight:700}
-  .tlc-input-table .sub{background:#f3e2e2;font-weight:700}
-  .tlc-input-table .cell-gray{background:#efefef}
-  .tlc-input-table input{height:32px;text-align:right}
-  .tlc-summary{background:#f8f9fa;border:1px solid #ddd;padding:8px 10px;border-radius:4px}
+  .tl-input-table{border-collapse:collapse;width:100%;min-width:1200px}
+  .tl-input-table th,.tl-input-table td{border:1px solid #c9ced4;padding:5px 6px;text-align:center;vertical-align:middle}
+  .tl-input-table .head-air{background:#b7cae2;font-weight:700}
+  .tl-input-table .head-steam{background:#b7cae2;font-weight:700}
+  .tl-input-table .sub{background:#f3e2e2;font-weight:700}
+  .tl-input-table .unit{background:#fafafa;font-size:11px;font-weight:700}
+  .tl-input-table .cell-blue{background:#c4d5e9}
+  .tl-input-table .cell-gray{background:#efefef}
+  .tl-input-table input{height:32px;text-align:right}
+  .tl-input-table .input-group-sm .btn{height:32px}
 </style>
 
 <div class="modal fade" id="modalTambah20TLonchuan" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
       <div class="modal-header bg-<?= htmlspecialchars($themeColor) ?> text-white">
-        <h5 class="modal-title">Input Laju Sesaat Boiler Lonchuan (20T)</h5>
+        <h5 class="modal-title">Input Meter Air & Steam 20 Ton Lonchuan</h5>
         <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <form id="form20TLonchuan" autocomplete="off">
@@ -97,39 +107,88 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
               <label class="font-weight-bold">Tanggal (TGL)</label>
               <input type="date" name="tanggal" id="xTanggal" class="form-control" required>
             </div>
-            <div class="form-group col-md-9 mb-2">
-              <label class="font-weight-bold">Note</label>
-              <input type="text" name="note" id="xNote" class="form-control" placeholder="Catatan singkat (opsional)">
+            <div class="form-group col-md-3 mb-2">
+              <label class="font-weight-bold">Cut Off Jam</label>
+              <input type="time" name="cut_off_jam" id="xCutOff" class="form-control" value="09:00">
+            </div>
+            <div class="form-group col-md-6 mb-2">
+              <div class="alert alert-light border mb-0 py-2 px-3" style="height:38px;display:flex;align-items:center;">
+                Isi keterangan pada kolom KET Air / KET Steam.
+              </div>
             </div>
           </div>
 
           <div class="table-responsive">
-            <table class="tlc-input-table">
+            <table class="tl-input-table">
               <thead>
-                <tr><th class="head" colspan="3">INPUT PER JAM</th></tr>
                 <tr>
-                  <th class="sub">Jam</th>
-                  <th class="sub">Air (ton)</th>
-                  <th class="sub">Steam (ton)</th>
+                  <th class="head-air" colspan="5">METER AIR BOILER STEAM 20 TON LONCHUAN</th>
+                  <th class="head-steam" colspan="5">METER STEAM BOILER STEAM 20 TON LONCHUAN</th>
+                </tr>
+                <tr>
+                  <th class="sub">Awal</th>
+                  <th class="sub">Akhir</th>
+                  <th class="sub">Total Pemakaian</th>
+                  <th class="sub">Rata-rata / Jam</th>
+                  <th class="sub">KET</th>
+                  <th class="sub">Awal</th>
+                  <th class="sub">Akhir</th>
+                  <th class="sub">Total Pemakaian</th>
+                  <th class="sub">Rata-rata / Jam</th>
+                  <th class="sub">KET</th>
+                </tr>
+                <tr>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit"></th>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit">ton</th>
+                  <th class="unit"></th>
                 </tr>
               </thead>
               <tbody>
-                <?php for ($idx=0; $idx<24; $idx++): $j = ($idx + 9) % 24; $label = str_pad((string)$j, 2, '0', STR_PAD_LEFT) . ':00'; ?>
                 <tr>
-                  <td class="cell-gray"><?= htmlspecialchars($label) ?><input type="hidden" name="jam[]" value="<?= $j ?>"></td>
-                  <td class="cell-gray"><input type="text" name="air[]" id="air_<?= $j ?>" class="form-control form-control-sm num-only input-air"></td>
-                  <td class="cell-gray"><input type="text" name="steam[]" id="steam_<?= $j ?>" class="form-control form-control-sm num-only input-steam"></td>
+                  <td class="cell-gray">
+                    <div class="input-group input-group-sm">
+                      <input type="text" name="air_awal_ton" id="xAirAwal" class="form-control form-control-sm num-only" required>
+                      <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-secondary" id="btnAutoAirAwal" title="Ambil dari Air Akhir tanggal sebelumnya">
+                          <i class="fas fa-download"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="cell-gray"><input type="text" name="air_akhir_ton" id="xAirAkhir" class="form-control form-control-sm num-only" required></td>
+                  <td class="cell-blue"><input type="text" name="air_total_pemakaian_ton" id="xAirTotal" class="form-control form-control-sm" readonly></td>
+                  <td class="cell-gray"><input type="text" name="air_rata_rata_per_jam_ton" id="xAirRata" class="form-control form-control-sm" readonly></td>
+                  <td class="cell-gray"><input type="text" name="air_ket" id="xAirKet" class="form-control form-control-sm text-left" style="text-align:left;"></td>
+                  <td class="cell-gray">
+                    <div class="input-group input-group-sm">
+                      <input type="text" name="steam_awal_ton" id="xSteamAwal" class="form-control form-control-sm num-only" required>
+                      <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-secondary" id="btnAutoSteamAwal" title="Ambil dari Steam Akhir tanggal sebelumnya">
+                          <i class="fas fa-download"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="cell-gray"><input type="text" name="steam_akhir_ton" id="xSteamAkhir" class="form-control form-control-sm num-only" required></td>
+                  <td class="cell-blue"><input type="text" name="steam_total_pemakaian_ton" id="xSteamTotal" class="form-control form-control-sm" readonly></td>
+                  <td class="cell-gray"><input type="text" name="steam_rata_rata_per_jam_ton" id="xSteamRata" class="form-control form-control-sm" readonly></td>
+                  <td class="cell-gray"><input type="text" name="steam_ket" id="xSteamKet" class="form-control form-control-sm text-left" style="text-align:left;"></td>
                 </tr>
-                <?php endfor; ?>
               </tbody>
             </table>
           </div>
 
           <div class="form-row mt-2">
             <div class="col-12">
-              <div class="tlc-summary d-flex" style="gap:20px;">
-                <div><strong>Total Air (ton):</strong> <span id="sumAir">0.00</span></div>
-                <div><strong>Total Steam (ton):</strong> <span id="sumSteam">0.00</span></div>
+              <div class="alert alert-info mb-0 py-2 px-3">
+                Rumus: Total Air = Air Akhir - Air Awal, Rata/Jam Air = Total Air / 24. Total Steam = Steam Akhir - Steam Awal, Rata/Jam Steam = Total Steam / 24.
               </div>
             </div>
           </div>
@@ -158,13 +217,20 @@ $(function(){
   function parseNum(v){ if(v===null||v===undefined) return NaN; v=String(v).trim().replace(/,/g,''); if(v==='') return NaN; var n=Number(v); return isNaN(n)?NaN:n; }
   function fmt(v,d){ var n=parseNum(v); return isNaN(n)?'-':n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
   function fmtInput(v,d){ var n=parseNum(v); return isNaN(n)?'':n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
-
   function recalc(){
-    var sumAir = 0, sumSteam = 0;
-    $('.input-air').each(function(){ var n=parseNum($(this).val()); if(!isNaN(n)) sumAir += n; });
-    $('.input-steam').each(function(){ var n=parseNum($(this).val()); if(!isNaN(n)) sumSteam += n; });
-    $('#sumAir').text(fmt(sumAir,2));
-    $('#sumSteam').text(fmt(sumSteam,2));
+    var airAwal = parseNum($('#xAirAwal').val()); if (isNaN(airAwal)) airAwal = 0;
+    var airAkhir = parseNum($('#xAirAkhir').val()); if (isNaN(airAkhir)) airAkhir = 0;
+    var airTotal = airAkhir - airAwal; if (airTotal < 0) airTotal = 0;
+    var airRata = airTotal / 24;
+    $('#xAirTotal').val(fmtInput(airTotal,2));
+    $('#xAirRata').val(fmtInput(airRata,2));
+
+    var steamAwal = parseNum($('#xSteamAwal').val()); if (isNaN(steamAwal)) steamAwal = 0;
+    var steamAkhir = parseNum($('#xSteamAkhir').val()); if (isNaN(steamAkhir)) steamAkhir = 0;
+    var steamTotal = steamAkhir - steamAwal; if (steamTotal < 0) steamTotal = 0;
+    var steamRata = steamTotal / 24;
+    $('#xSteamTotal').val(fmtInput(steamTotal,2));
+    $('#xSteamRata').val(fmtInput(steamRata,2));
   }
 
   var table = $('#table20TLonchuan').DataTable({
@@ -173,9 +239,15 @@ $(function(){
     columns:[
       {data:null,render:function(d,t,r,m){return m.row+m.settings._iDisplayStart+1;}},
       {data:'tanggal_formatted'},
-      {data:'jumlah_air_ton',render:function(d){return fmt(d,2)}},
-      {data:'jumlah_steam_ton',render:function(d){return fmt(d,2)}},
-      {data:'note',render:function(d){return d||'-';}},
+      {data:'air_awal_ton',render:function(d){return fmt(d,2)}},
+      {data:'air_akhir_ton',render:function(d){return fmt(d,2)}},
+      {data:'air_total_pemakaian_ton',render:function(d){return fmt(d,2)}},
+      {data:'air_rata_rata_per_jam_ton',render:function(d){return fmt(d,2)}},
+      {data:'steam_awal_ton',render:function(d){return fmt(d,2)}},
+      {data:'steam_akhir_ton',render:function(d){return fmt(d,2)}},
+      {data:'steam_total_pemakaian_ton',render:function(d){return fmt(d,2)}},
+      {data:'steam_rata_rata_per_jam_ton',render:function(d){return fmt(d,2)}},
+      {data:'cut_off_jam',render:function(d){return d||'09:00';}},
       {data:'created_by',render:function(d){return d||'-';}},
       {data:'id',render:function(id){
         if(!id) return '-';
@@ -197,13 +269,57 @@ $(function(){
     $('#form20TLonchuan')[0].reset();
     $('#xId').val('');
     $('#xTanggal').prop('readonly', false).val(new Date().toISOString().slice(0,10));
-    $('.input-air,.input-steam').val('');
+    $('#xCutOff').val('09:00');
     recalc();
     $('#modalTambah20TLonchuan').modal('show');
   });
 
   $(document).on('input','.num-only',function(){ this.value=this.value.replace(/[^0-9.,]/g,''); });
-  $('#form20TLonchuan').on('input blur','.num-only', recalc);
+  $('#form20TLonchuan .num-only').on('input blur', recalc);
+
+  function isiAwalOtomatis(type){
+    var tanggal = $('#xTanggal').val();
+    if (!tanggal) {
+      Swal.fire({icon:'warning',title:'Tanggal belum dipilih',text:'Pilih tanggal terlebih dahulu.'});
+      return;
+    }
+
+    $.ajax({
+      url:'get_prev_20tlonchuan.php',
+      type:'GET',
+      dataType:'json',
+      data:{tanggal:tanggal},
+      success:function(resp){
+        if(!(resp && resp.success)){
+          Swal.fire({icon:'error',title:'Gagal',text:(resp && resp.message) ? resp.message : 'Gagal mengambil data sebelumnya.'});
+          return;
+        }
+
+        if(type === 'air'){
+          if(resp.air_akhir_ton !== null && resp.air_akhir_ton !== ''){
+            $('#xAirAwal').val(fmtInput(resp.air_akhir_ton,2));
+            recalc();
+          } else {
+            Swal.fire({icon:'info',title:'Data tidak ditemukan',text:'Tidak ada Air Akhir tanggal sebelumnya untuk tanggal ini.'});
+          }
+          return;
+        }
+
+        if(resp.steam_akhir_ton !== null && resp.steam_akhir_ton !== ''){
+          $('#xSteamAwal').val(fmtInput(resp.steam_akhir_ton,2));
+          recalc();
+        } else {
+          Swal.fire({icon:'info',title:'Data tidak ditemukan',text:'Tidak ada Steam Akhir tanggal sebelumnya untuk tanggal ini.'});
+        }
+      },
+      error:function(){
+        Swal.fire({icon:'error',title:'Error',text:'Terjadi kesalahan saat mengambil data sebelumnya.'});
+      }
+    });
+  }
+
+  $('#btnAutoAirAwal').on('click', function(){ isiAwalOtomatis('air'); });
+  $('#btnAutoSteamAwal').on('click', function(){ isiAwalOtomatis('steam'); });
 
   $('#form20TLonchuan').on('submit', function(e){
     e.preventDefault();
@@ -227,32 +343,25 @@ $(function(){
 
   $('#table20TLonchuan').on('click','.btn-detail',function(){ window.location.href='view_20tlonchuan.php?id='+$(this).data('id'); });
   $('#table20TLonchuan').on('click','.btn-edit',function(){
-    var id=$(this).data('id');
-    if(!id) return;
-    $('#form20TLonchuan')[0].reset();
-    $('.input-air,.input-steam').val('');
-    $('#xId').val(id);
-    $.getJSON('get_20tlonchuan_detail.php',{id:id},function(resp){
-      if(!resp||!resp.success){
-        Swal.fire({icon:'error',title:'Gagal',text:(resp&&resp.message)?resp.message:'Gagal mengambil data.'});
-        return;
-      }
-      var d = resp.data || {};
-      $('#xTanggal').prop('readonly', true).val(d.tanggal || '');
-      $('#xNote').val(d.note || '');
-      if (d.rows && d.rows.length){
-        d.rows.forEach(function(r){
-          if (r.jam === undefined || r.jam === null) return;
-          var j = String(r.jam);
-          $('#air_'+j).val(r.air !== null ? fmtInput(r.air,2) : '');
-          $('#steam_'+j).val(r.steam !== null ? fmtInput(r.steam,2) : '');
-        });
-      }
-      recalc();
-      $('#modalTambah20TLonchuan').modal('show');
-    }).fail(function(){ Swal.fire({icon:'error',title:'Error',text:'Terjadi kesalahan.'}); });
-  });
+    var tr = $(this).closest('tr');
+    var row = table.row(tr);
+    if (!row.data() && tr.hasClass('child')) row = table.row(tr.prev());
+    var d = row.data();
+    if (!d) return;
 
+    $('#form20TLonchuan')[0].reset();
+    $('#xId').val(d.id || '');
+    $('#xTanggal').prop('readonly', true).val(d.tanggal || '');
+    $('#xCutOff').val(d.cut_off_jam || '09:00');
+    $('#xAirAwal').val(fmtInput(d.air_awal_ton,2));
+    $('#xAirAkhir').val(fmtInput(d.air_akhir_ton,2));
+    $('#xAirKet').val(d.air_ket || '');
+    $('#xSteamAwal').val(fmtInput(d.steam_awal_ton,2));
+    $('#xSteamAkhir').val(fmtInput(d.steam_akhir_ton,2));
+    $('#xSteamKet').val(d.steam_ket || '');
+    recalc();
+    $('#modalTambah20TLonchuan').modal('show');
+  });
   $('#table20TLonchuan').on('click','.btn-delete',function(){
     var id=$(this).data('id');
     Swal.fire({title:'Hapus data?',text:'Data ini akan dihapus permanen.',icon:'warning',showCancelButton:true,confirmButtonText:'Ya, Hapus'})

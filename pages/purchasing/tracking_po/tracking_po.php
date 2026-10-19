@@ -124,8 +124,10 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     border-color: currentColor;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
+.tracking-stat-card[data-status="Tunggu Tanggal Penyerahan"]::before { background: #ea580c; }
 .tracking-stat-card[data-status="Diserahkan"]::before { background: #3b82f6; }
 .tracking-stat-card[data-status="Belum Kembali"]::before { background: #f59e0b; }
+.tracking-stat-card[data-status="Sudah Kembali"]::before { background: #06b6d4; }
 .tracking-stat-card[data-status="Sudah TTD"]::before { background: #10b981; }
 .tracking-stat-card[data-status="Approved"]::before { background: #8b5cf6; }
 .stat-icon-box {
@@ -138,8 +140,10 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     font-size: 18px;
     flex-shrink: 0;
 }
+.stat-icon-box.bg-orange { background: #fff7ed; color: #ea580c; }
 .stat-icon-box.bg-blue { background: #eff6ff; color: #3b82f6; }
 .stat-icon-box.bg-amber { background: #fffbeb; color: #f59e0b; }
+.stat-icon-box.bg-cyan { background: #ecfeff; color: #0891b2; }
 .stat-icon-box.bg-emerald { background: #ecfdf5; color: #10b981; }
 .stat-icon-box.bg-violet { background: #f5f3ff; color: #8b5cf6; }
 .stat-info .stat-count {
@@ -211,6 +215,11 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     align-items: center;
     white-space: nowrap;
     gap: 4px;
+}
+.badge-status-tunggu {
+    background-color: #fff7ed;
+    color: #ea580c;
+    border: 1px solid #fed7aa;
 }
 .badge-status-diserahkan {
     background-color: #eff6ff;
@@ -592,6 +601,26 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     transform: translateY(-1px);
     box-shadow: 0 5px 16px rgba(139, 92, 246, 0.5);
 }
+.btn-batch-delete {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    color: #ffffff !important;
+    border: none;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 7px 18px;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(239, 68, 68, 0.4);
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.btn-batch-delete:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(239, 68, 68, 0.5);
+}
 .batch-mode-badge {
     font-size: 11px;
     font-weight: 700;
@@ -659,11 +688,18 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 
             <!-- Summary Cards -->
             <div class="tracking-summary-row" id="summaryCards">
+                <div class="tracking-stat-card" data-status="Tunggu Tanggal Penyerahan" id="cardTungguPenyerahan">
+                    <div class="stat-icon-box bg-orange"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="stat-info">
+                        <div class="stat-count" id="countTungguPenyerahan">0</div>
+                        <div class="stat-label">Tunggu Penyerahan</div>
+                    </div>
+                </div>
                 <div class="tracking-stat-card" data-status="Diserahkan" id="cardDiserahkan">
                     <div class="stat-icon-box bg-blue"><i class="fas fa-paper-plane"></i></div>
                     <div class="stat-info">
                         <div class="stat-count" id="countDiserahkan">0</div>
-                        <div class="stat-label">Diserahkan Hari Ini</div>
+                        <div class="stat-label">Diserahkan</div>
                     </div>
                 </div>
                 <div class="tracking-stat-card" data-status="Belum Kembali" id="cardBelumKembali">
@@ -673,11 +709,11 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                         <div class="stat-label">Belum Kembali</div>
                     </div>
                 </div>
-                <div class="tracking-stat-card" data-status="Sudah TTD" id="cardSudahTTD">
-                    <div class="stat-icon-box bg-emerald"><i class="fas fa-check-circle"></i></div>
+                <div class="tracking-stat-card" data-status="Sudah Kembali" id="cardSudahKembali">
+                    <div class="stat-icon-box bg-cyan"><i class="fas fa-undo"></i></div>
                     <div class="stat-info">
-                        <div class="stat-count" id="countSudahTTD">0</div>
-                        <div class="stat-label">Sudah TTD</div>
+                        <div class="stat-count" id="countSudahKembali">0</div>
+                        <div class="stat-label">Sudah Kembali (Belum TTD)</div>
                     </div>
                 </div>
                 <div class="tracking-stat-card" data-status="Approved" id="cardApproved">
@@ -695,7 +731,12 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                     <h3 class="card-title font-weight-bold pt-1 mb-0">
                         <i class="fas fa-shipping-fast mr-1"></i> List Tracking Dokumen PO
                     </h3>
-                    <div class="card-tools float-right">
+                    <div class="card-tools float-right d-flex align-items-center" style="gap: 6px;">
+                        <?php if ($userCanDelete): ?>
+                        <button type="button" class="btn btn-danger btn-sm font-weight-bold shadow-sm" id="btnTopBatchDelete" style="display: none;" title="Hapus data tracking PO yang dipilih">
+                            <i class="fas fa-trash-alt mr-1"></i> Hapus Terpilih (<span class="batch-delete-count">0</span>)
+                        </button>
+                        <?php endif; ?>
                         <?php if ($userCanInput): ?>
                         <button type="button" class="btn btn-success btn-sm font-weight-bold shadow-sm" id="btnSerahkanPo">
                             <i class="fas fa-plus mr-1"></i> Serahkan PO
@@ -709,7 +750,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                         <div class="row align-items-end">
                             <div class="col-md-3 col-sm-6 mb-2">
                                 <label for="filterDateFrom" class="small font-weight-bold text-muted mb-1">
-                                    <i class="fas fa-calendar-alt mr-1"></i> Dari Tanggal
+                                     <i class="fas fa-calendar-alt mr-1"></i> Dari Tanggal
                                 </label>
                                 <input type="date" id="filterDateFrom" class="form-control form-control-sm" autocomplete="off">
                             </div>
@@ -725,9 +766,10 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                 </label>
                                 <select id="filterStatus" class="form-control form-control-sm">
                                     <option value="">Semua Status</option>
+                                    <option value="Tunggu Tanggal Penyerahan">Tunggu Tanggal Penyerahan</option>
                                     <option value="Diserahkan">Diserahkan</option>
                                     <option value="Belum Kembali">Belum Kembali</option>
-                                    <option value="Sudah Kembali">Sudah Kembali</option>
+                                    <option value="Sudah Kembali">Sudah Kembali (Belum TTD)</option>
                                     <option value="Sudah TTD">Sudah TTD</option>
                                     <option value="Approved">Approved</option>
                                 </select>
@@ -863,6 +905,9 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                         </label>
                         <input type="date" id="inputTanggalKirim" class="form-control form-control-sm font-weight-bold" 
                                value="<?= date('Y-m-d') ?>" style="width: 145px;">
+                        <button type="button" class="btn btn-outline-secondary btn-sm ml-1" id="btnClearTanggalKirim" title="Kosongkan tanggal (status jadi Tunggu Tanggal Penyerahan)">
+                            <i class="fas fa-times mr-1"></i> Kosongkan
+                        </button>
                     </div>
                     <div>
                         <span id="poSelectedCountBadge" class="badge badge-primary px-3 py-2 font-weight-bold" style="font-size: 0.85rem;">
@@ -1080,10 +1125,22 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                 <i class="fas fa-times-circle mr-1"></i> Semua Belum TTD
             </button>
         </span>
-        <!-- Group Approve (IT) -->
-        <span id="batchGroupApprove" style="display: none;">
-            <button type="button" class="btn btn-batch-approve" id="btnBatchApprove" title="Approve semua PO terpilih yang sudah ditandatangani">
-                <i class="fas fa-check-double mr-1"></i> Approve Terpilih
+        <!-- Group Tunggu Tanggal Penyerahan (Input Tanggal Menyusul) -->
+        <span id="batchGroupTunggu" style="display: none;">
+            <button type="button" class="btn btn-batch-belum-ttd" id="btnBatchSetTanggal" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);" title="Input tanggal penyerahan untuk semua PO terpilih">
+                <i class="fas fa-calendar-plus mr-1"></i> Input Tgl Penyerahan Terpilih
+            </button>
+        </span>
+        <!-- Group Serahkan Kembali (Purchasing & Admin) -->
+        <span id="batchGroupSerahkanKembali" style="display: none;">
+            <button type="button" class="btn btn-batch-ttd" id="btnBatchSerahkanKembali" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);" title="Serahkan kembali semua PO terpilih ke Direktur">
+                <i class="fas fa-redo mr-1"></i> Serahkan Kembali Terpilih
+            </button>
+        </span>
+        <!-- Group Hapus (Purchasing & Admin) -->
+        <span id="batchGroupDelete" style="display: none;">
+            <button type="button" class="btn btn-batch-delete" id="btnFloatingBatchDelete" title="Hapus semua PO terpilih">
+                <i class="fas fa-trash-alt mr-1"></i> Hapus Terpilih (<span class="batch-delete-count">0</span>)
             </button>
         </span>
     </div>
@@ -1115,10 +1172,18 @@ $(document).ready(function () {
     var userPerms = { can_input: false, can_confirm: false, can_approve: false, is_admin: false };
 
     // ─── STATUS BADGE HELPER ──────────────────────────────────────────────
-    function getStatusBadge(status) {
+    function getStatusBadge(status, row) {
         switch (status) {
+            case 'Tunggu Tanggal Penyerahan':
+                var erpBadge = (row && row.is_approved_erp) 
+                    ? ' <span class="badge badge-success ml-1 font-weight-bold" style="font-size:10px;" title="Sudah di-approve di ERP"><i class="fas fa-check"></i> ERP</span>' 
+                    : '';
+                return '<span class="badge-status badge-status-tunggu"><i class="fas fa-hourglass-half"></i> Tunggu Penyerahan</span>' + erpBadge;
             case 'Diserahkan':
-                return '<span class="badge-status badge-status-diserahkan"><i class="fas fa-paper-plane"></i> Diserahkan</span>';
+                var erpBadge = (row && row.is_approved_erp) 
+                    ? ' <span class="badge badge-success ml-1 font-weight-bold" style="font-size:10px;" title="Sudah di-approve di ERP"><i class="fas fa-check"></i> ERP</span>' 
+                    : '';
+                return '<span class="badge-status badge-status-diserahkan"><i class="fas fa-paper-plane"></i> Diserahkan</span>' + erpBadge;
             case 'Belum Kembali':
                 return '<span class="badge-status badge-status-belum-kembali"><i class="fas fa-clock"></i> Belum Kembali</span>';
             case 'Sudah Kembali':
@@ -1136,6 +1201,8 @@ $(document).ready(function () {
     function getLogDotColor(action) {
         switch (action) {
             case 'Diserahkan': return '#3b82f6';
+            case 'Serahkan Kembali': return '#2563eb';
+            case 'Set Tanggal Penyerahan': return '#f59e0b';
             case 'Konfirmasi Kembali': return '#f59e0b';
             case 'Approve': return '#8b5cf6';
             default: return '#94a3b8';
@@ -1144,39 +1211,75 @@ $(document).ready(function () {
 
     // ─── LOAD SUMMARY CARDS ───────────────────────────────────────────────
     function loadSummary() {
-        $.getJSON(BASE_URL + '?action=get_summary', function (res) {
+        var params = {
+            action: 'get_summary',
+            date_from: $('#filterDateFrom').val() || '',
+            date_to: $('#filterDateTo').val() || ''
+        };
+        $.getJSON(BASE_URL, params, function (res) {
             if (res.status === 'ok') {
-                $('#countDiserahkan').text(res.summary.diserahkan);
-                $('#countBelumKembali').text(res.summary.belum_kembali);
-                $('#countSudahTTD').text(res.summary.sudah_ttd);
-                $('#countApproved').text(res.summary.approved);
+                $('#countTungguPenyerahan').text(res.summary.tunggu_penyerahan || 0);
+                $('#countDiserahkan').text(res.summary.diserahkan || 0);
+                $('#countBelumKembali').text(res.summary.belum_kembali || 0);
+                $('#countSudahKembali').text(res.summary.sudah_kembali || 0);
+                $('#countApproved').text(res.summary.approved || 0);
             }
         });
     }
 
     var loadDataXhr = null;
     var selectedBatchIds = new Set();
-    var batchMode = null; // null | 'konfirmasi' | 'approve'
+    var batchMode = null; // null | 'konfirmasi' | 'serahkan_kembali' | 'set_tanggal'
 
     function updateBatchFloatingBar() {
         var count = selectedBatchIds.size;
         $('#floatingSelectedCount').text(count);
+        $('.batch-delete-count').text(count);
 
         if (count > 0) {
-            if (batchMode === 'approve') {
-                $('#batchGroupKonfirmasi').hide();
-                $('#batchGroupApprove').show();
-                $('#floatingModeBadge').html('<i class="fas fa-shield-alt mr-1"></i> Mode Approve IT').show();
+            // Tampilkan tombol Hapus Terpilih di toolbar atas & floating bar jika user punya hak can_delete
+            if (userPerms.can_delete) {
+                $('#btnTopBatchDelete').show();
+                $('#batchGroupDelete').show();
             } else {
+                $('#btnTopBatchDelete').hide();
+                $('#batchGroupDelete').hide();
+            }
+
+            // Tampilkan tombol alur sesuai status yang terpilih
+            if (batchMode === 'serahkan_kembali') {
+                $('#batchGroupKonfirmasi').hide();
+                $('#batchGroupTunggu').hide();
                 $('#batchGroupApprove').hide();
+                $('#batchGroupSerahkanKembali').show();
+                $('#floatingModeBadge').html('<i class="fas fa-redo mr-1"></i> Mode Serahkan Kembali').show();
+            } else if (batchMode === 'set_tanggal') {
+                $('#batchGroupKonfirmasi').hide();
+                $('#batchGroupSerahkanKembali').hide();
+                $('#batchGroupTunggu').show();
+                $('#batchGroupApprove').hide();
+                $('#floatingModeBadge').html('<i class="fas fa-hourglass-half mr-1"></i> Mode Tunggu Penyerahan').show();
+            } else if (batchMode === 'konfirmasi') {
+                $('#batchGroupApprove').hide();
+                $('#batchGroupTunggu').hide();
+                $('#batchGroupSerahkanKembali').hide();
                 $('#batchGroupKonfirmasi').show();
                 $('#floatingModeBadge').html('<i class="fas fa-undo mr-1"></i> Mode Konfirmasi Kembali').show();
+            } else {
+                // Pilihan lintas status / hapus massal
+                $('#batchGroupKonfirmasi').hide();
+                $('#batchGroupTunggu').hide();
+                $('#batchGroupSerahkanKembali').hide();
+                $('#batchGroupApprove').hide();
+                $('#floatingModeBadge').html('<i class="fas fa-layer-group mr-1"></i> Pilihan Lintas Status').show();
             }
 
             if ($('#batchKonfirmasiFloatingBar').is(':hidden')) {
                 $('#batchKonfirmasiFloatingBar').stop(true, true).fadeIn(250);
             }
         } else {
+            $('#btnTopBatchDelete').hide();
+            $('#batchGroupDelete').hide();
             $('#batchKonfirmasiFloatingBar').stop(true, true).fadeOut(200);
             $('#floatingModeBadge').hide();
             $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
@@ -1184,57 +1287,74 @@ $(document).ready(function () {
     }
 
     function syncBatchCheckboxes() {
-        if (selectedBatchIds.size === 0) {
-            batchMode = null;
-        }
+        var totalEnabled = 0;
+        var checkedCount = 0;
 
-        var totalMatchEnabled = 0;
-        var checkedMatchCount = 0;
+        var countKonfirmasi = 0;
+        var countTunggu = 0;
+        var countSudahKembali = 0;
+        var countSudahTTD = 0;
+        var countApproved = 0;
 
         $('.row-select-checkbox').each(function () {
             var $cb = $(this);
             var id = parseInt($cb.val());
             var status = $cb.data('status');
-            var canKonfirmasi = userPerms.can_confirm && (status === 'Diserahkan' || status === 'Belum Kembali');
-            var canApprove = userPerms.can_approve && status === 'Sudah TTD';
 
-            if (batchMode === null) {
-                if (canKonfirmasi || canApprove) {
-                    $cb.prop('disabled', false).removeAttr('title');
-                } else {
-                    $cb.prop('disabled', true).attr('title', 'Status tidak memenuhi syarat aksi massal');
-                }
-            } else if (batchMode === 'approve') {
-                if (canApprove) {
-                    $cb.prop('disabled', false).removeAttr('title');
-                    totalMatchEnabled++;
-                    if (selectedBatchIds.has(id)) {
-                        checkedMatchCount++;
-                    }
-                } else {
-                    $cb.prop('disabled', true).attr('title', 'Sedang dalam mode Approve (hanya status Sudah TTD)');
-                }
-            } else if (batchMode === 'konfirmasi') {
-                if (canKonfirmasi) {
-                    $cb.prop('disabled', false).removeAttr('title');
-                    totalMatchEnabled++;
-                    if (selectedBatchIds.has(id)) {
-                        checkedMatchCount++;
-                    }
-                } else {
-                    $cb.prop('disabled', true).attr('title', 'Sedang dalam mode Konfirmasi (hanya status Diserahkan / Belum Kembali)');
-                }
+            var canKonfirmasi = userPerms.can_confirm && (status === 'Diserahkan' || status === 'Belum Kembali');
+            var canSetTgl = (status === 'Tunggu Tanggal Penyerahan');
+            var canSerahkanKembali = userPerms.can_confirm && (status === 'Sudah Kembali');
+            var canDelete = userPerms.can_delete && (status !== 'Approved' || userPerms.is_admin);
+
+            // Baris bisa dipilih jika user punya hak hapus ATAU hak aksi alur
+            var isEligible = canDelete || canKonfirmasi || canSetTgl || canSerahkanKembali;
+
+            if (isEligible) {
+                $cb.prop('disabled', false).removeAttr('title');
+                totalEnabled++;
+            } else {
+                $cb.prop('disabled', true).attr('title', 'Tidak memiliki hak akses untuk data ini');
             }
 
-            $cb.prop('checked', selectedBatchIds.has(id));
+            var isChecked = selectedBatchIds.has(id);
+            $cb.prop('checked', isChecked);
+
+            if (isChecked) {
+                checkedCount++;
+                if (status === 'Diserahkan' || status === 'Belum Kembali') {
+                    countKonfirmasi++;
+                } else if (status === 'Tunggu Tanggal Penyerahan') {
+                    countTunggu++;
+                } else if (status === 'Sudah Kembali') {
+                    countSudahKembali++;
+                } else if (status === 'Sudah TTD') {
+                    countSudahTTD++;
+                } else if (status === 'Approved') {
+                    countApproved++;
+                }
+            }
         });
 
-        if (totalMatchEnabled > 0 && checkedMatchCount === totalMatchEnabled) {
+        // Update indeterminate / checked pada checkAllRows
+        if (totalEnabled > 0 && checkedCount === totalEnabled) {
             $('#checkAllRows').prop('checked', true).prop('indeterminate', false);
-        } else if (checkedMatchCount > 0) {
+        } else if (checkedCount > 0) {
             $('#checkAllRows').prop('checked', false).prop('indeterminate', true);
         } else {
             $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
+        }
+
+        // Tentukan mode alur dari item-item yang terpilih
+        if (checkedCount === 0) {
+            batchMode = null;
+        } else if (countKonfirmasi === checkedCount && userPerms.can_confirm) {
+            batchMode = 'konfirmasi';
+        } else if (countTunggu === checkedCount) {
+            batchMode = 'set_tanggal';
+        } else if (countSudahKembali === checkedCount && userPerms.can_confirm) {
+            batchMode = 'serahkan_kembali';
+        } else {
+            batchMode = 'mixed';
         }
 
         updateBatchFloatingBar();
@@ -1245,6 +1365,7 @@ $(document).ready(function () {
         batchMode = null;
         $('.row-select-checkbox').prop('checked', false);
         $('#checkAllRows').prop('checked', false).prop('indeterminate', false);
+        $('#btnTopBatchDelete').hide();
         syncBatchCheckboxes();
     }
 
@@ -1283,14 +1404,19 @@ $(document).ready(function () {
                     // View Detail PO - selalu tampil
                     aksiHtml += '<button class="btn btn-info btn-view-detail" data-ponmbr="' + row.ponmbr + '" title="Lihat Detail Barang PO"><i class="fas fa-eye"></i></button>';
 
+                    // Input Tanggal Penyerahan - khusus status Tunggu Tanggal Penyerahan
+                    if (row.status === 'Tunggu Tanggal Penyerahan') {
+                        aksiHtml += '<button class="btn btn-warning btn-set-tgl-penyerahan" data-id="' + row.detail_id + '" data-ponmbr="' + row.ponmbr + '" title="Input Tanggal Penyerahan"><i class="fas fa-calendar-plus"></i></button>';
+                    }
+
+                    // Serahkan Kembali - khusus status Sudah Kembali (Purchasing/Admin)
+                    if (userPerms.can_confirm && row.status === 'Sudah Kembali') {
+                        aksiHtml += '<button class="btn btn-primary btn-serahkan-kembali" data-id="' + row.detail_id + '" data-ponmbr="' + row.ponmbr + '" title="Serahkan Kembali ke Direktur"><i class="fas fa-redo"></i></button>';
+                    }
+
                     // Konfirmasi Kembali - Purchasing/Admin, status Diserahkan/Belum Kembali
                     if (userPerms.can_confirm && (row.status === 'Diserahkan' || row.status === 'Belum Kembali')) {
                         aksiHtml += '<button class="btn btn-warning btn-konfirmasi" data-id="' + row.detail_id + '" data-ponmbr="' + row.ponmbr + '" data-vendor="' + (row.povendorname || '-') + '" title="Konfirmasi Dokumen Kembali"><i class="fas fa-undo"></i></button>';
-                    }
-
-                    // Approve - IT/Admin, status Sudah TTD
-                    if (userPerms.can_approve && row.status === 'Sudah TTD') {
-                        aksiHtml += '<button class="btn btn-success btn-approve" data-id="' + row.detail_id + '" data-ponmbr="' + row.ponmbr + '" title="Approve PO"><i class="fas fa-check"></i></button>';
                     }
 
                     // Log History - selalu tampil
@@ -1305,20 +1431,12 @@ $(document).ready(function () {
 
                     // Checkbox kolom
                     var canKonfirmasi = userPerms.can_confirm && (row.status === 'Diserahkan' || row.status === 'Belum Kembali');
-                    var canApprove = userPerms.can_approve && row.status === 'Sudah TTD';
-                    var isEligible = false;
-                    var checkTitle = '';
+                    var canSetTgl = (row.status === 'Tunggu Tanggal Penyerahan');
+                    var canSerahkanKembali = userPerms.can_confirm && (row.status === 'Sudah Kembali');
+                    var canDelete = userPerms.can_delete && (row.status !== 'Approved' || userPerms.is_admin);
 
-                    if (batchMode === 'approve') {
-                        isEligible = canApprove;
-                        checkTitle = isEligible ? '' : 'Sedang dalam mode Approve (hanya status Sudah TTD)';
-                    } else if (batchMode === 'konfirmasi') {
-                        isEligible = canKonfirmasi;
-                        checkTitle = isEligible ? '' : 'Sedang dalam mode Konfirmasi (hanya status Diserahkan / Belum Kembali)';
-                    } else {
-                        isEligible = canKonfirmasi || canApprove;
-                        checkTitle = isEligible ? '' : 'Status tidak dapat diproses aksi massal';
-                    }
+                    var isEligible = canDelete || canKonfirmasi || canSetTgl || canSerahkanKembali;
+                    var checkTitle = isEligible ? '' : 'Tidak memiliki hak akses untuk aksi massal pada baris ini';
 
                     var isChecked = selectedBatchIds.has(parseInt(row.detail_id));
                     var checkAttr = '';
@@ -1329,7 +1447,7 @@ $(document).ready(function () {
                     }
 
                     var checkCol = '<td class="text-center align-middle">' +
-                        '<input type="checkbox" class="row-select-checkbox" value="' + row.detail_id + '" ' + checkAttr + ' data-ponmbr="' + row.ponmbr + '" data-status="' + row.status + '">' +
+                        '<input type="checkbox" class="row-select-checkbox" value="' + row.detail_id + '" ' + checkAttr + ' data-ponmbr="' + row.ponmbr + '" data-status="' + row.status + '" data-approved-erp="' + (row.is_approved_erp ? '1' : '0') + '">' +
                         '</td>';
 
                     html += '<tr>' +
@@ -1340,7 +1458,7 @@ $(document).ready(function () {
                         '<td class="font-weight-bold" style="font-size:12px;">' + row.povendorname + '</td>' +
                         '<td class="text-center">' + row.podate + '</td>' +
                         '<td style="font-size:12px;">' + row.diserahkan_oleh + '</td>' +
-                        '<td class="text-center">' + getStatusBadge(row.status) + '</td>' +
+                        '<td class="text-center">' + getStatusBadge(row.status, row) + '</td>' +
                         '<td class="text-center">' + (row.tanggal_kembali || '-') + '</td>' +
                         '<td class="text-center">' + aksiHtml + '</td>' +
                     '</tr>';
@@ -1390,50 +1508,10 @@ $(document).ready(function () {
             return;
         }
 
-        // Determine target mode if not yet active
-        var targetMode = batchMode;
-        if (!targetMode) {
-            var currentFilter = $('#filterStatus').val();
-            if (currentFilter === 'Sudah TTD') {
-                targetMode = 'approve';
-            } else if (currentFilter === 'Diserahkan' || currentFilter === 'Belum Kembali') {
-                targetMode = 'konfirmasi';
-            } else {
-                // Semua Status: priority by role
-                if (userPerms.can_approve && !userPerms.can_confirm) {
-                    targetMode = 'approve';
-                } else if (userPerms.can_confirm && !userPerms.can_approve) {
-                    targetMode = 'konfirmasi';
-                } else {
-                    var countSudahTTD = $('.row-select-checkbox[data-status="Sudah TTD"]').length;
-                    var countDiserahkan = $('.row-select-checkbox[data-status="Diserahkan"], .row-select-checkbox[data-status="Belum Kembali"]').length;
-                    if (countSudahTTD > 0 && countDiserahkan === 0) {
-                        targetMode = 'approve';
-                    } else {
-                        targetMode = 'konfirmasi';
-                    }
-                }
-            }
-        }
-
-        batchMode = targetMode;
-
-        $('.row-select-checkbox').each(function () {
-            var $cb = $(this);
-            var id = parseInt($cb.val());
-            var status = $cb.data('status');
-            var matches = false;
-
-            if (targetMode === 'approve') {
-                matches = (status === 'Sudah TTD' && userPerms.can_approve);
-            } else if (targetMode === 'konfirmasi') {
-                matches = ((status === 'Diserahkan' || status === 'Belum Kembali') && userPerms.can_confirm);
-            }
-
-            if (matches) {
-                selectedBatchIds.add(id);
-                $cb.prop('checked', true);
-            }
+        $('.row-select-checkbox:not(:disabled)').each(function () {
+            var id = parseInt($(this).val());
+            selectedBatchIds.add(id);
+            $(this).prop('checked', true);
         });
 
         syncBatchCheckboxes();
@@ -1441,22 +1519,11 @@ $(document).ready(function () {
 
     $(document).on('change', '.row-select-checkbox', function () {
         var id = parseInt($(this).val());
-        var status = $(this).data('status');
 
         if ($(this).prop('checked')) {
-            if (selectedBatchIds.size === 0) {
-                if (status === 'Sudah TTD') {
-                    batchMode = 'approve';
-                } else {
-                    batchMode = 'konfirmasi';
-                }
-            }
             selectedBatchIds.add(id);
         } else {
             selectedBatchIds.delete(id);
-            if (selectedBatchIds.size === 0) {
-                batchMode = null;
-            }
         }
         syncBatchCheckboxes();
     });
@@ -1511,37 +1578,66 @@ $(document).ready(function () {
         submitBatchKonfirmasi(0);
     });
 
-    function submitBatchApprove() {
+    function submitBatchSerahkanKembali() {
         if (selectedBatchIds.size === 0) return;
-        var count = selectedBatchIds.size;
+        var ids = Array.from(selectedBatchIds);
+        var count = ids.length;
+        var today = new Date().toISOString().split('T')[0];
+
+        var poList = [];
+        $('.row-select-checkbox:checked').each(function () {
+            var p = $(this).data('ponmbr');
+            if (p) poList.push(p);
+        });
+
+        var previewText = poList.slice(0, 6).join(', ') + (poList.length > 6 ? ' ...dan ' + (poList.length - 6) + ' lainnya' : '');
 
         Swal.fire({
-            title: 'Konfirmasi Approve',
-            html: 'Apakah Anda yakin ingin meng-approve <b>' + count + '</b> dokumen PO yang sudah ditandatangani?',
-            icon: 'question',
+            title: 'Serahkan Kembali Massal',
+            html: '<div class="text-left mb-2">' +
+                  '  <p class="mb-1">Total: <b>' + count + ' PO</b> (' + previewText + ')</p>' +
+                  '  <p class="small text-muted mb-3">Seluruh PO terpilih akan diubah statusnya menjadi <b>Diserahkan</b> kembali ke Direktur.</p>' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Tanggal Penyerahan Kembali:</label>' +
+                  '  <input type="date" id="swalBatchTanggalKembali" class="form-control form-control-sm font-weight-bold mb-2" value="' + today + '">' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Catatan Tambahan (Opsional):</label>' +
+                  '  <textarea id="swalBatchCatatanKembali" class="form-control form-control-sm" rows="2" placeholder="Catatan untuk seluruh PO terpilih..."></textarea>' +
+                  '</div>',
+            icon: 'info',
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check-double mr-1"></i> Ya, Approve',
+            confirmButtonText: '<i class="fas fa-redo mr-1"></i> Simpan untuk ' + count + ' PO',
             cancelButtonText: 'Batal',
-            confirmButtonColor: '#8b5cf6',
-            cancelButtonColor: '#64748b'
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#64748b',
+            preConfirm: function () {
+                var val = $('#swalBatchTanggalKembali').val();
+                if (!val) {
+                    Swal.showValidationMessage('Tanggal penyerahan kembali wajib diisi.');
+                    return false;
+                }
+                return {
+                    tanggal: val,
+                    catatan: $('#swalBatchCatatanKembali').val()
+                };
+            }
         }).then(function (result) {
-            if (!result.isConfirmed) return;
+            if (!result.isConfirmed || !result.value) return;
 
-            var $btn = $('#btnBatchApprove');
+            var $btn = $('#btnBatchSerahkanKembali');
             var $btnCancel = $('#btnCancelBatchSelection');
-
             $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
             $btnCancel.prop('disabled', true);
 
             $.post(BASE_URL, {
-                action: 'batch_approve',
-                detail_ids: Array.from(selectedBatchIds)
+                action: 'batch_serahkan_kembali',
+                detail_ids: ids,
+                tanggal_penyerahan: result.value.tanggal,
+                catatan: result.value.catatan
             }, function (res) {
                 if (res.status === 'ok') {
                     Swal.fire({
                         icon: 'success',
                         title: 'Berhasil!',
-                        text: res.message || (count + ' PO berhasil di-approve.'),
+                        text: res.message || (count + ' PO berhasil diserahkan kembali.'),
                         timer: 2000,
                         showConfirmButton: false
                     });
@@ -1554,14 +1650,163 @@ $(document).ready(function () {
             }, 'json').fail(function () {
                 Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
             }).always(function () {
-                $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Approve Terpilih');
+                $btn.prop('disabled', false).html('<i class="fas fa-redo mr-1"></i> Serahkan Kembali Terpilih');
                 $btnCancel.prop('disabled', false);
             });
         });
     }
 
-    $(document).on('click', '#btnBatchApprove', function () {
-        submitBatchApprove();
+    $(document).on('click', '#btnBatchSerahkanKembali', function () {
+        submitBatchSerahkanKembali();
+    });
+
+    function submitBatchSetTanggal() {
+        if (selectedBatchIds.size === 0) return;
+        var ids = Array.from(selectedBatchIds);
+        var count = ids.length;
+        var today = new Date().toISOString().split('T')[0];
+
+        var poList = [];
+        $('.row-select-checkbox:checked').each(function () {
+            var p = $(this).data('ponmbr');
+            if (p) poList.push(p);
+        });
+
+        var previewText = poList.slice(0, 6).join(', ') + (poList.length > 6 ? ' ...dan ' + (poList.length - 6) + ' lainnya' : '');
+
+        Swal.fire({
+            title: 'Input Tanggal Penyerahan Massal',
+            html: '<div class="text-left mb-2">' +
+                  '  <p class="mb-1">Total: <b>' + count + ' PO</b> (' + previewText + ')</p>' +
+                  '  <p class="small text-muted mb-3">Status seluruh PO terpilih akan otomatis berubah menjadi <b>Diserahkan</b> setelah tanggal disimpan.</p>' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Tanggal Penyerahan Fisik:</label>' +
+                  '  <input type="date" id="swalBatchTanggalPenyerahan" class="form-control form-control-sm font-weight-bold" value="' + today + '">' +
+                  '</div>',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-check mr-1"></i> Simpan untuk ' + count + ' PO',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#ea580c',
+            cancelButtonColor: '#64748b',
+            preConfirm: function () {
+                var val = $('#swalBatchTanggalPenyerahan').val();
+                if (!val) {
+                    Swal.showValidationMessage('Tanggal penyerahan wajib diisi.');
+                    return false;
+                }
+                return val;
+            }
+        }).then(function (result) {
+            if (!result.isConfirmed || !result.value) return;
+
+            var $btn = $('#btnBatchSetTanggal');
+            var $btnCancel = $('#btnCancelBatchSelection');
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
+            $btnCancel.prop('disabled', true);
+
+            $.post(BASE_URL, {
+                action: 'set_tanggal_penyerahan',
+                detail_ids: JSON.stringify(ids),
+                tanggal_penyerahan: result.value
+            }, function (res) {
+                if (res.status === 'ok') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil!',
+                        text: res.message || (count + ' PO berhasil diupdate tanggal penyerahannya.'),
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    clearBatchSelection();
+                    loadData();
+                    loadSummary();
+                } else {
+                    Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
+                }
+            }, 'json').fail(function () {
+                Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+            }).always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-calendar-plus mr-1"></i> Input Tgl Penyerahan Terpilih');
+                $btnCancel.prop('disabled', false);
+            });
+        });
+    }
+
+    $(document).on('click', '#btnBatchSetTanggal', function () {
+        submitBatchSetTanggal();
+    });
+
+    function submitBatchDelete() {
+        var count = selectedBatchIds.size;
+        if (count === 0) return;
+
+        var poList = [];
+        $('.row-select-checkbox:checked').each(function () {
+            var ponmbr = $(this).data('ponmbr');
+            var status = $(this).data('status');
+            if (ponmbr) {
+                poList.push({ ponmbr: ponmbr, status: status });
+            }
+        });
+
+        var poListHtml = '<div class="text-left my-2 p-2 rounded" style="background:#f8fafc; border:1px solid #e2e8f0; max-height:160px; overflow-y:auto;">' +
+                         '<ul class="list-unstyled mb-0 small">';
+        $.each(poList, function (i, item) {
+            poListHtml += '<li class="py-1 border-bottom d-flex justify-content-between align-items-center">' +
+                          '<span><b>' + item.ponmbr + '</b></span>' +
+                          '<span class="badge badge-light border">' + item.status + '</span>' +
+                          '</li>';
+        });
+        poListHtml += '</ul></div>';
+
+        Swal.fire({
+            title: 'Hapus ' + count + ' Tracking PO?',
+            html: '<p class="mb-2">Apakah Anda yakin ingin menghapus data tracking untuk <b>' + count + ' PO</b> terpilih?</p>' +
+                  poListHtml +
+                  '<div class="alert alert-warning text-left py-2 px-3 small mt-2 mb-0">' +
+                  '  <i class="fas fa-exclamation-triangle mr-1"></i> PO yang dihapus akan dikeluarkan dari tracking dan dapat diserahkan kembali jika diperlukan.' +
+                  '</div>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> Ya, Hapus Semua (' + count + ' PO)',
+            cancelButtonText: 'Batal'
+        }).then(function (result) {
+            if (!result.isConfirmed) return;
+
+            var $btnTop = $('#btnTopBatchDelete');
+            var $btnFloat = $('#btnFloatingBatchDelete');
+            var $btnCancel = $('#btnCancelBatchSelection');
+
+            $btnTop.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menghapus...');
+            $btnFloat.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menghapus...');
+            $btnCancel.prop('disabled', true);
+
+            $.post(BASE_URL, {
+                action: 'batch_delete_tracking',
+                detail_ids: Array.from(selectedBatchIds)
+            }, function (res) {
+                if (res.status === 'ok') {
+                    Swal.fire('Terhapus!', res.message || (count + ' data tracking PO berhasil dihapus.'), 'success');
+                    clearBatchSelection();
+                    loadData();
+                    loadSummary();
+                } else {
+                    Swal.fire('Gagal', res.message || 'Gagal menghapus data tracking.', 'error');
+                }
+            }, 'json').fail(function () {
+                Swal.fire('Error', 'Gagal menghubungi server.', 'error');
+            }).always(function () {
+                $btnTop.prop('disabled', false).html('<i class="fas fa-trash-alt mr-1"></i> Hapus Terpilih (<span class="batch-delete-count">' + selectedBatchIds.size + '</span>)');
+                $btnFloat.prop('disabled', false).html('<i class="fas fa-trash-alt mr-1"></i> Hapus Terpilih (<span class="batch-delete-count">' + selectedBatchIds.size + '</span>)');
+                $btnCancel.prop('disabled', false);
+            });
+        });
+    }
+
+    $(document).on('click', '#btnTopBatchDelete, #btnFloatingBatchDelete', function () {
+        submitBatchDelete();
     });
 
     // ─── INITIAL LOAD ─────────────────────────────────────────────────────
@@ -1864,15 +2109,16 @@ $(document).ready(function () {
         updatePoSelectionUI();
     });
 
+    // Tombol kosongkan tanggal kirim
+    $('#btnClearTanggalKirim').on('click', function () {
+        $('#inputTanggalKirim').val('');
+    });
+
     // Submit batch PO yang diserahkan
     $('#btnSubmitPoSearch').on('click', function () {
-        var tanggalKirim = $('#inputTanggalKirim').val();
+        var tanggalKirim = $.trim($('#inputTanggalKirim').val());
         var selectedKeys = Object.keys(selectedPoMap);
 
-        if (!tanggalKirim) {
-            Swal.fire('Perhatian', 'Pilih tanggal kirim terlebih dahulu.', 'warning');
-            return;
-        }
         if (selectedKeys.length === 0) {
             Swal.fire('Perhatian', 'Pilih minimal 1 PO untuk diserahkan.', 'warning');
             return;
@@ -1888,14 +2134,34 @@ $(document).ready(function () {
             });
         });
 
+        var confirmTitle = 'Konfirmasi Penyerahan';
+        var confirmHtml = '';
+        var confirmBtnText = '';
+        var confirmColor = '#28a745';
+        var iconType = 'question';
+
+        if (!tanggalKirim) {
+            confirmTitle = 'Tunggu Tanggal Penyerahan';
+            confirmHtml = 'Tanggal penyerahan <b>dikosongkan</b>.<br><br>Simpan <b>' + poItems.length + ' PO</b> dengan status <b><span class="badge badge-warning text-dark font-weight-bold px-2 py-1">Tunggu Tanggal Penyerahan</span></b>?<br><small class="text-muted">Tanggal penyerahan dapat diinputkan menyusul nanti.</small>';
+            confirmBtnText = '<i class="fas fa-save mr-1"></i> Ya, Simpan';
+            confirmColor = '#ea580c';
+            iconType = 'info';
+        } else {
+            confirmTitle = 'Konfirmasi Penyerahan';
+            confirmHtml = 'Serahkan <b>' + poItems.length + ' PO</b> ke Direktur pada tanggal <b>' + tanggalKirim + '</b>?';
+            confirmBtnText = '<i class="fas fa-paper-plane mr-1"></i> Ya, Serahkan!';
+            confirmColor = '#28a745';
+            iconType = 'question';
+        }
+
         Swal.fire({
-            title: 'Konfirmasi Penyerahan',
-            html: 'Serahkan <b>' + poItems.length + ' PO</b> ke Direktur pada tanggal <b>' + tanggalKirim + '</b>?',
-            icon: 'question',
+            title: confirmTitle,
+            html: confirmHtml,
+            icon: iconType,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i> Ya, Serahkan!',
+            confirmButtonText: confirmBtnText,
             cancelButtonText: 'Batal',
-            confirmButtonColor: '#28a745'
+            confirmButtonColor: confirmColor
         }).then(function (result) {
             if (!result.isConfirmed) return;
 
@@ -1910,7 +2176,7 @@ $(document).ready(function () {
                 $btn.prop('disabled', false).html('<i class="fas fa-paper-plane mr-1"></i> Submit');
                 if (res.status === 'ok') {
                     $('#modalSerahkanPo').modal('hide');
-                    Swal.fire('Berhasil!', res.message || 'PO berhasil diserahkan ke Direktur.', 'success');
+                    Swal.fire('Berhasil!', res.message || 'PO berhasil diproses.', 'success');
                     selectedPoMap = {};
                     loadSummary();
                     loadData();
@@ -1972,36 +2238,107 @@ $(document).ready(function () {
         });
     });
 
-    // ─── APPROVE PO ───────────────────────────────────────────────────────
-    $(document).on('click', '.btn-approve', function () {
+    // ─── INPUT TANGGAL PENYERAHAN (BARIS TUNGGAL) ─────────────────────────
+    $(document).on('click', '.btn-set-tgl-penyerahan', function () {
         var detailId = $(this).data('id');
         var ponmbr = $(this).data('ponmbr');
+        var today = new Date().toISOString().split('T')[0];
 
         Swal.fire({
-            title: 'Approve PO',
-            html: 'Approve PO <strong>' + ponmbr + '</strong>?<br><small class="text-muted">Aksi ini tidak dapat dibatalkan.</small>',
-            icon: 'warning',
+            title: 'Input Tanggal Penyerahan',
+            html: '<div class="text-left mb-2">' +
+                  '  <p class="mb-1">No PO: <b>' + ponmbr + '</b></p>' +
+                  '  <p class="small text-muted mb-3">Setelah tanggal disimpan, status PO akan otomatis berubah menjadi <b>Diserahkan</b>.</p>' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Tanggal Penyerahan Fisik:</label>' +
+                  '  <input type="date" id="swalRowTanggalPenyerahan" class="form-control form-control-sm font-weight-bold" value="' + today + '">' +
+                  '</div>',
+            icon: 'info',
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check mr-1"></i> Ya, Approve',
+            confirmButtonText: '<i class="fas fa-check mr-1"></i> Simpan Tanggal',
             cancelButtonText: 'Batal',
-            confirmButtonColor: '#10b981'
-        }).then(function (result) {
-            if (result.isConfirmed) {
-                $.post(BASE_URL, {
-                    action: 'approve',
-                    detail_id: detailId
-                }, function (res) {
-                    if (res.status === 'ok') {
-                        Swal.fire('Berhasil!', res.message, 'success');
-                        loadData();
-                        loadSummary();
-                    } else {
-                        Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
-                    }
-                }, 'json').fail(function () {
-                    Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
-                });
+            confirmButtonColor: '#ea580c',
+            cancelButtonColor: '#64748b',
+            preConfirm: function () {
+                var val = $('#swalRowTanggalPenyerahan').val();
+                if (!val) {
+                    Swal.showValidationMessage('Tanggal penyerahan wajib diisi.');
+                    return false;
+                }
+                return val;
             }
+        }).then(function (result) {
+            if (!result.isConfirmed || !result.value) return;
+
+            $.post(BASE_URL, {
+                action: 'set_tanggal_penyerahan',
+                detail_id: detailId,
+                tanggal_penyerahan: result.value
+            }, function (res) {
+                if (res.status === 'ok') {
+                    Swal.fire('Berhasil!', res.message, 'success');
+                    loadData();
+                    loadSummary();
+                } else {
+                    Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
+                }
+            }, 'json').fail(function () {
+                Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+            });
+        });
+    });
+
+    // ─── SERAHKAN KEMBALI PO (BARIS TUNGGAL) ─────────────────────────────
+    $(document).on('click', '.btn-serahkan-kembali', function () {
+        var detailId = $(this).data('id');
+        var ponmbr = $(this).data('ponmbr');
+        var today = new Date().toISOString().split('T')[0];
+
+        Swal.fire({
+            title: 'Serahkan Kembali PO',
+            html: '<div class="text-left mb-2">' +
+                  '  <p class="mb-1">No PO: <b>' + ponmbr + '</b></p>' +
+                  '  <p class="small text-muted mb-3">Status PO akan otomatis berubah kembali menjadi <b>Diserahkan</b> ke Direktur untuk ditandatangani.</p>' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Tanggal Penyerahan Kembali:</label>' +
+                  '  <input type="date" id="swalRowTanggalKembali" class="form-control form-control-sm font-weight-bold mb-2" value="' + today + '">' +
+                  '  <label class="small font-weight-bold text-secondary mb-1">Catatan Tambahan (Opsional):</label>' +
+                  '  <textarea id="swalRowCatatanKembali" class="form-control form-control-sm" rows="2" placeholder="Catatan penyerahan kembali..."></textarea>' +
+                  '</div>',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-redo mr-1"></i> Serahkan Kembali',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#64748b',
+            preConfirm: function () {
+                var val = $('#swalRowTanggalKembali').val();
+                if (!val) {
+                    Swal.showValidationMessage('Tanggal penyerahan kembali wajib diisi.');
+                    return false;
+                }
+                return {
+                    tanggal: val,
+                    catatan: $('#swalRowCatatanKembali').val()
+                };
+            }
+        }).then(function (result) {
+            if (!result.isConfirmed || !result.value) return;
+
+            $.post(BASE_URL, {
+                action: 'serahkan_kembali',
+                detail_id: detailId,
+                tanggal_penyerahan: result.value.tanggal,
+                catatan: result.value.catatan
+            }, function (res) {
+                if (res.status === 'ok') {
+                    Swal.fire('Berhasil!', res.message, 'success');
+                    loadData();
+                    loadSummary();
+                } else {
+                    Swal.fire('Gagal', res.message || 'Terjadi kesalahan.', 'error');
+                }
+            }, 'json').fail(function () {
+                Swal.fire('Error', 'Gagal terhubung ke server.', 'error');
+            });
         });
     });
 

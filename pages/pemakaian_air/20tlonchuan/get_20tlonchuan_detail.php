@@ -14,35 +14,27 @@ if (!empty($permissions) && isset($permissions['CanView']) && $permissions['CanV
 $id = intval($_GET['id'] ?? 0);
 if ($id <= 0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
 
-$hdrStmt = sqlsrv_query($conn, "SELECT id, periode, note FROM dbo.pmlonchuan_hdr WHERE id=?", [$id]);
-$hdr = $hdrStmt ? sqlsrv_fetch_array($hdrStmt, SQLSRV_FETCH_ASSOC) : null;
-if ($hdrStmt) sqlsrv_free_stmt($hdrStmt);
-if (!$hdr) { echo json_encode(['success'=>false,'message'=>'Data tidak ditemukan.']); exit; }
+$stmt = sqlsrv_query($conn, "SELECT x.*, CONVERT(VARCHAR(5), x.cut_off_jam, 108) AS cut_off_jam_fmt FROM dbo.air_steam_20tlonchuan_harian x WHERE x.id=?", [$id]);
+$row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : null;
+if ($stmt) sqlsrv_free_stmt($stmt);
+if (!$row) { echo json_encode(['success'=>false,'message'=>'Data tidak ditemukan.']); exit; }
 
-$tgl = $hdr['periode'];
+$tgl = $row['tanggal'];
 if ($tgl instanceof DateTime) $tanggal = $tgl->format('Y-m-d');
 else $tanggal = $tgl ? date('Y-m-d', strtotime((string)$tgl)) : '';
 
-$rows = [];
-$map = [];
-$dtlStmt = sqlsrv_query($conn, "SELECT jam, jenis, nilai_ton FROM dbo.pmlonchuan_dtl WHERE hdr_id=?", [$id]);
-if ($dtlStmt) {
-    while ($r = sqlsrv_fetch_array($dtlStmt, SQLSRV_FETCH_ASSOC)) {
-        $jam = (int)($r['jam'] ?? 0);
-        $jenis = strtoupper(trim((string)($r['jenis'] ?? '')));
-        if (!isset($map[$jam])) $map[$jam] = ['jam'=>$jam, 'air'=>null, 'steam'=>null];
-        if ($jenis === 'AIR') $map[$jam]['air'] = (float)($r['nilai_ton'] ?? 0);
-        if ($jenis === 'STEAM') $map[$jam]['steam'] = (float)($r['nilai_ton'] ?? 0);
-    }
-    sqlsrv_free_stmt($dtlStmt);
-}
-
-ksort($map);
-foreach ($map as $m) $rows[] = $m;
-
 echo json_encode(['success'=>true,'data'=>[
-    'id' => $id,
+    'id' => $row['id'],
     'tanggal' => $tanggal,
-    'note' => $hdr['note'] ?? '',
-    'rows' => $rows
+    'air_awal_ton' => $row['air_awal_ton'] ?? 0,
+    'air_akhir_ton' => $row['air_akhir_ton'] ?? 0,
+    'air_total_pemakaian_ton' => $row['air_total_pemakaian_ton'] ?? 0,
+    'air_rata_rata_per_jam_ton' => $row['air_rata_rata_per_jam_ton'] ?? 0,
+    'air_ket' => $row['air_ket'] ?? '',
+    'steam_awal_ton' => $row['steam_awal_ton'] ?? 0,
+    'steam_akhir_ton' => $row['steam_akhir_ton'] ?? 0,
+    'steam_total_pemakaian_ton' => $row['steam_total_pemakaian_ton'] ?? 0,
+    'steam_rata_rata_per_jam_ton' => $row['steam_rata_rata_per_jam_ton'] ?? 0,
+    'steam_ket' => $row['steam_ket'] ?? '',
+    'cut_off_jam' => $row['cut_off_jam_fmt'] ?? '09:00'
 ]]);
