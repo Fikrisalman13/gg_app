@@ -49,7 +49,7 @@ function loadSyncRow($conn, int $recipeId): ?array
     $conditions = ["p.id=?", "UPPER(LTRIM(RTRIM(ISNULL(p.status_resep_lipat,''))))='EXPERIMENT'", 'e.was_approved=1'];
     $params = [$recipeId];
     resepExperimentApplyVisibility($conditions, $params, 'e', $conn);
-    $sql = 'SELECT p.id,p.cus_color,p.no_cp AS ppc_no_cp,p.no_so AS ppc_no_so,p.source_experiment_id,e.no_cp AS experiment_no_cp,e.soi AS experiment_soi FROM dbo.resep_obat p INNER JOIN dbo.resep_obat_experiment e ON e.id=p.source_experiment_id WHERE ' . implode(' AND ', $conditions);
+    $sql = 'SELECT p.id,p.cus_color,p.no_cp AS ppc_no_cp,p.no_so AS ppc_no_so,p.source_experiment_id,e.no_cp AS experiment_no_cp,e.soi AS experiment_soi FROM dbo.resep_obat_v2 p INNER JOIN dbo.resep_obat_experiment e ON e.id=p.source_experiment_id WHERE ' . implode(' AND ', $conditions);
     $statement = sqlsrv_query($conn, $sql, $params);
     $row = $statement ? sqlsrv_fetch_array($statement, SQLSRV_FETCH_ASSOC) : null;
     return $row ?: null;
@@ -65,7 +65,7 @@ function applySyncRow($conn, array $row, array $baseline, string $user): string
     $newNoCp = isset($updates['no_cp']) ? $fields['no_cp']['source'] : $fields['no_cp']['current'];
     $newNoSo = isset($updates['no_so']) ? $fields['no_so']['source'] : $fields['no_so']['current'];
     if (!sqlsrv_begin_transaction($conn)) return 'failed';
-    $update = sqlsrv_query($conn, "UPDATE dbo.resep_obat SET no_cp=?,no_so=?,updated_at=?,updated_by=? WHERE id=? AND UPPER(LTRIM(RTRIM(ISNULL(status_resep_lipat,''))))='EXPERIMENT' AND ISNULL(no_cp,'')=? AND ISNULL(no_so,'')=?", [$newNoCp, $newNoSo, date('Y-m-d H:i:s'), $user, (int) $row['id'], $fields['no_cp']['current'], $fields['no_so']['current']]);
+    $update = sqlsrv_query($conn, "UPDATE dbo.resep_obat_v2 SET no_cp=?,no_so=?,updated_at=?,updated_by=? WHERE id=? AND UPPER(LTRIM(RTRIM(ISNULL(status_resep_lipat,''))))='EXPERIMENT' AND ISNULL(no_cp,'')=? AND ISNULL(no_so,'')=?", [$newNoCp, $newNoSo, date('Y-m-d H:i:s'), $user, (int) $row['id'], $fields['no_cp']['current'], $fields['no_so']['current']]);
     if (!$update || sqlsrv_rows_affected($update) !== 1) { sqlsrv_rollback($conn); return 'skipped'; }
     if (!sqlsrv_commit($conn)) { sqlsrv_rollback($conn); return 'failed'; }
     return 'updated';
@@ -82,7 +82,7 @@ if ($action === 'bulk_preview') {
     $conditions = ["UPPER(LTRIM(RTRIM(ISNULL(p.status_resep_lipat,''))))='EXPERIMENT'", 'p.source_experiment_id IS NOT NULL', 'e.was_approved=1'];
     $params = [];
     resepExperimentApplyVisibility($conditions, $params, 'e', $conn);
-    $sql = 'SELECT TOP 500 p.id,p.cus_color,p.no_cp AS ppc_no_cp,p.no_so AS ppc_no_so,p.source_experiment_id,e.no_cp AS experiment_no_cp,e.soi AS experiment_soi FROM dbo.resep_obat p INNER JOIN dbo.resep_obat_experiment e ON e.id=p.source_experiment_id WHERE ' . implode(' AND ', $conditions) . ' ORDER BY p.id DESC';
+    $sql = 'SELECT TOP 500 p.id,p.cus_color,p.no_cp AS ppc_no_cp,p.no_so AS ppc_no_so,p.source_experiment_id,e.no_cp AS experiment_no_cp,e.soi AS experiment_soi FROM dbo.resep_obat_v2 p INNER JOIN dbo.resep_obat_experiment e ON e.id=p.source_experiment_id WHERE ' . implode(' AND ', $conditions) . ' ORDER BY p.id DESC';
     $statement = sqlsrv_query($conn, $sql, $params);
     if (!$statement) syncRespond(500, ['ok' => false, 'message' => 'Gagal memindai resep Experiment.']);
     $summary = ['scanned' => 0, 'can_update' => 0, 'already_sync' => 0, 'source_empty' => 0, 'conflict' => 0, 'no_source_id' => 0];
@@ -90,7 +90,7 @@ if ($action === 'bulk_preview') {
     $unlinkedStatement = sqlsrv_query(
         $conn,
         "SELECT TOP 100 id,cus_color,no_cp AS ppc_no_cp,no_so AS ppc_no_so
-         FROM dbo.resep_obat
+         FROM dbo.resep_obat_v2
          WHERE UPPER(LTRIM(RTRIM(ISNULL(status_resep_lipat,''))))='EXPERIMENT'
            AND source_experiment_id IS NULL
          ORDER BY id DESC"

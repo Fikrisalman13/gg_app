@@ -55,7 +55,7 @@ while ($row = sqlsrv_fetch_array($detailStatement, SQLSRV_FETCH_ASSOC)) $details
 $duplicateParams = [$header['cus_color'], $header['kode_warna']];
 $duplicateWhere = 'UPPER(LTRIM(RTRIM(cus_color)))=UPPER(?) AND UPPER(LTRIM(RTRIM(kode_warna)))=UPPER(?)';
 if (trim((string)$header['no_cp']) !== '') { $duplicateWhere .= ' AND UPPER(LTRIM(RTRIM(no_cp)))=UPPER(?)'; $duplicateParams[] = $header['no_cp']; }
-$duplicateStatement = sqlsrv_query($conn, "SELECT TOP 10 id, no_cp, kode_warna, color_name, cus_color, status_resep_lipat, created_at FROM dbo.resep_obat WHERE $duplicateWhere ORDER BY id DESC", $duplicateParams);
+$duplicateStatement = sqlsrv_query($conn, "SELECT TOP 10 id, no_cp, kode_warna, color_name, cus_color, status_resep_lipat, created_at FROM dbo.resep_obat_v2 WHERE $duplicateWhere ORDER BY id DESC", $duplicateParams);
 $duplicates = [];
 while ($duplicateStatement && $row = sqlsrv_fetch_array($duplicateStatement, SQLSRV_FETCH_ASSOC)) { if ($row['created_at'] instanceof DateTime) $row['created_at'] = $row['created_at']->format('Y-m-d H:i:s'); $duplicates[] = $row; }
 respondDraft(200, ['ok' => true, 'header' => $header, 'details' => $details, 'duplicates' => $duplicates]);
