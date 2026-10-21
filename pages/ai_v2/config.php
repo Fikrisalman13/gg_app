@@ -5,7 +5,7 @@
 // =========================
 // Database SQL Server
 // =========================
-define('AI_DB_SERVER', '202.150.136.51');
+define('AI_DB_SERVER', '192.168.7.184');
 define('AI_DB_NAME', 'GG');
 define('AI_DB_USER', 'sa');
 define('AI_DB_PASS', 'rahasiaIT2020');

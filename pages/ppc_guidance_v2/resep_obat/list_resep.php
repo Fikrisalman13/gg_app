@@ -69,9 +69,6 @@ include '../../../includes/sidebar.php';
                     <div class="float-right">
 
                         <?php if ($permissions['CanEdit'] == 1): ?>
-                            <a href="../edit_otomatis/index.php" class="btn btn-warning btn-sm mr-1 text-dark font-weight-bold" title="Edit Otomatis susunan routing & item resep">
-                                <i class="fas fa-magic mr-1"></i> Edit Otomatis
-                            </a>
                             <button type="button" class="btn btn-secondary btn-sm mr-1" id="ppcExperimentBulkSyncOpen">
                                 <i class="fas fa-sync-alt"></i> Sinkronkan Experiment
                             </button>
@@ -126,16 +123,32 @@ include '../../../includes/sidebar.php';
 
                     <div class="status-summary mb-3" id="statusSummary" aria-live="polite">
                         <button type="button" class="status-summary-item status-shading ppc-summary-group-open" data-category="shading" data-label="Shading" aria-label="Lihat rincian grouping Shading">
-                            <span>Shading</span><strong id="summaryShading">0</strong>
+                            <span>Shading</span>
+                            <div class="status-summary-value text-right">
+                                <strong id="summaryShading">0</strong>
+                                <small id="summaryShadingGrouped" class="status-summary-sub">0 kelompok</small>
+                            </div>
                         </button>
                         <button type="button" class="status-summary-item status-experiment ppc-summary-group-open" data-category="experiment" data-label="Experiment" aria-label="Lihat rincian grouping Experiment">
-                            <span>Experiment</span><strong id="summaryExperiment">0</strong>
+                            <span>Experiment</span>
+                            <div class="status-summary-value text-right">
+                                <strong id="summaryExperiment">0</strong>
+                                <small id="summaryExperimentGrouped" class="status-summary-sub">0 kelompok</small>
+                            </div>
                         </button>
                         <button type="button" class="status-summary-item status-kestabilan ppc-summary-group-open" data-category="kesetabilan" data-label="Kesetabilan" aria-label="Lihat rincian grouping Kesetabilan">
-                            <span>Kesetabilan</span><strong id="summaryKesetabilan">0</strong>
+                            <span>Kesetabilan</span>
+                            <div class="status-summary-value text-right">
+                                <strong id="summaryKesetabilan">0</strong>
+                                <small id="summaryKesetabilanGrouped" class="status-summary-sub">0 kelompok</small>
+                            </div>
                         </button>
                         <button type="button" class="status-summary-item status-master-resep ppc-summary-group-open" data-category="master_resep" data-label="Master Resep" aria-label="Lihat rincian grouping Master Resep">
-                            <span>Master Resep</span><strong id="summaryMasterResep">0</strong>
+                            <span>Master Resep</span>
+                            <div class="status-summary-value text-right">
+                                <strong id="summaryMasterResep">0</strong>
+                                <small id="summaryMasterResepGrouped" class="status-summary-sub">0 kelompok</small>
+                            </div>
                         </button>
                         <button type="button" class="status-summary-item status-total ppc-summary-group-open" data-category="total" data-label="Total Hasil" aria-label="Lihat rincian seluruh grouping">
                             <span>Total Hasil</span><strong id="summaryTotal">0</strong>
@@ -356,6 +369,29 @@ include '../../../includes/sidebar.php';
     .status-summary-item strong {
         font-size: 1.35rem;
         margin-left: .5rem;
+    }
+
+    .status-summary-value {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        line-height: 1.15;
+        margin-left: .5rem;
+    }
+
+    .status-summary-value strong {
+        font-size: 1.35rem;
+        line-height: 1.1;
+        margin-left: 0;
+    }
+
+    .status-summary-sub {
+        font-size: .72rem;
+        font-weight: 500;
+        opacity: .9;
+        white-space: nowrap;
+        margin-top: 2px;
     }
 
     .ppc-summary-group-card {
@@ -866,9 +902,13 @@ include '../../../includes/sidebar.php';
         table.on('xhr.dt', function (e, settings, json) {
             if (!json || !json.statusSummary) return;
             $('#summaryShading').text(json.statusSummary.shading || 0);
+            $('#summaryShadingGrouped').text((json.statusSummary.shading_grouped || 0) + ' kelompok');
             $('#summaryExperiment').text(json.statusSummary.experiment || 0);
+            $('#summaryExperimentGrouped').text((json.statusSummary.experiment_grouped || 0) + ' kelompok');
             $('#summaryKesetabilan').text(json.statusSummary.kesetabilan || 0);
+            $('#summaryKesetabilanGrouped').text((json.statusSummary.kesetabilan_grouped || 0) + ' kelompok');
             $('#summaryMasterResep').text(json.statusSummary.master_resep || 0);
+            $('#summaryMasterResepGrouped').text((json.statusSummary.master_resep_grouped || 0) + ' kelompok');
             $('#summaryTotal').text(json.recordsFiltered || 0);
         });
 

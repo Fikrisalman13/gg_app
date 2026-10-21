@@ -13,7 +13,7 @@ $theme = $_SESSION['Theme'] ?? 'primary';
         <div class="container-fluid">
             <div class="row mb-2 align-items-center">
                 <div class="col-sm-6">
-                    <h1 class="m-0">AI PT. Surya Usaha Mandiri</h1>
+                    <h1 class="m-0">AI Assistant PT. Surya Usaha Mandiri</h1>
                 </div>
                 <div class="col-sm-6 text-right">
                     <a href="upload.php" class="btn btn-sm btn-primary">Upload Dokumen</a>
@@ -31,7 +31,7 @@ $theme = $_SESSION['Theme'] ?? 'primary';
                             <div class="panel chat-panel">
                                 <div class="chat-header">
                                     <div class="chat-title">
-                                        <div class="chat-brand">AI PT. Surya Usaha Mandiri</div>
+                                        <div class="chat-brand">AI Assistant PT. Surya Usaha Mandiri</div>
                                     </div>
                                     <div class="model-select">
                                         <label>Dokumen</label>

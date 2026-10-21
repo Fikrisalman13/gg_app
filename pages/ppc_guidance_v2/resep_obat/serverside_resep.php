@@ -129,13 +129,20 @@ try {
 
     $filteredStatement = requireRecipeStatement(sqlsrv_query(
         $conn,
-        "SELECT COUNT(*) AS total FROM (
+        "SELECT 
+            COUNT(*) AS total,
+            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) = 'shading' THEN 1 ELSE 0 END) AS shading_grouped,
+            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) = 'experiment' THEN 1 ELSE 0 END) AS experiment_grouped,
+            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) IN ('kestabilan', 'kesetabilan') THEN 1 ELSE 0 END) AS kesetabilan_grouped,
+            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) IN ('master resep', 'master') THEN 1 ELSE 0 END) AS master_resep_grouped
+        FROM (
             SELECT $groupCode AS group_code, $groupCustomerColor AS group_customer_color, $groupStatus AS group_status
             FROM dbo.resep_obat_v2 r $whereClause GROUP BY $groupCode, $groupCustomerColor, $groupStatus
         ) groups",
         $params,
     ), 'Gagal menghitung group resep terfilter.');
-    $totalFiltered = (int) sqlsrv_fetch_array($filteredStatement, SQLSRV_FETCH_ASSOC)['total'];
+    $filteredRow = sqlsrv_fetch_array($filteredStatement, SQLSRV_FETCH_ASSOC) ?: [];
+    $totalFiltered = (int) ($filteredRow['total'] ?? 0);
 
     $summaryStatement = requireRecipeStatement(sqlsrv_query($conn, "SELECT
         SUM(CASE WHEN LOWER(LTRIM(RTRIM(COALESCE(r.status_resep_lipat, '')))) = 'shading' THEN 1 ELSE 0 END) AS shading,
@@ -149,6 +156,10 @@ try {
         'experiment' => (int) ($summaryRow['experiment'] ?? 0),
         'kesetabilan' => (int) ($summaryRow['kesetabilan'] ?? 0),
         'master_resep' => (int) ($summaryRow['master_resep'] ?? 0),
+        'shading_grouped' => (int) ($filteredRow['shading_grouped'] ?? 0),
+        'experiment_grouped' => (int) ($filteredRow['experiment_grouped'] ?? 0),
+        'kesetabilan_grouped' => (int) ($filteredRow['kesetabilan_grouped'] ?? 0),
+        'master_resep_grouped' => (int) ($filteredRow['master_resep_grouped'] ?? 0),
     ];
 
     $groupStatement = requireRecipeStatement(sqlsrv_query($conn, "WITH filtered AS (
