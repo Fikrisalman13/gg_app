@@ -10,7 +10,9 @@
  * 4. PO Overdue (Terlambat)
  */
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $rootPath = dirname(__DIR__, 3);
 require_once $rootPath . '/koneksi.php';
@@ -43,6 +45,7 @@ if ($startDate > $endDate) {
 
 $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : '';
 $picFilter = isset($_GET['pic']) ? trim($_GET['pic']) : '';
+$paymentStatusFilter = isset($_GET['payment_status']) ? trim($_GET['payment_status']) : '';
 $includeRange = isset($_GET['range']) && $_GET['range'] === '1' ? 1 : 0;
 
 $errorMessage = null;
@@ -54,14 +57,16 @@ $countOverdue = 0;
 $poGroups = [];
 
 // Format angka tanpa trailing zero
-function formatQty($val)
-{
-    if ($val === null || $val === '') return '0';
-    $floatVal = (float) $val;
-    if (floor($floatVal) == $floatVal) {
-        return number_format($floatVal, 0, ',', '.');
+if (!function_exists('formatQty')) {
+    function formatQty($val)
+    {
+        if ($val === null || $val === '') return '0';
+        $floatVal = (float) $val;
+        if (floor($floatVal) == $floatVal) {
+            return number_format($floatVal, 0, ',', '.');
+        }
+        return rtrim(rtrim(number_format($floatVal, 4, ',', '.'), '0'), ',');
     }
-    return rtrim(rtrim(number_format($floatVal, 4, ',', '.'), '0'), ',');
 }
 
 // Evaluasi status delivery PO berdasarkan fgstatus prpohd
@@ -69,33 +74,35 @@ function formatQty($val)
 // Parsial      : fgstatus U
 // Selesai      : fgstatus X
 // PO Overdue   : fgstatus V, tapi melewati rentang delivery-nya
-function evaluatePoDeliveryStatus(&$group, $targetDate = '')
-{
-    $poStatus = strtoupper(trim($group['po_status'] ?? ''));
+if (!function_exists('evaluatePoDeliveryStatus')) {
+    function evaluatePoDeliveryStatus(&$group, $targetDate = '')
+    {
+        $poStatus = strtoupper(trim($group['po_status'] ?? ''));
 
-    // Cek apakah pengiriman sudah melewati batas waktu (Overdue)
-    // Syarat: PO berstatus V dan batas akhir delivery < targetDate
-    $isOverdue = false;
-    $maxDelivery = !empty($group['max_d2']) ? $group['max_d2'] : $group['min_d1'];
-    if (!empty($targetDate) && !empty($maxDelivery)) {
-        if ($maxDelivery < $targetDate && $poStatus === 'V') {
-            $isOverdue = true;
+        // Cek apakah pengiriman sudah melewati batas waktu (Overdue)
+        // Syarat: PO berstatus V dan batas akhir delivery < targetDate
+        $isOverdue = false;
+        $maxDelivery = !empty($group['max_d2']) ? $group['max_d2'] : $group['min_d1'];
+        if (!empty($targetDate) && !empty($maxDelivery)) {
+            if ($maxDelivery < $targetDate && $poStatus === 'V') {
+                $isOverdue = true;
+            }
         }
-    }
-    $group['is_overdue'] = $isOverdue;
+        $group['is_overdue'] = $isOverdue;
 
-    if ($poStatus === 'X') {
-        $group['status_label'] = 'Selesai';
-        $group['status_badge'] = 'badge-success';
-    } elseif ($poStatus === 'U') {
-        $group['status_label'] = 'Parsial (Diterima Sebagian)';
-        $group['status_badge'] = 'badge-info';
-    } elseif ($poStatus === 'V') {
-        $group['status_label'] = 'Belum Datang';
-        $group['status_badge'] = 'badge-warning';
-    } else {
-        $group['status_label'] = 'Lainnya (' . $poStatus . ')';
-        $group['status_badge'] = 'badge-secondary';
+        if ($poStatus === 'X') {
+            $group['status_label'] = 'Selesai';
+            $group['status_badge'] = 'badge-success';
+        } elseif ($poStatus === 'U') {
+            $group['status_label'] = 'Parsial (Diterima Sebagian)';
+            $group['status_badge'] = 'badge-info';
+        } elseif ($poStatus === 'V') {
+            $group['status_label'] = 'Belum Datang';
+            $group['status_badge'] = 'badge-warning';
+        } else {
+            $group['status_label'] = 'Lainnya (' . $poStatus . ')';
+            $group['status_badge'] = 'badge-secondary';
+        }
     }
 }
 
@@ -455,6 +462,112 @@ if (!isset($conn3) || !$conn3) {
                 $poGroups = $normalPoGroups;
             }
         }
+
+        // 4. Ambil data status pembayaran (Cash Payment / CPNmbr dengan fgstatus = 'V')
+        // Sesuai kriteria: CPNmbr terisi dan di tabel cmcphd kolom fgstatus = 'V'
+        $allPoHdids = array_keys($poGroups);
+        $paymentLookup = [];
+        if (!empty($allPoHdids)) {
+            $inClause = implode(',', array_map('intval', $allPoHdids));
+            $sqlPayment = "
+                SELECT 
+                    u.pohdid,
+                    STRING_AGG(DISTINCT u.cpnmbr || '~' || COALESCE(TO_CHAR(u.cpdate, 'YYYY-MM-DD'), ''), '|') AS cp_details,
+                    STRING_AGG(DISTINCT u.cpnmbr, ', ') AS cp_numbers
+                FROM (
+                    -- 1. Pembayaran AP Invoice setelah penerimaan barang (GRN -> APPosting -> CMCP)
+                    SELECT 
+                        gd.pohdid,
+                        cp.cpnmbr,
+                        cp.cpdate
+                    FROM prgrndt gd
+                    JOIN apposting ap ON ap.grnhdid = gd.grnhdid
+                    JOIN cmcpdt cpd ON cpd.apid = ap.apid
+                    JOIN cmcphd cp ON cp.cphdid = cpd.cphdid
+                    WHERE gd.pohdid IN ($inClause)
+                      AND cp.cpnmbr IS NOT NULL
+                      AND TRIM(cp.cpnmbr) <> ''
+                      AND TRIM(cp.fgstatus) = 'V'
+
+                    UNION
+
+                    -- 2. Pembayaran Uang Muka / Langsung PO (CMTTTAP -> CMCP)
+                    SELECT 
+                        t.pohdid,
+                        cp.cpnmbr,
+                        cp.cpdate
+                    FROM cmtttap t
+                    JOIN cmcphd cp ON cp.cphdid = t.cphdid
+                    WHERE t.pohdid IN ($inClause)
+                      AND cp.cpnmbr IS NOT NULL
+                      AND TRIM(cp.cpnmbr) <> ''
+                      AND TRIM(cp.fgstatus) = 'V'
+
+                    UNION
+
+                    -- 3. Pembayaran via Settlement Uang Muka Impor (PASettlement -> CMCP)
+                    SELECT 
+                        sdt.pohdid,
+                        cp.cpnmbr,
+                        cp.cpdate
+                    FROM pasettlementdt sdt
+                    JOIN pasettlementhd sh ON sh.settleid = sdt.settleid
+                    JOIN cmrequesthd req ON req.reqhdid = sh.rfphdid
+                    JOIN cmcpdt cpd ON cpd.cphdid = req.cphdid
+                    JOIN cmcphd cp ON cp.cphdid = cpd.cphdid
+                    WHERE sdt.pohdid IN ($inClause)
+                      AND cp.cpnmbr IS NOT NULL
+                      AND TRIM(cp.cpnmbr) <> ''
+                      AND TRIM(cp.fgstatus) = 'V'
+                ) u
+                GROUP BY u.pohdid
+            ";
+            $stmtPayment = $conn3->query($sqlPayment);
+            $payRows = $stmtPayment->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($payRows as $pr) {
+                $pId = (int)$pr['pohdid'];
+                $paymentLookup[$pId] = [
+                    'cp_numbers' => trim($pr['cp_numbers'] ?? ''),
+                    'payments' => []
+                ];
+                if (!empty($pr['cp_details'])) {
+                    foreach (explode('|', $pr['cp_details']) as $part) {
+                        if (trim($part) === '') continue;
+                        $p = explode('~', $part);
+                        $cNum = trim($p[0] ?? '');
+                        $cDate = trim($p[1] ?? '');
+                        $cDateFmt = $cDate ? date('d/m/Y', strtotime($cDate)) : '-';
+                        if ($cNum !== '') {
+                            $paymentLookup[$pId]['payments'][] = [
+                                'cp_number' => $cNum,
+                                'cp_date' => $cDateFmt
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach ($poGroups as $pohdid => &$group) {
+            $hasPay = isset($paymentLookup[$pohdid]) && !empty($paymentLookup[$pohdid]['cp_numbers']);
+            $group['is_paid'] = $hasPay;
+            $group['cp_numbers'] = $hasPay ? $paymentLookup[$pohdid]['cp_numbers'] : '';
+            $group['payments'] = $hasPay ? $paymentLookup[$pohdid]['payments'] : [];
+            $group['payment_label'] = $hasPay ? 'Sudah Dibayar' : 'Belum Dibayar';
+            $group['payment_badge'] = $hasPay ? 'badge-success' : 'badge-secondary';
+        }
+        unset($group);
+
+        // 5. Filter berdasarkan status pembayaran jika dipilih oleh user
+        if ($paymentStatusFilter === 'paid') {
+            $poGroups = array_filter($poGroups, function ($g) {
+                return !empty($g['is_paid']);
+            });
+        } elseif ($paymentStatusFilter === 'unpaid') {
+            $poGroups = array_filter($poGroups, function ($g) {
+                return empty($g['is_paid']);
+            });
+        }
     } catch (PDOException $e) {
         $errorMessage = "Gagal mengambil data dari database ERP: " . htmlspecialchars($e->getMessage());
     }
@@ -774,21 +887,21 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                         <div class="filter-section p-3 mb-3" style="background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
                             <form method="GET" action="" id="filterForm">
                                 <div class="row align-items-end">
-                                    <div class="col-lg-2 col-md-3 col-sm-6 mb-2">
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
                                         <label class="small mb-1 font-weight-bold text-dark" for="filterTanggalMulai">
                                             <i class="far fa-calendar-alt text-primary mr-1"></i>Dari Tanggal
                                         </label>
                                         <input type="date" id="filterTanggalMulai" name="tgl_mulai" class="form-control form-control-sm"
                                             value="<?php echo htmlspecialchars($startDate); ?>">
                                     </div>
-                                    <div class="col-lg-2 col-md-3 col-sm-6 mb-2">
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
                                         <label class="small mb-1 font-weight-bold text-dark" for="filterTanggalSelesai">
                                             <i class="far fa-calendar-check text-primary mr-1"></i>Sampai Tanggal
                                         </label>
                                         <input type="date" id="filterTanggalSelesai" name="tgl_selesai" class="form-control form-control-sm"
                                             value="<?php echo htmlspecialchars($endDate); ?>">
                                     </div>
-                                    <div class="col-lg-2 col-md-3 col-sm-6 mb-2">
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
                                         <label class="small mb-1 font-weight-bold text-dark" for="filterStatus">Status Pengiriman</label>
                                         <select class="form-control form-control-sm" id="filterStatus" name="status">
                                             <option value="">-- Semua Status --</option>
@@ -798,7 +911,17 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <option value="Overdue" <?php echo $statusFilter === 'Overdue' ? 'selected' : ''; ?>>PO Overdue (Terlambat)</option>
                                         </select>
                                     </div>
-                                    <div class="col-lg-2 col-md-3 col-sm-6 mb-2">
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                        <label class="small mb-1 font-weight-bold text-dark" for="filterPaymentStatus">
+                                            <i class="fas fa-money-bill-wave text-success mr-1"></i>Status Bayar
+                                        </label>
+                                        <select class="form-control form-control-sm" id="filterPaymentStatus" name="payment_status">
+                                            <option value="">-- Semua Status Bayar --</option>
+                                            <option value="paid" <?php echo $paymentStatusFilter === 'paid' ? 'selected' : ''; ?>>Sudah Dibayar</option>
+                                            <option value="unpaid" <?php echo $paymentStatusFilter === 'unpaid' ? 'selected' : ''; ?>>Belum Dibayar</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
                                         <label class="small mb-1 font-weight-bold text-dark" for="filterPic">PIC Pembuat PO</label>
                                         <select class="form-control form-control-sm" id="filterPic" name="pic">
                                             <option value="">-- Semua PIC --</option>
@@ -809,8 +932,8 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                    <div class="col-lg-4 col-md-12 col-sm-12 mb-2">
-                                        <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap: 8px;">
+                                    <div class="col-lg-2 col-md-4 col-sm-12 mb-2">
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap: 6px;">
                                             <div class="custom-control custom-switch mt-1">
                                                 <input type="checkbox" class="custom-control-input" id="switchRange" name="range" value="1"
                                                     <?php echo $includeRange === 1 ? 'checked' : ''; ?> <?php echo $statusFilter === 'Overdue' ? 'disabled' : ''; ?>>
@@ -818,15 +941,15 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                                     Rentang Berjalan
                                                 </label>
                                             </div>
-                                            <div class="btn-group btn-group-sm">
-                                                <button type="submit" class="btn btn-primary font-weight-bold" title="Terapkan Filter Tanggal">
+                                            <div class="btn-group btn-group-sm w-100">
+                                                <button type="submit" class="btn btn-primary font-weight-bold" title="Terapkan Filter">
                                                     <i class="fas fa-filter mr-1"></i> Filter
                                                 </button>
                                                 <button type="button" id="btnToday" class="btn btn-outline-primary" title="Set Tanggal Hari Ini">
-                                                    <i class="fas fa-calendar-day mr-1"></i> Hari Ini
+                                                    Hari Ini
                                                 </button>
                                                 <button type="button" id="btnReset" class="btn btn-secondary" title="Reset Filter">
-                                                    <i class="fas fa-sync"></i> Reset
+                                                    <i class="fas fa-sync"></i>
                                                 </button>
                                             </div>
                                         </div>
@@ -846,7 +969,8 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                     <th>Vendor / Supplier</th>
                                     <th class="text-center">Jumlah Item</th>
                                     <th class="text-center">Rentang Delivery</th>
-                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Status Delivery</th>
+                                    <th class="text-center">Status Bayar</th>
                                     <th style="width: 70px;" class="text-center">Aksi</th>
                                 </tr>
                             </thead>
@@ -894,6 +1018,17 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <?php if (!empty($group['is_overdue'])): ?>
                                                 <span class="badge badge-danger px-2 py-1 ml-1" title="Tanggal delivery sudah lewat">
                                                     <i class="fas fa-clock mr-1"></i>Overdue
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <?php if (!empty($group['is_paid'])): ?>
+                                                <span class="badge badge-success px-2 py-1 shadow-xs font-weight-bold" title="No. CP: <?= htmlspecialchars($group['cp_numbers']) ?>">
+                                                    <i class="fas fa-check-circle mr-1"></i>Sudah Dibayar
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge badge-secondary px-2 py-1 text-white font-weight-normal">
+                                                    <i class="fas fa-clock mr-1"></i>Belum Dibayar
                                                 </span>
                                             <?php endif; ?>
                                         </td>
@@ -985,6 +1120,15 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <i class="fas fa-receipt text-success mr-1"></i>No. GRN Penerimaan :
                                         </span>
                                         <div id="modalPoGrnList" class="d-inline-flex align-items-center flex-wrap"></div>
+                                    </div>
+
+                                    <!-- Baris Status Pembayaran, Tanggal CP, & No. CP -->
+                                    <div class="mt-2 pt-2 border-top d-flex align-items-center flex-wrap" style="border-top: 1px dashed #e2e8f0 !important; gap: 8px;">
+                                        <span class="badge badge-light border text-muted px-2 py-1 font-weight-bold" style="font-size: 0.78rem;">
+                                            <i class="fas fa-money-bill-wave text-success mr-1"></i>Status Pembayaran :
+                                        </span>
+                                        <div id="modalPoPaymentBadge" class="d-inline-block"></div>
+                                        <div id="modalPoPaymentList" class="d-inline-flex align-items-center flex-wrap" style="gap: 8px;"></div>
                                     </div>
                                 </div>
 
@@ -1085,7 +1229,7 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
         });
 
         // ─── Filter Form Event Listeners ──────────────────────────────────────────
-        $('#filterStatus, #filterPic, #switchRange').on('change', function () {
+        $('#filterStatus, #filterPic, #filterPaymentStatus, #switchRange').on('change', function () {
             $('#filterForm').submit();
         });
 
@@ -1155,6 +1299,43 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                 $('#modalPoGrnList').html(grnBadges.join(' '));
             } else {
                 $('#modalPoGrnList').html('<span class="badge badge-light border text-muted px-2 py-1 font-weight-normal"><i class="fas fa-info-circle mr-1"></i>Belum ada penerimaan barang (GRN = 0)</span>');
+            }
+
+            // Render Status Pembayaran, Tanggal CP, & No CP pada Header Modal
+            if (po.is_paid) {
+                $('#modalPoPaymentBadge').html('<span class="badge badge-success px-2 py-1 font-weight-bold shadow-xs"><i class="fas fa-check-circle mr-1"></i>Sudah Dibayar</span>');
+                if (po.payments && po.payments.length > 0) {
+                    var payItems = [];
+                    $.each(po.payments, function (i, pay) {
+                        payItems.push(
+                            '<div class="d-inline-flex align-items-center bg-white border rounded px-2 py-1 shadow-xs" style="gap: 6px;">' +
+                                '<span class="badge badge-light border text-muted px-2 py-1 font-weight-bold" style="font-size: 0.78rem;">' +
+                                    '<i class="far fa-calendar-alt text-info mr-1"></i>Tanggal CP :' +
+                                '</span>' +
+                                '<span class="badge badge-light border text-dark font-weight-bold px-2 py-1" style="font-size: 0.8rem;">' + (pay.cp_date || '-') + '</span>' +
+                                '<span class="badge badge-light border text-muted px-2 py-1 ml-1 font-weight-bold" style="font-size: 0.78rem;">' +
+                                    '<i class="fas fa-receipt text-primary mr-1"></i>No. Cash Payment (CP) :' +
+                                '</span>' +
+                                '<span class="badge badge-primary font-weight-bold px-2 py-1 shadow-xs" style="font-size: 0.8rem;">' + pay.cp_number + '</span>' +
+                            '</div>'
+                        );
+                    });
+                    $('#modalPoPaymentList').html(payItems.join(' '));
+                } else if (po.cp_numbers && po.cp_numbers.trim() !== '') {
+                    $('#modalPoPaymentList').html(
+                        '<div class="d-inline-flex align-items-center bg-white border rounded px-2 py-1 shadow-xs" style="gap: 6px;">' +
+                            '<span class="badge badge-light border text-muted px-2 py-1 font-weight-bold" style="font-size: 0.78rem;">' +
+                                '<i class="fas fa-receipt text-primary mr-1"></i>No. Cash Payment (CP) :' +
+                            '</span>' +
+                            '<span class="badge badge-primary font-weight-bold px-2 py-1 shadow-xs">' + po.cp_numbers + '</span>' +
+                        '</div>'
+                    );
+                } else {
+                    $('#modalPoPaymentList').html('<span class="badge badge-light border text-muted px-2 py-1 font-weight-normal">-</span>');
+                }
+            } else {
+                $('#modalPoPaymentBadge').html('<span class="badge badge-secondary px-2 py-1 text-white font-weight-normal"><i class="fas fa-clock mr-1"></i>Belum Dibayar</span>');
+                $('#modalPoPaymentList').html('<span class="badge badge-light border text-muted px-2 py-1 font-weight-normal"><i class="fas fa-info-circle mr-1"></i>Belum ada bukti pembayaran (CP)</span>');
             }
 
             // Render Baris Item Barang
