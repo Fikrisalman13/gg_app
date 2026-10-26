@@ -50,13 +50,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Set cookie agar halaman login bisa mengingat warna tombol meskipun belum login
             setcookie('user_theme', $themeValue, time() + (86400 * 30), "/");
 
+            // Ambil GroupName untuk cek apakah user portal atau bukan
+            $groupName = '';
+            $qGroup = sqlsrv_query($conn, "SELECT GroupName FROM dbo.SMUserGroup WHERE GroupId = ?", [$row['GroupId']]);
+            if ($qGroup && ($groupRow = sqlsrv_fetch_array($qGroup, SQLSRV_FETCH_ASSOC))) {
+                $groupName = trim($groupRow['GroupName'] ?? '');
+            }
+            $_SESSION['GroupName'] = $groupName;
+
             // Bersihkan error/redirect lama agar tidak muncul sebagai popup di halaman tujuan
             unset($_SESSION['error']);
             unset($_SESSION['login_redirect']);
 
             sqlsrv_free_stmt($stmt);
             sqlsrv_close($conn);
-            header("Location: /gg_app/index.php");
+
+            // Redirect berdasarkan tipe akun (toleran jika ada typo 'Web Potal')
+            if (!empty($groupName) && (stripos($groupName, 'portal') !== false || stripos($groupName, 'potal') !== false)) {
+                header("Location: /gg_app/pages/sumber_agung/portal.php");
+            } else {
+                header("Location: /gg_app/index.php");
+            }
             exit();
         } else {
             $_SESSION['login_error'] = "User ID atau Password salah!";
