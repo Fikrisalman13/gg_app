@@ -55,6 +55,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 <!-- DataTables & Plugins CSS -->
 <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
 <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-fixedcolumns/css/fixedColumns.bootstrap4.min.css">
 <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2-theme-bootstrap-4/bootstrap-4.min.css">
 <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/toastr/toastr.min.css">
 
@@ -217,24 +218,137 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     display: inline-block;
 }
 
-/* Detail Table in Modal */
-.table-detail th {
-    background: #f8fafc;
-    width: 32%;
+/* Header Tabel Utama 1 Baris (Nowrap) */
+#tableTitipan thead th {
+    white-space: nowrap !important;
+    vertical-align: middle;
+}
+
+/* DataTables Fixed Columns & Sticky Left Styling */
+table.dataTable thead th.dtfc-fixed-left {
+    background-color: #f8fafc !important;
+    z-index: 5 !important;
+}
+table.dataTable tbody td.dtfc-fixed-left {
+    background-color: #ffffff !important;
+    z-index: 4 !important;
+}
+table.dataTable tbody tr.even td.dtfc-fixed-left {
+    background-color: #ffffff !important;
+}
+table.dataTable tbody tr.odd td.dtfc-fixed-left {
+    background-color: #fcfcfd !important;
+}
+table.dataTable tbody tr:hover td.dtfc-fixed-left {
+    background-color: #f1f5f9 !important;
+}
+
+/* Pembatas garis di sebelah kanan kolom No SO (kolom ke-4 yang dibekukan) */
+#tableTitipan thead th.dtfc-fixed-left:nth-child(4),
+#tableTitipan tbody td.dtfc-fixed-left:nth-child(4) {
+    box-shadow: 4px 0 6px -3px rgba(0, 0, 0, 0.12);
+    border-right: 2px solid #cbd5e1 !important;
+}
+
+/* Posisi Pagination Tetap di Pojok Kanan Bawah Kartu */
+#tableTitipan_wrapper {
+    width: 100% !important;
+}
+#tableTitipan_wrapper .dataTables_paginate {
+    float: right !important;
+    text-align: right !important;
+    margin: 0 !important;
+}
+#tableTitipan_wrapper .dataTables_paginate ul.pagination {
+    justify-content: flex-end !important;
+    margin: 2px 0 !important;
+}
+
+/* Action Buttons Modern Soft Style */
+.btn-action-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.btn-action-item {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 13px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+.btn-action-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+.btn-action-item:active {
+    transform: translateY(0);
+}
+.btn-action-detail {
+    background-color: #e0f2fe;
+    color: #0284c7;
+    border-color: #bae6fd;
+}
+.btn-action-detail:hover {
+    background-color: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+}
+.btn-action-delete {
+    background-color: #fee2e2;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+.btn-action-delete:hover {
+    background-color: #dc2626;
+    color: #ffffff;
+    border-color: #dc2626;
+}
+
+/* Detail Modal Styling (Modern & Professional) */
+.sa-field-label {
+    width: 36%;
+    background-color: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
     font-weight: 600;
-    color: #475569;
-    border-top: none;
+    vertical-align: middle;
+    border-top: 1px solid #f1f5f9 !important;
+    padding: 8px 12px !important;
 }
-.table-detail td {
+.sa-field-val {
     color: #1e293b;
-    border-top: none;
+    font-size: 12.5px;
+    vertical-align: middle;
+    border-top: 1px solid #f1f5f9 !important;
+    padding: 8px 12px !important;
 }
-.upload-box {
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
-    border-radius: 10px;
+.sa-detail-table tr:first-child .sa-field-label,
+.sa-detail-table tr:first-child .sa-field-val {
+    border-top: none !important;
+}
+.sa-upload-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
     padding: 16px;
-    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s ease;
+}
+.sa-upload-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.custom-file-label::after {
+    content: "Pilih" !important;
 }
 
 /* =========================================================
@@ -438,20 +552,19 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                 <div class="card-body py-2 px-3">
                     <form id="filterForm" class="row align-items-center">
                         <div class="col-md-3 col-sm-6 mb-2">
-                            <label class="small text-muted mb-1 font-weight-bold">Dari Tgl Titipan</label>
+                            <label class="small text-muted mb-1 font-weight-bold">Dari Tgl Kirim</label>
                             <input type="date" class="form-control form-control-sm" id="filterDateFrom" name="date_from" value="<?= date('Y-m-01') ?>">
                         </div>
                         <div class="col-md-3 col-sm-6 mb-2">
-                            <label class="small text-muted mb-1 font-weight-bold">Sampai Tgl Titipan</label>
+                            <label class="small text-muted mb-1 font-weight-bold">Sampai Tgl Kirim</label>
                             <input type="date" class="form-control form-control-sm" id="filterDateTo" name="date_to" value="<?= date('Y-m-d') ?>">
                         </div>
                         <div class="col-md-2 col-sm-6 mb-2">
                             <label class="small text-muted mb-1 font-weight-bold">Status Dokumen</label>
                             <select class="form-control form-control-sm" id="filterDoc">
-                                <option value="">Semua Dokumen</option>
-                                <option value="belum_komplit">Belum Komplit</option>
-                                <option value="komplit">Komplit</option>
-                                <option value="tidak_ada">Tidak Ada Data</option>
+                                <option value="">Semua Status Dokumen</option>
+                                <option value="belum_lengkap">Belum Lengkap</option>
+                                <option value="lengkap">Lengkap</option>
                             </select>
                         </div>
                         <div class="col-md-2 col-sm-6 mb-2">
@@ -478,39 +591,38 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
             <!-- DATA TABLE CARD -->
             <div class="card shadow-sm border-0">
                 <div class="card-body p-3">
-                    <div class="table-responsive">
-                        <table id="tableTitipan" class="table table-hover table-striped table-bordered text-sm w-100">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th style="width: 30px;" class="text-center">
-                                        <input type="checkbox" id="checkAll">
-                                    </th>
-                                    <th style="width: 35px;" class="text-center">#</th>
-                                    <th>No Sales Order</th>
-                                    <th>Tgl SC</th>
-                                    <th>Product Code</th>
-                                    <th>Nama Product</th>
-                                    <th>Label Jual</th>
-                                    <th>Cust Color</th>
-                                    <th>No Titipan</th>
-                                    <th>Tgl Titipan</th>
-                                    <th>No DO</th>
-                                    <th>Tgl DO</th>
-                                    <th class="text-right">DO QTY</th>
-                                    <th class="text-right">Qty Kirim</th>
-                                    <th>UOM</th>
-                                    <th>Ket. Titipan 2</th>
-                                    <th class="text-center">Packing List</th>
-                                    <th class="text-center">Surat Jalan</th>
-                                    <th class="text-center">Status</th>
-                                    <th style="width: 80px;" class="text-center">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Loaded via AJAX -->
-                            </tbody>
-                        </table>
-                    </div>
+                    <table id="tableTitipan" class="table table-hover table-striped table-bordered text-sm w-100">
+                        <thead class="bg-light text-nowrap">
+                            <tr>
+                                <th style="width: 30px;" class="text-center">
+                                    <input type="checkbox" id="checkAll">
+                                </th>
+                                <th style="width: 35px;" class="text-center">#</th>
+                                <th>Tgl Kirim</th>
+                                <th>No SO</th>
+                                <th>Tgl SC</th>
+                                <th>Prod Code</th>
+                                <th>Nama Produk</th>
+                                <th>Label Jual</th>
+                                <th>Cust Color</th>
+                                <th>No Titipan</th>
+                                <th>Tgl Titipan</th>
+                                <th>No DO</th>
+                                <th>Tgl DO</th>
+                                <th class="text-right">Qty DO</th>
+                                <th class="text-right">Qty Kirim</th>
+                                <th>UOM</th>
+                                <th>Keterangan</th>
+                                <th class="text-center">Packing List</th>
+                                <th class="text-center">Surat Jalan</th>
+                                <th class="text-center">Status</th>
+                                <th style="min-width: 95px; width: 95px;" class="text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Loaded via AJAX -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -566,9 +678,9 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                             <option value="no_titipan">No Titipan</option>
                             <option value="no_do">No DO</option>
                             <option value="cust_name">Vendor / Supplier / Cust</option>
-                            <option value="sonmbr">No Sales Order (SC)</option>
-                            <option value="prodcode">Product Code</option>
-                            <option value="prodname">Nama Product</option>
+                            <option value="sonmbr">No SO (Sales Order)</option>
+                            <option value="prodcode">Prod Code</option>
+                            <option value="prodname">Nama Produk</option>
                             <option value="label_jual">Label Jual</option>
                             <option value="cust_color">Cust Color</option>
                         </select>
@@ -597,15 +709,15 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                 <th style="width: 130px; min-width: 130px;" class="text-center">No DO</th>
                                 <th style="width: 95px; min-width: 95px;" class="text-center">Tgl DO</th>
                                 <th style="min-width: 190px;">Vendor / Supplier</th>
-                                <th style="min-width: 140px;" class="text-center">No SC</th>
+                                <th style="min-width: 140px;" class="text-center">No SO</th>
                                 <th style="width: 95px; min-width: 95px;" class="text-center">Tgl SC</th>
-                                <th style="width: 140px; min-width: 140px;" class="text-center">Product Code</th>
-                                <th style="min-width: 200px;">Product Name</th>
+                                <th style="width: 140px; min-width: 140px;" class="text-center">Prod Code</th>
+                                <th style="min-width: 200px;">Nama Produk</th>
                                 <th style="min-width: 110px;">Label Jual</th>
                                 <th style="width: 100px; min-width: 100px;" class="text-center">Cust Color</th>
                                 <th style="width: 100px; min-width: 100px;" class="text-right">Qty Kirim</th>
                                 <th style="width: 60px; min-width: 60px;" class="text-center">UOM</th>
-                                <th style="min-width: 240px;">Description</th>
+                                <th style="min-width: 240px;">Keterangan</th>
                                 <th style="width: 110px; min-width: 110px;" class="text-center">Status</th>
                             </tr>
                         </thead>
@@ -659,217 +771,293 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 </div>
 
 <!-- =========================================================================
-     MODAL 2: DETAIL DATA & UPLOAD DOKUMEN
+     MODAL 2: DETAIL DATA & UPLOAD DOKUMEN (REDESIGNED MODERN & PROFESSIONAL)
      ========================================================================= -->
 <div class="modal fade" id="modalDetail" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white py-2 px-3">
-                <h5 class="modal-title font-weight-bold" style="font-size: 1.1rem;">
-                    <i class="fas fa-file-invoice mr-2"></i>Detail Titipan & Dokumen
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 14px; overflow: hidden;">
+            <div class="modal-header text-white py-3 px-4" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+                <div class="d-flex align-items-center">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #60a5fa;">
+                        <i class="fas fa-file-invoice" style="font-size: 17px;"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title font-weight-bold mb-0" style="font-size: 1.15rem; letter-spacing: -0.2px;">
+                            Detail Titipan & Kelola Dokumen
+                        </h5>
+                        <small style="color: #94a3b8; font-size: 12px;">Rincian pengiriman dan upload berkas Packing List & Surat Jalan</small>
+                    </div>
+                </div>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="opacity: 0.8; outline: none;">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body p-3">
-                <!-- Info Grid -->
+            <div class="modal-body p-4" style="background-color: #f8fafc;">
+                
+                <!-- Top Highlight Banner -->
+                <div class="p-3 mb-3 bg-white border rounded shadow-sm d-flex justify-content-between align-items-center flex-wrap" style="gap: 12px; border-radius: 10px !important;">
+                    <div class="d-flex align-items-center" style="gap: 12px;">
+                        <div style="width: 44px; height: 44px; border-radius: 10px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                            <i class="fas fa-truck-loading"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Nomor DO Titipan</small>
+                            <span class="font-weight-bold text-dark" style="font-family: monospace; font-size: 1.15rem;" id="detNoTitipan">-</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center" style="gap: 24px;">
+                        <div>
+                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Tanggal Kirim</small>
+                            <span class="badge badge-light border text-dark font-weight-bold px-2 py-1" style="font-size: 13px;" id="detTglKirim">-</span>
+                        </div>
+                        <div class="text-right">
+                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Total Qty Kirim</small>
+                            <span class="font-weight-bold text-primary" style="font-size: 1.2rem;" id="detQty">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dua Kolom Informasi Data -->
                 <div class="row">
-                    <div class="col-md-6">
-                        <table class="table table-sm table-detail">
-                            <tr>
-                                <th>No Titipan</th>
-                                <td id="detNoTitipan">-</td>
-                            </tr>
-                            <tr>
-                                <th>Tgl Titipan</th>
-                                <td id="detTglTitipan">-</td>
-                            </tr>
-                            <tr>
-                                <th>No DO</th>
-                                <td id="detNoDO">-</td>
-                            </tr>
-                            <tr>
-                                <th>Tgl DO</th>
-                                <td id="detTglDO">-</td>
-                            </tr>
-                            <tr>
-                                <th>Customer</th>
-                                <td id="detCustomer">-</td>
-                            </tr>
-                        </table>
+                    <!-- Panel Kiri: Data Dokumen & Pengiriman -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-0 shadow-sm" style="border-radius: 10px; overflow: hidden;">
+                            <div class="card-header py-2 px-3 bg-white border-bottom font-weight-bold text-dark" style="font-size: 13px;">
+                                <i class="fas fa-file-contract text-primary mr-1"></i> Data Dokumen & Customer
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-striped mb-0 sa-detail-table">
+                                    <tbody>
+                                        <tr>
+                                            <td class="sa-field-label">Customer</td>
+                                            <td class="sa-field-val font-weight-bold text-dark" id="detCustomer">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">No DO</td>
+                                            <td class="sa-field-val text-dark" id="detNoDO">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Tgl DO</td>
+                                            <td class="sa-field-val text-dark" id="detTglDO">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">No SO</td>
+                                            <td class="sa-field-val text-dark font-weight-bold" id="detNoSC">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Tgl SC</td>
+                                            <td class="sa-field-val text-dark" id="detTglSC">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Tgl Titipan</td>
+                                            <td class="sa-field-val text-dark" id="detTglTitipan">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <table class="table table-sm table-detail">
-                            <tr>
-                                <th>No SC (Sales Order)</th>
-                                <td id="detNoSC">-</td>
-                            </tr>
-                            <tr>
-                                <th>Tgl SC</th>
-                                <td id="detTglSC">-</td>
-                            </tr>
-                            <tr>
-                                <th>Product</th>
-                                <td id="detProduct">-</td>
-                            </tr>
-                            <tr>
-                                <th>Label Jual</th>
-                                <td id="detLabelJual">-</td>
-                            </tr>
-                            <tr>
-                                <th>Cust Color</th>
-                                <td id="detCustColor">-</td>
-                            </tr>
-                            <tr>
-                                <th>Qty Kirim</th>
-                                <td id="detQty">-</td>
-                            </tr>
-                            <tr>
-                                <th>Ket. Titipan 2</th>
-                                <td id="detKet2">-</td>
-                            </tr>
-                        </table>
+
+                    <!-- Panel Kanan: Data Produk & Spesifikasi -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-0 shadow-sm" style="border-radius: 10px; overflow: hidden;">
+                            <div class="card-header py-2 px-3 bg-white border-bottom font-weight-bold text-dark" style="font-size: 13px;">
+                                <i class="fas fa-boxes text-info mr-1"></i> Data Produk & Spesifikasi
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-striped mb-0 sa-detail-table">
+                                    <tbody>
+                                        <tr>
+                                            <td class="sa-field-label">Produk</td>
+                                            <td class="sa-field-val text-dark font-weight-bold" id="detProduct">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Label Jual</td>
+                                            <td class="sa-field-val">
+                                                <span class="badge badge-light border text-dark font-weight-bold px-2 py-1" id="detLabelJual">-</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Cust Color</td>
+                                            <td class="sa-field-val">
+                                                <span class="badge badge-light text-primary border font-weight-bold px-2 py-1" id="detCustColor">-</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Keterangan</td>
+                                            <td class="sa-field-val text-muted small" id="detKet2" style="line-height: 1.4;">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <hr class="my-2">
-
-                <!-- UPLOAD PACKING LIST -->
-                <div class="upload-box">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="font-weight-bold mb-0 text-primary">
-                            <i class="fas fa-file-alt mr-1"></i> Dokumen Packing List (PDF)
-                        </h6>
-                        <span id="badgePLStatus">-</span>
-                    </div>
-
-                    <div id="infoPLUploaded" class="mb-2 p-2 bg-white rounded border" style="display: none;">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="fas fa-check-circle text-success mr-1"></i>
-                                <span class="small font-weight-bold" id="textPLFile">-</span>
-                                <div class="text-muted" style="font-size: 11px;" id="textPLMeta">-</div>
+                <!-- Bagian Upload Berkas Dokumen (2 Kolom Kartu Modern) -->
+                <div class="row">
+                    <!-- UPLOAD PACKING LIST -->
+                    <div class="col-md-6 mb-3">
+                        <div class="sa-upload-card h-100" style="border-left: 4px solid #3b82f6;">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="font-weight-bold text-dark" style="font-size: 13px;">
+                                    <i class="fas fa-file-pdf text-danger mr-1"></i> Packing List (PL)
+                                </span>
+                                <span id="badgePLStatus">-</span>
                             </div>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-info btn-preview-pdf mr-1" id="btnPreviewPL">
-                                    <i class="fas fa-eye"></i> Lihat
+
+                            <!-- Info Jika PL Sudah Diupload -->
+                            <div id="infoPLUploaded" class="mb-3 p-2 bg-light rounded border" style="display: none;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="mr-2 overflow-hidden">
+                                        <div class="font-weight-bold text-truncate text-dark small" id="textPLFile">-</div>
+                                        <div class="text-muted" style="font-size: 10.5px;" id="textPLMeta">-</div>
+                                    </div>
+                                    <div class="d-flex align-items-center" style="gap: 4px; flex-shrink: 0;">
+                                        <button type="button" class="btn btn-xs btn-outline-primary btn-preview-pdf px-2 py-1" id="btnPreviewPL" title="Lihat PDF">
+                                            <i class="fas fa-eye mr-1"></i> Lihat
+                                        </button>
+                                        <a href="#" target="_blank" class="btn btn-xs btn-outline-secondary px-2 py-1" id="btnDownloadPL" download title="Download PDF">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Form Upload PL -->
+                            <form id="formUploadPL" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="upload_doc">
+                                <input type="hidden" name="doc_type" value="packinglist">
+                                <input type="hidden" name="id" id="uploadPLId">
+
+                                <div class="mb-2 d-flex align-items-center" style="gap: 12px;">
+                                    <div class="custom-control custom-radio custom-control-inline mb-0">
+                                        <input type="radio" id="typePLFile" name="input_type" class="custom-control-input radio-input-type" value="file" checked data-target="pl">
+                                        <label class="custom-control-label small font-weight-bold" for="typePLFile">Upload File</label>
+                                    </div>
+                                    <div class="custom-control custom-radio custom-control-inline mb-0">
+                                        <input type="radio" id="typePLUrl" name="input_type" class="custom-control-input radio-input-type" value="url" data-target="pl">
+                                        <label class="custom-control-label small font-weight-bold" for="typePLUrl">URL Link</label>
+                                    </div>
+                                </div>
+
+                                <div id="containerPLFile" class="mb-2">
+                                    <div class="custom-file">
+                                        <input type="file" name="doc_file" class="custom-file-input custom-file-input-sm" id="inputPLFile" accept=".pdf">
+                                        <label class="custom-file-label custom-file-label-sm small text-truncate" for="inputPLFile" data-browse="Pilih">Pilih file PDF...</label>
+                                    </div>
+                                    <div class="d-flex justify-content-between mt-1">
+                                        <small class="text-muted" style="font-size: 10.5px;"><i class="fas fa-info-circle mr-1"></i>Maksimal 5MB, format .pdf</small>
+                                    </div>
+                                </div>
+
+                                <div id="containerPLUrl" class="mb-2" style="display: none;">
+                                    <input type="url" name="doc_url" class="form-control form-control-sm" placeholder="https://domain.com/file.pdf">
+                                </div>
+
+                                <button type="submit" class="btn btn-primary btn-sm btn-block font-weight-bold mt-2 shadow-sm">
+                                    <i class="fas fa-cloud-upload-alt mr-1"></i> Simpan / Upload PL
                                 </button>
-                                <a href="#" target="_blank" class="btn btn-sm btn-outline-secondary" id="btnDownloadPL" download>
-                                    <i class="fas fa-download"></i> Download
-                                </a>
-                            </div>
+                            </form>
                         </div>
                     </div>
 
-                    <!-- Form Upload PL -->
-                    <form id="formUploadPL" enctype="multipart/form-data">
-                        <input type="hidden" name="action" value="upload_doc">
-                        <input type="hidden" name="doc_type" value="packinglist">
-                        <input type="hidden" name="id" id="uploadPLId">
+                    <!-- UPLOAD SURAT JALAN -->
+                    <div class="col-md-6 mb-3">
+                        <div class="sa-upload-card h-100" style="border-left: 4px solid #10b981;">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="font-weight-bold text-dark" style="font-size: 13px;">
+                                    <i class="fas fa-file-invoice text-success mr-1"></i> Surat Jalan (SJ)
+                                </span>
+                                <span id="badgeSJStatus">-</span>
+                            </div>
 
-                        <div class="form-row align-items-center">
-                            <div class="col-auto">
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input radio-input-type" type="radio" name="input_type" id="typePLFile" value="file" checked data-target="pl">
-                                    <label class="form-check-label small" for="typePLFile">File PDF</label>
+                            <!-- Info Jika SJ Sudah Diupload -->
+                            <div id="infoSJUploaded" class="mb-3 p-2 bg-light rounded border" style="display: none;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="mr-2 overflow-hidden">
+                                        <div class="font-weight-bold text-truncate text-dark small" id="textSJFile">-</div>
+                                        <div class="text-muted" style="font-size: 10.5px;" id="textSJMeta">-</div>
+                                    </div>
+                                    <div class="d-flex align-items-center" style="gap: 4px; flex-shrink: 0;">
+                                        <button type="button" class="btn btn-xs btn-outline-success btn-preview-pdf px-2 py-1" id="btnPreviewSJ" title="Lihat PDF">
+                                            <i class="fas fa-eye mr-1"></i> Lihat
+                                        </button>
+                                        <a href="#" target="_blank" class="btn btn-xs btn-outline-secondary px-2 py-1" id="btnDownloadSJ" download title="Download PDF">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
                                 </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input radio-input-type" type="radio" name="input_type" id="typePLUrl" value="url" data-target="pl">
-                                    <label class="form-check-label small" for="typePLUrl">URL Link</label>
+                            </div>
+
+                            <!-- Form Upload SJ -->
+                            <form id="formUploadSJ" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="upload_doc">
+                                <input type="hidden" name="doc_type" value="suratjalan">
+                                <input type="hidden" name="id" id="uploadSJId">
+
+                                <div class="mb-2 d-flex align-items-center" style="gap: 12px;">
+                                    <div class="custom-control custom-radio custom-control-inline mb-0">
+                                        <input type="radio" id="typeSJFile" name="input_type" class="custom-control-input radio-input-type" value="file" checked data-target="sj">
+                                        <label class="custom-control-label small font-weight-bold" for="typeSJFile">Upload File</label>
+                                    </div>
+                                    <div class="custom-control custom-radio custom-control-inline mb-0">
+                                        <input type="radio" id="typeSJUrl" name="input_type" class="custom-control-input radio-input-type" value="url" data-target="sj">
+                                        <label class="custom-control-label small font-weight-bold" for="typeSJUrl">URL Link</label>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col" id="containerPLFile">
-                                <input type="file" name="doc_file" class="form-control-file form-control-sm" accept=".pdf">
-                                <small class="text-muted d-block" style="font-size: 11px;">Maksimal 10MB, format .pdf</small>
-                            </div>
-                            <div class="col" id="containerPLUrl" style="display: none;">
-                                <input type="url" name="doc_url" class="form-control form-control-sm" placeholder="https://example.com/file.pdf">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-primary btn-sm font-weight-bold">
-                                    <i class="fas fa-upload mr-1"></i> Upload PL
+
+                                <div id="containerSJFile" class="mb-2">
+                                    <div class="custom-file">
+                                        <input type="file" name="doc_file" class="custom-file-input custom-file-input-sm" id="inputSJFile" accept=".pdf">
+                                        <label class="custom-file-label custom-file-label-sm small text-truncate" for="inputSJFile" data-browse="Pilih">Pilih file PDF...</label>
+                                    </div>
+                                    <div class="d-flex justify-content-between mt-1">
+                                        <small class="text-muted" style="font-size: 10.5px;"><i class="fas fa-info-circle mr-1"></i>Maksimal 5MB, format .pdf</small>
+                                    </div>
+                                </div>
+
+                                <div id="containerSJUrl" class="mb-2" style="display: none;">
+                                    <input type="url" name="doc_url" class="form-control form-control-sm" placeholder="https://domain.com/file.pdf">
+                                </div>
+
+                                <button type="submit" class="btn btn-success btn-sm btn-block font-weight-bold mt-2 shadow-sm">
+                                    <i class="fas fa-cloud-upload-alt mr-1"></i> Simpan / Upload SJ
                                 </button>
-                            </div>
+                            </form>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
-                <!-- UPLOAD SURAT JALAN -->
-                <div class="upload-box">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="font-weight-bold mb-0 text-success">
-                            <i class="fas fa-shipping-fast mr-1"></i> Dokumen Surat Jalan (PDF)
-                        </h6>
-                        <span id="badgeSJStatus">-</span>
-                    </div>
-
-                    <div id="infoSJUploaded" class="mb-2 p-2 bg-white rounded border" style="display: none;">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="fas fa-check-circle text-success mr-1"></i>
-                                <span class="small font-weight-bold" id="textSJFile">-</span>
-                                <div class="text-muted" style="font-size: 11px;" id="textSJMeta">-</div>
+                <!-- Status Banner Publish & Customer View -->
+                <div class="p-3 bg-white rounded border shadow-sm">
+                    <div class="row align-items-center">
+                        <div class="col-md-6 mb-2 mb-md-0 d-flex align-items-center" style="gap: 10px;">
+                            <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 14px;">
+                                <i class="fas fa-share-alt"></i>
                             </div>
                             <div>
-                                <button type="button" class="btn btn-sm btn-info btn-preview-pdf mr-1" id="btnPreviewSJ">
-                                    <i class="fas fa-eye"></i> Lihat
-                                </button>
-                                <a href="#" target="_blank" class="btn btn-sm btn-outline-secondary" id="btnDownloadSJ" download>
-                                    <i class="fas fa-download"></i> Download
-                                </a>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10px;">Status Publikasi Portal</small>
+                                <span id="detPublishInfo" class="small">-</span>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Form Upload SJ -->
-                    <form id="formUploadSJ" enctype="multipart/form-data">
-                        <input type="hidden" name="action" value="upload_doc">
-                        <input type="hidden" name="doc_type" value="suratjalan">
-                        <input type="hidden" name="id" id="uploadSJId">
-
-                        <div class="form-row align-items-center">
-                            <div class="col-auto">
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input radio-input-type" type="radio" name="input_type" id="typeSJFile" value="file" checked data-target="sj">
-                                    <label class="form-check-label small" for="typeSJFile">File PDF</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input radio-input-type" type="radio" name="input_type" id="typeSJUrl" value="url" data-target="sj">
-                                    <label class="form-check-label small" for="typeSJUrl">URL Link</label>
-                                </div>
+                        <div class="col-md-6 d-flex align-items-center" style="gap: 10px;">
+                            <div style="width: 32px; height: 32px; border-radius: 8px; background: #ecfdf5; color: #10b981; display: flex; align-items: center; justify-content: center; font-size: 14px;">
+                                <i class="fas fa-user-check"></i>
                             </div>
-                            <div class="col" id="containerSJFile">
-                                <input type="file" name="doc_file" class="form-control-file form-control-sm" accept=".pdf">
-                                <small class="text-muted d-block" style="font-size: 11px;">Maksimal 10MB, format .pdf</small>
+                            <div>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10px;">Aktivitas Customer</small>
+                                <span id="detViewInfo" class="small">-</span>
                             </div>
-                            <div class="col" id="containerSJUrl" style="display: none;">
-                                <input type="url" name="doc_url" class="form-control form-control-sm" placeholder="https://example.com/file.pdf">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-success btn-sm font-weight-bold">
-                                    <i class="fas fa-upload mr-1"></i> Upload SJ
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Info Publish & View -->
-                <div class="bg-light p-2 rounded border small text-muted">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Status Publish:</strong> <span id="detPublishInfo">Belum dipublish</span>
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Status View Customer:</strong> <span id="detViewInfo">Belum dilihat</span>
                         </div>
                     </div>
                 </div>
 
             </div>
-            <div class="modal-footer py-2 px-3">
-                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Tutup</button>
+            <div class="modal-footer py-2 px-3 bg-white border-top">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3 font-weight-bold" data-dismiss="modal">
+                    <i class="fas fa-times mr-1"></i> Tutup
+                </button>
             </div>
         </div>
     </div>
@@ -908,6 +1096,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables/jquery.dataTables.min.js"></script>
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-fixedcolumns/js/dataTables.fixedColumns.min.js"></script>
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/toastr/toastr.min.js"></script>
 
@@ -931,6 +1120,12 @@ $(document).ready(function () {
         tableTitipan = $('#tableTitipan').DataTable({
             processing: true,
             serverSide: false, // Client-side DataTables on top of loaded JSON
+            scrollX: true,
+            scrollCollapse: true,
+            autoWidth: false,
+            fixedColumns: {
+                left: 4
+            },
             ajax: {
                 url: API_URL,
                 type: 'GET',
@@ -960,6 +1155,11 @@ $(document).ready(function () {
                     }
                 },
                 { data: 'no', className: 'text-center' },
+                {
+                    data: 'tgl_kirim',
+                    className: 'font-weight-bold text-dark',
+                    render: d => d && d !== '-' ? d : '<span class="text-muted">-</span>'
+                },
                 { data: 'no_sc', render: d => `<strong>${d}</strong>` },
                 { data: 'tgl_sc' },
                 {
@@ -1038,31 +1238,36 @@ $(document).ready(function () {
                     className: 'text-center',
                     render: function (data, type, row) {
                         return `
-                            <button type="button" class="btn btn-xs btn-info btn-detail" data-id="${row.id}" title="Detail & Upload Dokumen">
-                                <i class="fas fa-search-plus"></i>
-                            </button>
-                            <button type="button" class="btn btn-xs btn-outline-danger btn-delete ml-1" data-id="${row.id}" data-no="${row.no_titipan}" title="Hapus Data">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <div class="btn-action-wrap">
+                                <button type="button" class="btn btn-action-item btn-action-detail btn-detail" data-id="${row.id}" title="Detail & Upload Dokumen">
+                                    <i class="fas fa-search-plus"></i>
+                                </button>
+                                <button type="button" class="btn btn-action-item btn-action-delete btn-delete" data-id="${row.id}" data-no="${row.no_titipan}" title="Hapus Data">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         `;
                     }
                 }
             ],
-            order: [[9, 'desc']], // Urut berdasarkan tgl_titipan
+            order: [[2, 'desc']], // Urut berdasarkan Tanggal Kirim (kolom ke-3)
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Semua"]],
+            pagingType: "simple_numbers",
             language: {
+                processing: "Memproses...",
                 search: "Cari:",
-                lengthMenu: "Tampilkan _MENU_ data",
-                info: "Menampilkan _START_ s/d _END_ dari _TOTAL_ data",
+                lengthMenu: "Tampilkan _MENU_ data per halaman",
+                info: "Menampilkan _START_ - _END_ dari _TOTAL_ data",
                 infoEmpty: "Menampilkan 0 data",
                 infoFiltered: "(disaring dari _MAX_ total data)",
                 zeroRecords: "Tidak ada data titipan yang cocok",
+                emptyTable: "Tidak ada data titipan yang tersedia",
                 paginate: {
-                    first: "Awal",
-                    last: "Akhir",
-                    next: "Lanjut",
-                    previous: "Kembali"
+                    first: "Pertama",
+                    last: "Terakhir",
+                    next: "›",
+                    previous: "‹"
                 }
             },
             drawCallback: function () {
@@ -1131,7 +1336,7 @@ $(document).ready(function () {
         if (!isActive) {
             $(this).addClass('active');
             if (status === 'belum_lengkap') {
-                $('#filterDoc').val('belum_komplit');
+                $('#filterDoc').val('belum_lengkap');
                 $('#filterPub').val('');
             } else if (status === 'published') {
                 $('#filterDoc').val('');
@@ -1483,11 +1688,24 @@ $(document).ready(function () {
         const count = selectedItems.length;
         if (count === 0) return;
 
+        const tglKirimVal = $.trim($('#inputErpTanggalKirim').val());
+        if (!tglKirimVal) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Tanggal Kirim Wajib Diisi',
+                text: 'Harap tentukan Tanggal Kirim terlebih dahulu sebelum menyimpan data titipan.',
+                confirmButtonColor: '#2563eb'
+            });
+            $('#inputErpTanggalKirim').focus();
+            return;
+        }
+
         const $btn = $(this);
         $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menyimpan...');
 
         $.post(API_URL, {
             action: 'submit_titipan',
+            tgl_kirim: tglKirimVal,
             items: JSON.stringify(selectedItems)
         }, function (res) {
             $btn.prop('disabled', false).html('<i class="fas fa-paper-plane mr-1"></i> Submit');
@@ -1522,6 +1740,18 @@ $(document).ready(function () {
         $('#uploadPLId').val(id);
         $('#uploadSJId').val(id);
 
+        // Reset form & custom file labels
+        if ($('#formUploadPL').length) $('#formUploadPL')[0].reset();
+        if ($('#formUploadSJ').length) $('#formUploadSJ')[0].reset();
+        $('#containerPLFile .custom-file-label').removeClass('selected').text('Pilih file PDF...');
+        $('#containerSJFile .custom-file-label').removeClass('selected').text('Pilih file PDF...');
+        $('#typePLFile').prop('checked', true);
+        $('#typeSJFile').prop('checked', true);
+        $('#containerPLFile').show();
+        $('#containerPLUrl').hide();
+        $('#containerSJFile').show();
+        $('#containerSJUrl').hide();
+
         $.getJSON(API_URL, { action: 'get_detail', id: id }, function (res) {
             if (res.status !== 'ok' || !res.data) {
                 toastr.error(res.message || 'Gagal memuat detail data.');
@@ -1529,6 +1759,7 @@ $(document).ready(function () {
             }
 
             const d = res.data;
+            $('#detTglKirim').text(d.tgl_kirim || '-');
             $('#detNoTitipan').text(d.no_titipan);
             $('#detTglTitipan').text(d.tgl_titipan);
             $('#detNoDO').text(d.no_do);
@@ -1545,46 +1776,52 @@ $(document).ready(function () {
 
             // Packing List status
             if (d.packinglist_file) {
-                $('#badgePLStatus').html('<span class="badge badge-success"><i class="fas fa-check"></i> Sudah Terupload</span>');
+                $('#badgePLStatus').html('<span class="badge badge-success px-2 py-1"><i class="fas fa-check mr-1"></i> Sudah Ada</span>');
                 $('#textPLFile').text(d.packinglist_file.split('/').pop());
                 $('#textPLMeta').text(`Diupload oleh: ${d.packinglist_by || '-'} pada ${d.packinglist_at || '-'}`);
                 $('#btnPreviewPL').attr('data-url', d.packinglist_file);
                 $('#btnDownloadPL').attr('href', d.packinglist_file);
                 $('#infoPLUploaded').show();
             } else {
-                $('#badgePLStatus').html('<span class="badge badge-warning"><i class="fas fa-clock"></i> Belum Ada</span>');
+                $('#badgePLStatus').html('<span class="badge badge-warning px-2 py-1"><i class="fas fa-clock mr-1"></i> Belum Ada</span>');
                 $('#infoPLUploaded').hide();
             }
 
             // Surat Jalan status
             if (d.suratjalan_file) {
-                $('#badgeSJStatus').html('<span class="badge badge-success"><i class="fas fa-check"></i> Sudah Terupload</span>');
+                $('#badgeSJStatus').html('<span class="badge badge-success px-2 py-1"><i class="fas fa-check mr-1"></i> Sudah Ada</span>');
                 $('#textSJFile').text(d.suratjalan_file.split('/').pop());
                 $('#textSJMeta').text(`Diupload oleh: ${d.suratjalan_by || '-'} pada ${d.suratjalan_at || '-'}`);
                 $('#btnPreviewSJ').attr('data-url', d.suratjalan_file);
                 $('#btnDownloadSJ').attr('href', d.suratjalan_file);
                 $('#infoSJUploaded').show();
             } else {
-                $('#badgeSJStatus').html('<span class="badge badge-warning"><i class="fas fa-clock"></i> Belum Ada</span>');
+                $('#badgeSJStatus').html('<span class="badge badge-warning px-2 py-1"><i class="fas fa-clock mr-1"></i> Belum Ada</span>');
                 $('#infoSJUploaded').hide();
             }
 
             // Publish info
             if (d.is_published) {
-                $('#detPublishInfo').html(`<span class="text-primary font-weight-bold"><i class="fas fa-check-circle"></i> Published</span> (${d.published_by || '-'} pada ${d.published_at || '-'})`);
+                $('#detPublishInfo').html(`<span class="text-primary font-weight-bold"><i class="fas fa-check-circle mr-1"></i> Published</span> <span class="text-muted small">(${d.published_by || '-'} pada ${d.published_at || '-'})</span>`);
             } else {
-                $('#detPublishInfo').html('<span class="text-muted">Belum dipublish</span>');
+                $('#detPublishInfo').html('<span class="badge badge-secondary px-2 py-1">Belum dipublish</span>');
             }
 
             if (d.is_viewed) {
-                $('#detViewInfo').html(`<span class="text-success font-weight-bold"><i class="fas fa-eye"></i> Sudah dilihat</span> (${d.viewed_by || '-'} pada ${d.viewed_at || '-'})`);
+                $('#detViewInfo').html(`<span class="text-success font-weight-bold"><i class="fas fa-eye mr-1"></i> Sudah dilihat</span> <span class="text-muted small">(${d.viewed_by || '-'} pada ${d.viewed_at || '-'})</span>`);
             } else {
-                $('#detViewInfo').html('<span class="text-muted">Belum dilihat oleh customer</span>');
+                $('#detViewInfo').html('<span class="badge badge-light border text-muted px-2 py-1">Belum dibuka customer</span>');
             }
 
             $('#modalDetail').modal('show');
         });
     }
+
+    // Dynamic filename for custom file input
+    $(document).on('change', '.custom-file-input', function () {
+        var fileName = $(this).val().split('\\').pop();
+        $(this).next('.custom-file-label').addClass("selected").html(fileName || 'Pilih file PDF...');
+    });
 
     // Radio input toggle (file vs url)
     $('.radio-input-type').on('change', function () {
@@ -1612,6 +1849,14 @@ $(document).ready(function () {
     // UPLOAD PACKING LIST FORM
     $('#formUploadPL').on('submit', function (e) {
         e.preventDefault();
+        const fileInput = $(this).find('input[name="doc_file"]')[0];
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+            if (fileInput.files[0].size > 5 * 1024 * 1024) {
+                Swal.fire('File Terlalu Besar', 'Ukuran file PDF maksimal 5MB.', 'warning');
+                return;
+            }
+        }
+
         const formData = new FormData(this);
         const submitBtn = $(this).find('button[type="submit"]');
 
@@ -1646,6 +1891,14 @@ $(document).ready(function () {
     // UPLOAD SURAT JALAN FORM
     $('#formUploadSJ').on('submit', function (e) {
         e.preventDefault();
+        const fileInput = $(this).find('input[name="doc_file"]')[0];
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+            if (fileInput.files[0].size > 5 * 1024 * 1024) {
+                Swal.fire('File Terlalu Besar', 'Ukuran file PDF maksimal 5MB.', 'warning');
+                return;
+            }
+        }
+
         const formData = new FormData(this);
         const submitBtn = $(this).find('button[type="submit"]');
 

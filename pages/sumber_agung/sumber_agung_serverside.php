@@ -122,24 +122,22 @@ switch ($action) {
         $params = [];
 
         if (!empty($dateFrom) && !empty($dateTo)) {
-            $where .= " AND tgl_titipan BETWEEN ? AND ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) BETWEEN ? AND ?";
             $params[] = $dateFrom;
             $params[] = $dateTo;
         } elseif (!empty($dateFrom)) {
-            $where .= " AND tgl_titipan >= ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) >= ?";
             $params[] = $dateFrom;
         } elseif (!empty($dateTo)) {
-            $where .= " AND tgl_titipan <= ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) <= ?";
             $params[] = $dateTo;
         }
 
         // Filter status dokumen
-        if ($filterDoc === 'belum_komplit') {
-            $where .= " AND ((packinglist_file IS NOT NULL AND suratjalan_file IS NULL) OR (packinglist_file IS NULL AND suratjalan_file IS NOT NULL))";
-        } elseif ($filterDoc === 'komplit') {
+        if ($filterDoc === 'belum_lengkap' || $filterDoc === 'belum_komplit') {
+            $where .= " AND (packinglist_file IS NULL OR suratjalan_file IS NULL)";
+        } elseif ($filterDoc === 'lengkap' || $filterDoc === 'komplit') {
             $where .= " AND packinglist_file IS NOT NULL AND suratjalan_file IS NOT NULL";
-        } elseif ($filterDoc === 'tidak_ada') {
-            $where .= " AND packinglist_file IS NULL AND suratjalan_file IS NULL";
         }
 
         // Filter status publish
@@ -151,7 +149,7 @@ switch ($action) {
             $where .= " AND is_published = 1 AND is_viewed = 1";
         }
 
-        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY tgl_titipan DESC, id DESC";
+        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY COALESCE(tgl_kirim, tgl_titipan) DESC, id DESC";
         $stmt = sqlsrv_query($conn, $sql, $params);
         $data = [];
         $no = 1;
@@ -163,11 +161,9 @@ switch ($action) {
 
                 // Status dokumen
                 if ($hasPL && $hasSJ) {
-                    $statusDoc = 'Komplit';
-                } elseif ($hasPL || $hasSJ) {
-                    $statusDoc = 'Belum Komplit';
+                    $statusDoc = 'Lengkap';
                 } else {
-                    $statusDoc = 'Tidak Ada Data';
+                    $statusDoc = 'Belum Lengkap';
                 }
 
                 // Status publish
@@ -182,6 +178,8 @@ switch ($action) {
                 $data[] = [
                     'no'             => $no++,
                     'id'             => (int)$row['id'],
+                    'tgl_kirim'      => formatDateSA($row['tgl_kirim']),
+                    'tgl_kirim_raw'  => !empty($row['tgl_kirim']) ? ($row['tgl_kirim'] instanceof DateTimeInterface ? $row['tgl_kirim']->format('Y-m-d') : date('Y-m-d', strtotime($row['tgl_kirim']))) : null,
                     'no_sc'          => trim($row['no_sc'] ?? '-'),
                     'tgl_sc'         => formatDateSA($row['tgl_sc']),
                     'product_name'   => trim($row['product_name'] ?? '-'),
@@ -233,13 +231,13 @@ switch ($action) {
         $dateParams = [];
 
         if (!empty($dateFrom) && !empty($dateTo)) {
-            $dateCond = " AND tgl_titipan BETWEEN ? AND ?";
+            $dateCond = " AND COALESCE(tgl_kirim, tgl_titipan) BETWEEN ? AND ?";
             $dateParams = [$dateFrom, $dateTo];
         } elseif (!empty($dateFrom)) {
-            $dateCond = " AND tgl_titipan >= ?";
+            $dateCond = " AND COALESCE(tgl_kirim, tgl_titipan) >= ?";
             $dateParams = [$dateFrom];
         } elseif (!empty($dateTo)) {
-            $dateCond = " AND tgl_titipan <= ?";
+            $dateCond = " AND COALESCE(tgl_kirim, tgl_titipan) <= ?";
             $dateParams = [$dateTo];
         }
 
@@ -294,7 +292,8 @@ switch ($action) {
         if (empty($dateTo))   $dateTo   = date('Y-m-d');
 
         try {
-            $where = " WHERE a.titipandate BETWEEN :date_from AND :date_to ";
+            // Filter khusus customer Sumber Agung: LS0014 (SUMBER AGUNG INTERNUSA, PT) & LP0072 (PT. SUMBER AGUNG INTERNUSA)
+            $where = " WHERE a.titipandate BETWEEN :date_from AND :date_to AND c.cuscode IN ('LS0014', 'LP0072') ";
             $params = [':date_from' => $dateFrom, ':date_to' => $dateTo];
 
             if (!empty($keyword)) {
@@ -475,6 +474,12 @@ switch ($action) {
             exit;
         }
 
+        $tglKirim = trim($_POST['tgl_kirim'] ?? '');
+        if (empty($tglKirim)) {
+            echo json_encode(['status' => 'error', 'message' => 'Tanggal Kirim wajib diisi sebelum menyimpan data.']);
+            exit;
+        }
+
         $insertedCount = 0;
         $skippedCount = 0;
 
@@ -495,12 +500,13 @@ switch ($action) {
             }
 
             $sqlInsert = "INSERT INTO dbo.sa_titipan
-                (no_titipan, tgl_titipan, no_do, tgl_do, cust_id, cust_name,
+                (tgl_kirim, no_titipan, tgl_titipan, no_do, tgl_do, cust_id, cust_name,
                  no_sc, tgl_sc, product_code, product_name, label_jual, cust_color, do_qty, qty_kirim,
                  uom, ket_titipan_1, ket_titipan_2, dodesc, created_by, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
 
             $stmtInsert = sqlsrv_query($conn, $sqlInsert, [
+                $tglKirim,
                 $noTitipan,
                 !empty($item['tgl_titipan_raw']) ? $item['tgl_titipan_raw'] : null,
                 trim($item['no_do'] ?? ''),
@@ -580,8 +586,8 @@ switch ($action) {
                 echo json_encode(['status' => 'error', 'message' => 'Hanya file PDF yang diperbolehkan.']);
                 exit;
             }
-            if ($file['size'] > 10 * 1024 * 1024) {
-                echo json_encode(['status' => 'error', 'message' => 'Ukuran file maksimal 10MB.']);
+            if ($file['size'] > 5 * 1024 * 1024) {
+                echo json_encode(['status' => 'error', 'message' => 'Ukuran file maksimal 5MB.']);
                 exit;
             }
 
@@ -680,6 +686,8 @@ switch ($action) {
 
         $detail = [
             'id'             => (int)$rDetail['id'],
+            'tgl_kirim'      => formatDateSA($rDetail['tgl_kirim']),
+            'tgl_kirim_raw'  => !empty($rDetail['tgl_kirim']) ? ($rDetail['tgl_kirim'] instanceof DateTimeInterface ? $rDetail['tgl_kirim']->format('Y-m-d') : date('Y-m-d', strtotime($rDetail['tgl_kirim']))) : null,
             'no_sc'          => trim($rDetail['no_sc'] ?? '-'),
             'tgl_sc'         => formatDateSA($rDetail['tgl_sc']),
             'product_name'   => trim($rDetail['product_name'] ?? '-'),

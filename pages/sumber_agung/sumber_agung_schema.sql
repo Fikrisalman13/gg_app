@@ -16,6 +16,8 @@ IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sa
 BEGIN
     CREATE TABLE [dbo].[sa_titipan] (
         [id]                BIGINT IDENTITY(1,1) NOT NULL,
+        -- Data Tanggal Kirim dari input modal
+        [tgl_kirim]         DATE NULL,
         -- Data dari ERP (snapshot)
         [no_titipan]        NVARCHAR(100) NULL,
         [tgl_titipan]       DATE NULL,

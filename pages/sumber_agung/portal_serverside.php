@@ -59,18 +59,18 @@ switch ($action) {
         $params = [];
 
         if (!empty($dateFrom) && !empty($dateTo)) {
-            $where .= " AND tgl_titipan BETWEEN ? AND ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) BETWEEN ? AND ?";
             $params[] = $dateFrom;
             $params[] = $dateTo;
         } elseif (!empty($dateFrom)) {
-            $where .= " AND tgl_titipan >= ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) >= ?";
             $params[] = $dateFrom;
         } elseif (!empty($dateTo)) {
-            $where .= " AND tgl_titipan <= ?";
+            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) <= ?";
             $params[] = $dateTo;
         }
 
-        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY tgl_titipan DESC, id DESC";
+        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY COALESCE(tgl_kirim, tgl_titipan) DESC, id DESC";
         $stmt = sqlsrv_query($conn, $sql, $params);
         $data = [];
         $no = 1;
@@ -83,10 +83,13 @@ switch ($action) {
                 $data[] = [
                     'no'               => $no++,
                     'id'               => (int)$row['id'],
+                    'tgl_kirim'        => formatDatePortal($row['tgl_kirim']),
                     'no_sc'            => trim($row['no_sc'] ?? '-'),
                     'tgl_sc'           => formatDatePortal($row['tgl_sc']),
                     'product_name'     => trim($row['product_name'] ?? '-'),
                     'product_code'     => trim($row['product_code'] ?? ''),
+                    'label_jual'       => trim($row['label_jual'] ?? '-'),
+                    'cust_color'       => trim($row['cust_color'] ?? '-'),
                     'no_titipan'       => trim($row['no_titipan'] ?? '-'),
                     'tgl_titipan'      => formatDatePortal($row['tgl_titipan']),
                     'no_do'            => trim($row['no_do'] ?? '-'),
@@ -160,10 +163,13 @@ switch ($action) {
 
         $detail = [
             'id'               => (int)$row['id'],
+            'tgl_kirim'        => formatDatePortal($row['tgl_kirim']),
             'no_sc'            => trim($row['no_sc'] ?? '-'),
             'tgl_sc'           => formatDatePortal($row['tgl_sc']),
             'product_name'     => trim($row['product_name'] ?? '-'),
             'product_code'     => trim($row['product_code'] ?? ''),
+            'label_jual'       => trim($row['label_jual'] ?? '-'),
+            'cust_color'       => trim($row['cust_color'] ?? '-'),
             'no_titipan'       => trim($row['no_titipan'] ?? '-'),
             'tgl_titipan'      => formatDatePortal($row['tgl_titipan']),
             'no_do'            => trim($row['no_do'] ?? '-'),

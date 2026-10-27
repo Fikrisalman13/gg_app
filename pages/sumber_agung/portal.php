@@ -41,6 +41,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
     <!-- DataTables -->
     <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
     <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+    <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-fixedcolumns/css/fixedColumns.bootstrap4.min.css">
 
     <!-- SweetAlert2 & Toastr -->
     <link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2-theme-bootstrap-4/bootstrap-4.min.css">
@@ -155,10 +156,144 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             font-size: 12.5px;
             vertical-align: middle;
             border-top: none;
+            white-space: nowrap !important;
         }
         .table-portal td {
             font-size: 13px;
             vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        @media (min-width: 768px) {
+            /* Fixed columns & Sticky Left Styling di Portal (Khusus Layar Desktop) */
+            #tablePortal thead th.dtfc-fixed-left {
+                background-color: #f8fafc !important;
+                z-index: 5 !important;
+            }
+            #tablePortal tbody td.dtfc-fixed-left {
+                background-color: #ffffff !important;
+                z-index: 4 !important;
+            }
+            #tablePortal tbody tr.even td.dtfc-fixed-left {
+                background-color: #ffffff !important;
+            }
+            #tablePortal tbody tr.odd td.dtfc-fixed-left {
+                background-color: #fcfcfd !important;
+            }
+            #tablePortal tbody tr:hover td.dtfc-fixed-left {
+                background-color: #f1f5f9 !important;
+            }
+
+            /* Garis pembatas di sebelah kanan kolom No SO (kolom ke-3 pada portal) */
+            #tablePortal thead th.dtfc-fixed-left:nth-child(3),
+            #tablePortal tbody td.dtfc-fixed-left:nth-child(3) {
+                box-shadow: 4px 0 6px -3px rgba(0, 0, 0, 0.12);
+                border-right: 2px solid #cbd5e1 !important;
+            }
+
+            /* Posisi Pagination Tetap di Pojok Kanan Bawah Kartu */
+            #tablePortal_wrapper .dataTables_paginate {
+                float: right !important;
+                text-align: right !important;
+                margin: 0 !important;
+            }
+            #tablePortal_wrapper .dataTables_paginate ul.pagination {
+                justify-content: flex-end !important;
+                margin: 2px 0 !important;
+            }
+        }
+
+        /* Optimasi Khusus Perangkat Mobile / Layar HP (< 768px) */
+        @media (max-width: 767.98px) {
+            .container-fluid {
+                padding-left: 10px !important;
+                padding-right: 10px !important;
+            }
+            .portal-navbar {
+                padding: 10px 14px !important;
+            }
+            .portal-brand {
+                gap: 8px !important;
+            }
+            .portal-brand img {
+                width: 32px !important;
+                height: 32px !important;
+            }
+            .portal-brand-text h1 {
+                font-size: 1rem !important;
+            }
+            .portal-brand-text small {
+                font-size: 9.5px !important;
+                display: none; /* Ringkas di HP */
+            }
+            .hero-banner {
+                padding: 16px 18px !important;
+                margin-bottom: 14px !important;
+                border-radius: 12px !important;
+            }
+            .hero-banner h2 {
+                font-size: 1.25rem !important;
+            }
+            .portal-card {
+                margin-bottom: 14px !important;
+                border-radius: 12px !important;
+            }
+            .portal-card-header {
+                padding: 12px 14px !important;
+            }
+            .portal-card .card-body {
+                padding: 12px !important;
+            }
+            #portalFilterForm .col-sm-12.text-right {
+                display: flex !important;
+                gap: 6px !important;
+                padding-top: 4px;
+            }
+            #portalFilterForm .btn {
+                flex: 1 !important;
+            }
+            /* Kepadatan & Ukuran Tabel di HP */
+            .table-portal th {
+                font-size: 11px !important;
+                padding: 6px 8px !important;
+            }
+            .table-portal td {
+                font-size: 11.5px !important;
+                padding: 6px 8px !important;
+            }
+            .btn-view-doc, .btn-view-doc-green {
+                font-size: 10.5px !important;
+                padding: 3px 8px !important;
+            }
+            .btn-portal-detail {
+                font-size: 11px !important;
+                padding: 3px 8px !important;
+            }
+            /* Kontrol DataTables di HP */
+            #tablePortal_wrapper .dataTables_length,
+            #tablePortal_wrapper .dataTables_filter {
+                text-align: left !important;
+                margin-bottom: 8px;
+            }
+            #tablePortal_wrapper .dataTables_filter input {
+                width: 100% !important;
+                margin-left: 0 !important;
+                margin-top: 4px;
+            }
+            #tablePortal_wrapper .dataTables_paginate {
+                float: none !important;
+                text-align: center !important;
+                margin-top: 12px !important;
+            }
+            #tablePortal_wrapper .dataTables_paginate ul.pagination {
+                justify-content: center !important;
+                flex-wrap: wrap !important;
+            }
+            #tablePortal_wrapper .dataTables_info {
+                text-align: center !important;
+                font-size: 11.5px !important;
+                margin-bottom: 4px;
+            }
         }
 
         /* Hero banner */
@@ -182,6 +317,63 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             font-size: 120px;
             opacity: 0.1;
             color: #ffffff;
+        }
+
+        /* Detail Modal Customer Styling */
+        .table-detail-portal td {
+            padding: 9px 14px;
+            vertical-align: middle;
+            font-size: 13px;
+            border-top: 1px solid #f1f5f9;
+        }
+        .table-detail-portal tr:first-child td {
+            border-top: none;
+        }
+        .table-detail-portal td.field-label {
+            width: 38%;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .table-detail-portal td.field-value {
+            color: #0f172a;
+            font-weight: 600;
+        }
+        .portal-detail-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        }
+        .portal-detail-card-header {
+            background-color: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 10px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .portal-doc-box {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+        }
+        .portal-doc-box:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
         }
     </style>
 </head>
@@ -237,11 +429,11 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             <div class="card-body py-3 px-4">
                 <form id="portalFilterForm" class="row align-items-end">
                     <div class="col-md-4 col-sm-6 mb-2">
-                        <label class="small text-muted font-weight-bold mb-1">Dari Tgl Titipan</label>
+                        <label class="small text-muted font-weight-bold mb-1">Dari Tgl Kirim</label>
                         <input type="date" class="form-control form-control-sm" id="portalDateFrom" value="<?= date('Y-m-01') ?>">
                     </div>
                     <div class="col-md-4 col-sm-6 mb-2">
-                        <label class="small text-muted font-weight-bold mb-1">Sampai Tgl Titipan</label>
+                        <label class="small text-muted font-weight-bold mb-1">Sampai Tgl Kirim</label>
                         <input type="date" class="form-control form-control-sm" id="portalDateTo" value="<?= date('Y-m-d') ?>">
                     </div>
                     <div class="col-md-4 col-sm-12 mb-2 text-right">
@@ -267,32 +459,42 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 </div>
             </div>
             <div class="card-body p-3">
-                <div class="table-responsive">
-                    <table id="tablePortal" class="table table-hover table-striped table-bordered table-portal w-100">
-                        <thead>
-                            <tr>
-                                <th style="width: 35px;" class="text-center">#</th>
-                                <th>No Sales Order</th>
-                                <th>Tgl SC</th>
-                                <th>Nama Product</th>
-                                <th>No Titipan</th>
-                                <th>Tgl Titipan</th>
-                                <th>No DO</th>
-                                <th>Tgl DO</th>
-                                <th class="text-right">QTY DO</th>
-                                <th class="text-right">Qty Kirim</th>
-                                <th>UOM</th>
-                                <th>Keterangan</th>
-                                <th class="text-center">Packing List</th>
-                                <th class="text-center">Surat Jalan</th>
-                                <th style="width: 80px;" class="text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Loaded via AJAX -->
-                        </tbody>
-                    </table>
+                <!-- Mobile Swipe Hint Banner -->
+                <div class="d-md-none p-2 mb-2 rounded bg-light border text-muted small d-flex align-items-center justify-content-between" style="font-size: 11.5px;">
+                    <div>
+                        <i class="fas fa-arrows-alt-h text-primary mr-1"></i>
+                        <span>Geser tabel ke samping untuk melihat seluruh data</span>
+                    </div>
+                    <span class="badge badge-primary px-2 py-1"><i class="fas fa-hand-point-right mr-1"></i> Geser</span>
                 </div>
+
+                <table id="tablePortal" class="table table-hover table-striped table-bordered table-portal w-100">
+                    <thead>
+                        <tr>
+                            <th style="width: 35px;" class="text-center">#</th>
+                            <th>Tgl Kirim</th>
+                            <th>No SO</th>
+                            <th>Tgl SC</th>
+                            <th>Nama Produk</th>
+                            <th>Cust Color</th>
+                            <th>Label Jual</th>
+                            <th>No Titipan</th>
+                            <th>Tgl Titipan</th>
+                            <th>No DO</th>
+                            <th>Tgl DO</th>
+                            <th class="text-right">Qty DO</th>
+                            <th class="text-right">Qty Kirim</th>
+                            <th>UOM</th>
+                            <th>Keterangan</th>
+                            <th class="text-center">Packing List</th>
+                            <th class="text-center">Surat Jalan</th>
+                            <th style="width: 80px;" class="text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Loaded via AJAX -->
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -317,88 +519,164 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body p-4">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">NO TITIPAN</label>
-                            <h6 class="font-weight-bold text-dark" id="pDetNoTitipan">-</h6>
+                <div class="modal-body p-4" style="background-color: #f8fafc;">
+                    
+                    <!-- Top Highlight Card -->
+                    <div class="p-3 mb-3 bg-white border rounded shadow-sm d-flex justify-content-between align-items-center flex-wrap" style="gap: 12px; border-radius: 10px !important;">
+                        <div class="d-flex align-items-center" style="gap: 12px;">
+                            <div style="width: 44px; height: 44px; border-radius: 10px; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                                <i class="fas fa-truck-loading"></i>
+                            </div>
+                            <div>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Nomor DO Titipan</small>
+                                <span class="font-weight-bold text-dark" style="font-family: monospace; font-size: 1.1rem;" id="pDetNoTitipan">-</span>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">TGL TITIPAN</label>
-                            <div class="text-dark font-weight-bold" id="pDetTglTitipan">-</div>
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">NO DELIVERY ORDER (DO)</label>
-                            <div class="text-dark font-weight-bold" id="pDetNoDO">-</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">TGL DO</label>
-                            <div class="text-dark font-weight-bold" id="pDetTglDO">-</div>
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">NO SALES ORDER (SC)</label>
-                            <div class="text-dark font-weight-bold" id="pDetNoSC">-</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">TGL SC</label>
-                            <div class="text-dark font-weight-bold" id="pDetTglSC">-</div>
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">PRODUK</label>
-                            <div class="text-dark font-weight-bold" id="pDetProduct">-</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">QTY KIRIM</label>
-                            <div class="text-dark font-weight-bold text-success" id="pDetQty">-</div>
-                        </div>
-
-                        <div class="col-12 mb-3">
-                            <label class="small text-muted font-weight-bold d-block mb-1">KETERANGAN</label>
-                            <div class="p-2 bg-light rounded border text-muted" id="pDetKeterangan">-</div>
+                        <div class="d-flex align-items-center" style="gap: 20px;">
+                            <div>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Tgl Kirim (Transaksi)</small>
+                                <span class="font-weight-bold text-dark" id="pDetTglKirim">-</span>
+                            </div>
+                            <div class="text-right">
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Total Qty Kirim</small>
+                                <span class="font-weight-bold text-success" style="font-size: 1.15rem;" id="pDetQty">-</span>
+                            </div>
                         </div>
                     </div>
 
-                    <hr class="my-3">
-
-                    <h6 class="font-weight-bold text-dark mb-3">
-                        <i class="fas fa-paperclip text-primary mr-1"></i> Berkas Dokumen Terkait
-                    </h6>
-
                     <div class="row">
-                        <div class="col-md-6 mb-2" id="boxPL">
-                            <div class="p-3 bg-light rounded border d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="font-weight-bold text-primary">
-                                        <i class="fas fa-file-pdf mr-1"></i> Packing List
-                                    </div>
-                                    <small class="text-muted">Dokumen PDF Packing List</small>
+                        <!-- Panel Kiri: Informasi Dokumen & Referensi -->
+                        <div class="col-md-6 mb-3">
+                            <div class="portal-detail-card h-100">
+                                <div class="portal-detail-card-header">
+                                    <i class="fas fa-file-contract text-primary"></i> Data Dokumen & Referensi
                                 </div>
-                                <div id="actionPL">
-                                    <span class="badge badge-secondary">Tidak Ada</span>
+                                <div class="p-0">
+                                    <table class="table table-sm table-striped mb-0 table-detail-portal">
+                                        <tbody>
+                                            <tr>
+                                                <td class="field-label">No DO</td>
+                                                <td class="field-value text-dark" id="pDetNoDO">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Tgl DO</td>
+                                                <td class="field-value text-dark" id="pDetTglDO">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">No SO</td>
+                                                <td class="field-value text-dark" id="pDetNoSC">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Tgl SC</td>
+                                                <td class="field-value text-dark" id="pDetTglSC">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Tgl Titipan</td>
+                                                <td class="field-value text-dark" id="pDetTglTitipan">-</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-md-6 mb-2" id="boxSJ">
-                            <div class="p-3 bg-light rounded border d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="font-weight-bold text-success">
-                                        <i class="fas fa-shipping-fast mr-1"></i> Surat Jalan
-                                    </div>
-                                    <small class="text-muted">Dokumen PDF Surat Jalan</small>
+                        <!-- Panel Kanan: Rincian Barang & Spesifikasi -->
+                        <div class="col-md-6 mb-3">
+                            <div class="portal-detail-card h-100">
+                                <div class="portal-detail-card-header">
+                                    <i class="fas fa-boxes text-info"></i> Data Produk & Spesifikasi
                                 </div>
-                                <div id="actionSJ">
-                                    <span class="badge badge-secondary">Tidak Ada</span>
+                                <div class="p-0">
+                                    <table class="table table-sm table-striped mb-0 table-detail-portal">
+                                        <tbody>
+                                            <tr>
+                                                <td class="field-label">Produk</td>
+                                                <td class="field-value text-dark" id="pDetProduct">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Label Jual</td>
+                                                <td class="field-value">
+                                                    <span class="badge badge-light border px-2 py-1 font-weight-bold" id="pDetLabelJual">-</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Cust Color</td>
+                                                <td class="field-value">
+                                                    <span class="badge badge-light text-primary border px-2 py-1 font-weight-bold" id="pDetCustColor">-</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Qty DO</td>
+                                                <td class="field-value text-dark" id="pDetQtyDO">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Qty Kirim</td>
+                                                <td class="field-value text-success font-weight-bold" id="pDetQtySide">-</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Keterangan -->
+                    <div class="portal-detail-card mb-3">
+                        <div class="portal-detail-card-header">
+                            <i class="fas fa-sticky-note text-warning"></i> Keterangan / Catatan
+                        </div>
+                        <div class="p-3 text-dark bg-white" style="font-size: 13px; line-height: 1.6;" id="pDetKeterangan">-</div>
+                    </div>
+
+                    <!-- Berkas Dokumen Terkait -->
+                    <div class="portal-detail-card">
+                        <div class="portal-detail-card-header">
+                            <i class="fas fa-paperclip text-primary"></i> Berkas Dokumen Terkait
+                        </div>
+                        <div class="p-3 bg-light">
+                            <div class="row">
+                                <div class="col-md-6 mb-2 mb-md-0" id="boxPL">
+                                    <div class="portal-doc-box">
+                                        <div class="d-flex align-items-center" style="gap: 12px;">
+                                            <div style="width: 38px; height: 38px; border-radius: 8px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </div>
+                                            <div>
+                                                <div class="font-weight-bold text-dark" style="font-size: 13.5px;">Packing List</div>
+                                                <small class="text-muted d-block" style="font-size: 11px;">Dokumen PDF Packing List</small>
+                                            </div>
+                                        </div>
+                                        <div id="actionPL">
+                                            <span class="badge badge-secondary">Tidak Ada</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6" id="boxSJ">
+                                    <div class="portal-doc-box">
+                                        <div class="d-flex align-items-center" style="gap: 12px;">
+                                            <div style="width: 38px; height: 38px; border-radius: 8px; background: #ecfdf5; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                                                <i class="fas fa-shipping-fast"></i>
+                                            </div>
+                                            <div>
+                                                <div class="font-weight-bold text-dark" style="font-size: 13.5px;">Surat Jalan</div>
+                                                <small class="text-muted d-block" style="font-size: 11px;">Dokumen PDF Surat Jalan</small>
+                                            </div>
+                                        </div>
+                                        <div id="actionSJ">
+                                            <span class="badge badge-secondary">Tidak Ada</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-                <div class="modal-footer py-2 px-4 bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Tutup</button>
+                <div class="modal-footer py-2 px-4 bg-light d-flex justify-content-end">
+                    <button type="button" class="btn btn-secondary btn-sm px-4 font-weight-bold" data-dismiss="modal">
+                        <i class="fas fa-times mr-1"></i> Tutup
+                    </button>
                 </div>
             </div>
         </div>
@@ -440,6 +718,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
     <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
     <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+    <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-fixedcolumns/js/dataTables.fixedColumns.min.js"></script>
     <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2/sweetalert2.min.js"></script>
     <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/toastr/toastr.min.js"></script>
 
@@ -448,10 +727,18 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
         const PORTAL_API = '/gg_app/pages/sumber_agung/portal_serverside.php';
         let tablePortal = null;
 
+        const isMobile = window.innerWidth < 768;
+
         // Init DataTables Portal
         tablePortal = $('#tablePortal').DataTable({
             processing: true,
             serverSide: false,
+            scrollX: true,
+            scrollCollapse: true,
+            autoWidth: false,
+            fixedColumns: isMobile ? false : {
+                left: 3
+            },
             ajax: {
                 url: PORTAL_API,
                 type: 'GET',
@@ -470,6 +757,11 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             },
             columns: [
                 { data: 'no', className: 'text-center' },
+                {
+                    data: 'tgl_kirim',
+                    className: 'font-weight-bold text-dark',
+                    render: d => d && d !== '-' ? d : '<span class="text-muted">-</span>'
+                },
                 { data: 'no_sc', render: d => `<strong>${d}</strong>` },
                 { data: 'tgl_sc' },
                 {
@@ -477,6 +769,15 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     render: function (data, type, row) {
                         return `<div><b>${row.product_name}</b></div><small class="text-muted">${row.product_code || ''}</small>`;
                     }
+                },
+                {
+                    data: 'cust_color',
+                    className: 'text-center',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
+                },
+                {
+                    data: 'label_jual',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
                 },
                 { data: 'no_titipan', render: d => `<span class="badge badge-light border font-weight-bold">${d}</span>` },
                 { data: 'tgl_titipan' },
@@ -530,21 +831,24 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     }
                 }
             ],
-            order: [[5, 'desc']], // Urut berdasarkan tgl_titipan
+            order: [[1, 'desc']], // Urut berdasarkan Tanggal Kirim
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Semua"]],
+            pagingType: "simple_numbers",
             language: {
+                processing: "Memproses...",
                 search: "Cari:",
-                lengthMenu: "Tampilkan _MENU_ data",
-                info: "Menampilkan _START_ s/d _END_ dari _TOTAL_ data",
+                lengthMenu: "Tampilkan _MENU_ data per halaman",
+                info: "Menampilkan _START_ - _END_ dari _TOTAL_ data",
                 infoEmpty: "Menampilkan 0 data",
                 infoFiltered: "(disaring dari _MAX_ total data)",
                 zeroRecords: "Belum ada dokumen titipan yang dipublikasikan",
+                emptyTable: "Belum ada dokumen titipan yang tersedia",
                 paginate: {
-                    first: "Awal",
-                    last: "Akhir",
-                    next: "Lanjut",
-                    previous: "Kembali"
+                    first: "Pertama",
+                    last: "Terakhir",
+                    next: "›",
+                    previous: "‹"
                 }
             }
         });
@@ -595,14 +899,28 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 }
 
                 const d = res.data;
-                $('#pDetNoTitipan').text(d.no_titipan);
-                $('#pDetTglTitipan').text(d.tgl_titipan);
-                $('#pDetNoDO').text(d.no_do);
-                $('#pDetTglDO').text(d.tgl_do);
-                $('#pDetNoSC').text(d.no_sc);
-                $('#pDetTglSC').text(d.tgl_sc);
-                $('#pDetProduct').text(`${d.product_name} (${d.product_code})`);
-                $('#pDetQty').text(d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-');
+                const qtyKirimStr = d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-';
+                const qtyDOStr = d.do_qty !== null ? `${Number(d.do_qty).toLocaleString('id-ID')} ${d.uom}` : '-';
+
+                $('#pDetTglKirim').text(d.tgl_kirim || '-');
+                $('#pDetNoTitipan').text(d.no_titipan || '-');
+                $('#pDetTglTitipan').text(d.tgl_titipan || '-');
+                $('#pDetNoDO').text(d.no_do || '-');
+                $('#pDetTglDO').text(d.tgl_do || '-');
+                $('#pDetNoSC').text(d.no_sc || '-');
+                $('#pDetTglSC').text(d.tgl_sc || '-');
+                
+                if (d.product_code) {
+                    $('#pDetProduct').html(`${d.product_name} <br><span class="badge badge-light border text-dark font-monospace mt-1" style="font-size: 11px;">${d.product_code}</span>`);
+                } else {
+                    $('#pDetProduct').text(d.product_name || '-');
+                }
+
+                $('#pDetCustColor').text(d.cust_color || '-');
+                $('#pDetLabelJual').text(d.label_jual || '-');
+                $('#pDetQtyDO').text(qtyDOStr);
+                $('#pDetQty').text(qtyKirimStr);
+                $('#pDetQtySide').text(qtyKirimStr);
                 $('#pDetKeterangan').text(d.ket_titipan_2 || d.ket_titipan_1 || d.dodesc || 'Tidak ada catatan tambahan.');
 
                 // Action PL
