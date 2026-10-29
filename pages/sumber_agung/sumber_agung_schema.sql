@@ -37,6 +37,13 @@ BEGIN
         [ket_titipan_1]     NVARCHAR(500) NULL,
         [ket_titipan_2]     NVARCHAR(500) NULL,
         [dodesc]            NVARCHAR(500) NULL,
+        -- Rincian Bale / Packing List (Query DO ERP)
+        [no_packing]        NVARCHAR(100) NULL,
+        [no_bale]           NVARCHAR(100) NULL,
+        [totqtym]           DECIMAL(18,4) NULL,
+        [totqtyyard]        DECIMAL(18,4) NULL,
+        [countbatch]        INT NULL,
+        [dodtdesc]          NVARCHAR(500) NULL,
         -- Dokumen Upload
         [packinglist_file]  NVARCHAR(500) NULL,
         [packinglist_type]  VARCHAR(10) NULL,

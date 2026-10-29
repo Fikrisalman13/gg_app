@@ -22,11 +22,14 @@ $rootPath = dirname(__DIR__, 2);
 require_once $rootPath . '/koneksi.php';   // SQL Server GG ($conn)
 require_once $rootPath . '/koneksi3.php';  // PostgreSQL ERP_Crystal_SUM ($conn3) - READ ONLY
 
-header('Content-Type: application/json; charset=utf-8');
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 // =========================================================================
 // HELPER: IDENTITAS USER
 // =========================================================================
+if (!function_exists('getSAUserIdentity')) {
 function getSAUserIdentity($conn) {
     $user = trim($_SESSION['UserName'] ?? '');
     $nama = trim($_SESSION['NamaLengkap'] ?? '');
@@ -69,6 +72,7 @@ function getSAUserIdentity($conn) {
         'formatted'  => !empty($dept) ? "{$nama} ({$dept})" : $nama
     ];
 }
+}
 
 $currentUser = getSAUserIdentity($conn);
 
@@ -91,10 +95,12 @@ if (!empty($conn)) {
 // =========================================================================
 // HELPER: Format tanggal SQL Server
 // =========================================================================
+if (!function_exists('formatDateSA')) {
 function formatDateSA($val, $format = 'd/m/Y') {
     if (empty($val)) return '-';
     if ($val instanceof DateTimeInterface) return $val->format($format);
     return date($format, strtotime($val));
+}
 }
 
 // =========================================================================
@@ -198,6 +204,12 @@ switch ($action) {
                     'ket_titipan_1'  => trim($row['ket_titipan_1'] ?? ''),
                     'ket_titipan_2'  => trim($row['ket_titipan_2'] ?? ''),
                     'dodesc'         => trim($row['dodesc'] ?? ''),
+                    'no_packing'     => trim($row['no_packing'] ?? '-'),
+                    'no_bale'        => trim($row['no_bale'] ?? '-'),
+                    'totqtym'        => $row['totqtym'] !== null ? (float)$row['totqtym'] : null,
+                    'totqtyyard'     => $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : null,
+                    'countbatch'     => $row['countbatch'] !== null ? (int)$row['countbatch'] : null,
+                    'dodtdesc'       => trim($row['dodtdesc'] ?? ''),
                     'has_packinglist'=> $hasPL,
                     'has_suratjalan' => $hasSJ,
                     'packinglist_file' => $row['packinglist_file'],
@@ -271,7 +283,7 @@ switch ($action) {
         break;
 
     // =====================================================================
-    // SEARCH TITIPAN - Query data dari ERP PostgreSQL (READ ONLY)
+    // SEARCH TITIPAN / DO - Query data dari ERP PostgreSQL (READ ONLY)
     // =====================================================================
     case 'search_titipan':
         if (!isset($conn3) || !$conn3) {
@@ -287,53 +299,64 @@ switch ($action) {
         $limit    = max(10, min(100, (int)($_GET['limit'] ?? 25)));
         $offset   = ($page - 1) * $limit;
 
-        // Default: bulan berjalan
-        if (empty($dateFrom)) $dateFrom = date('Y-m-01');
+        // Default rentang tanggal DO: hari ini jika tidak dispesifikasi
+        if (empty($dateFrom)) $dateFrom = date('Y-m-d');
         if (empty($dateTo))   $dateTo   = date('Y-m-d');
 
         try {
             // Filter khusus customer Sumber Agung: LS0014 (SUMBER AGUNG INTERNUSA, PT) & LP0072 (PT. SUMBER AGUNG INTERNUSA)
-            $where = " WHERE a.titipandate BETWEEN :date_from AND :date_to AND c.cuscode IN ('LS0014', 'LP0072') ";
+            // Serta NOT EXISTS di tabel whdotitipan (hanya DO non-titipan / langsung)
+            $where = " WHERE smcustomer.cuscode IN ('LS0014','LP0072')
+                       AND whdohd.dodate BETWEEN :date_from AND :date_to
+                       AND NOT EXISTS (
+                           SELECT 1
+                           FROM whdotitipan
+                           WHERE whdotitipan.donmbr = whdohd.donmbr
+                       ) ";
             $params = [':date_from' => $dateFrom, ':date_to' => $dateTo];
 
             if (!empty($keyword)) {
                 $term = '%' . $keyword . '%';
-                if ($searchField === 'no_titipan') {
-                    $where .= " AND a.titipannmbr ILIKE :kw ";
+                if ($searchField === 'no_packing') {
+                    $where .= " AND whbalehd.balenmbr ILIKE :kw ";
+                    $params[':kw'] = $term;
+                } elseif ($searchField === 'no_bale') {
+                    $where .= " AND whbalehd.refnmbr ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'no_do') {
-                    $where .= " AND a.donmbr ILIKE :kw ";
+                    $where .= " AND whdohd.donmbr ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'cust_name') {
-                    $where .= " AND (c.cusname ILIKE :kw OR c.cuscode ILIKE :kw) ";
+                    $where .= " AND (smcustomer.cusname ILIKE :kw OR smcustomer.cuscode ILIKE :kw) ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'prodcode') {
-                    $where .= " AND d.prodcode ILIKE :kw ";
+                    $where .= " AND whdodt.prodcode ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'prodname') {
-                    $where .= " AND (d.prodname ILIKE :kw OR d.prodcode ILIKE :kw) ";
+                    $where .= " AND (whdodt.prodname ILIKE :kw OR whdodt.prodcode ILIKE :kw) ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'label_jual') {
-                    $where .= " AND tech.labeljual ILIKE :kw ";
+                    $where .= " AND smprodtechdata.labeljual ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'cust_color') {
-                    $where .= " AND tech.cuscolor ILIKE :kw ";
+                    $where .= " AND smprodtechdata.cuscolor ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'sonmbr') {
-                    $where .= " AND d.sonmbr ILIKE :kw ";
+                    $where .= " AND insohd.sonmbr ILIKE :kw ";
                     $params[':kw'] = $term;
                 } else {
                     $where .= " AND (
-                        a.titipannmbr ILIKE :kw1 OR
-                        a.donmbr ILIKE :kw2 OR
-                        c.cusname ILIKE :kw3 OR
-                        d.prodname ILIKE :kw4 OR
-                        d.sonmbr ILIKE :kw5 OR
-                        d.prodcode ILIKE :kw6 OR
-                        tech.labeljual ILIKE :kw7 OR
-                        tech.cuscolor ILIKE :kw8
+                        whdohd.donmbr ILIKE :kw1 OR
+                        whbalehd.balenmbr ILIKE :kw2 OR
+                        whbalehd.refnmbr ILIKE :kw3 OR
+                        smcustomer.cusname ILIKE :kw4 OR
+                        whdodt.prodname ILIKE :kw5 OR
+                        insohd.sonmbr ILIKE :kw6 OR
+                        whdodt.prodcode ILIKE :kw7 OR
+                        smprodtechdata.labeljual ILIKE :kw8 OR
+                        smprodtechdata.cuscolor ILIKE :kw9
                     )";
-                    for ($i = 1; $i <= 8; $i++) {
+                    for ($i = 1; $i <= 9; $i++) {
                         $params[":kw{$i}"] = $term;
                     }
                 }
@@ -342,12 +365,14 @@ switch ($action) {
             // Count total
             $sqlCount = "
                 SELECT COUNT(*) AS total
-                FROM whdotitipan AS a
-                INNER JOIN whdotitipandt AS b ON a.dotitipanid = b.dotitipanid
-                INNER JOIN whdohd AS c ON a.dohdid = c.dohdid
-                INNER JOIN whdodt AS d ON c.dohdid = d.dohdid
-                INNER JOIN smuom AS e ON b.dlvrstduom = e.uomid AND d.douomid = e.uomid AND d.stduomid = e.uomid AND b.uomid = e.uomid
-                LEFT JOIN smprodtechdata AS tech ON d.prodid = tech.prodid
+                FROM whdohd
+                LEFT JOIN whdodt ON whdohd.dohdid = whdodt.dohdid
+                LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
+                LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
+                LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
+                LEFT JOIN smuom ON whdodt.stduomid = smuom.uomid
+                LEFT JOIN whbaleprod ON whdohd.dohdid = whbaleprod.dohdid
+                LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
                 {$where}
             ";
             $stmtCount = $conn3->prepare($sqlCount);
@@ -357,33 +382,35 @@ switch ($action) {
             // Data query
             $sqlData = "
                 SELECT
-                    a.titipannmbr AS no_titipan,
-                    a.titipandate AS tgl_titipan,
-                    a.donmbr AS no_do,
-                    a.dodate AS tgl_do,
-                    c.cuscode AS cust_id,
-                    c.cusname AS cust_name,
-                    d.sonmbr AS no_sc,
-                    f.sodate AS tgl_sc,
-                    d.prodcode AS product_code,
-                    d.prodname AS product_name,
-                    tech.labeljual AS label_jual,
-                    tech.cuscolor AS cust_color,
-                    d.doqty AS do_qty,
-                    b.dlvrqty AS qty_kirim,
-                    e.uomname AS uom,
-                    a.titipandesc AS ket_titipan_1,
-                    b.dlvrdesc AS ket_titipan_2,
-                    c.dodesc
-                FROM whdotitipan AS a
-                INNER JOIN whdotitipandt AS b ON a.dotitipanid = b.dotitipanid
-                INNER JOIN whdohd AS c ON a.dohdid = c.dohdid
-                INNER JOIN whdodt AS d ON c.dohdid = d.dohdid
-                INNER JOIN smuom AS e ON b.dlvrstduom = e.uomid AND d.douomid = e.uomid AND d.stduomid = e.uomid AND b.uomid = e.uomid
-                LEFT JOIN insohd AS f ON d.sonmbr = f.sonmbr
-                LEFT JOIN smprodtechdata AS tech ON d.prodid = tech.prodid
+                    whdohd.donmbr AS no_do,
+                    whdohd.dodate AS tgl_do,
+                    smcustomer.cusname AS cust_name,
+                    smcustomer.cuscode AS cust_id,
+                    insohd.sonmbr AS no_sc,
+                    insohd.sodate AS tgl_sc,
+                    whdodt.prodcode AS product_code,
+                    whdodt.prodname AS product_name,
+                    smprodtechdata.cuscolor AS cust_color,
+                    smprodtechdata.labeljual AS label_jual,
+                    whdodt.doqty AS do_qty,
+                    smuom.uomname AS uom,
+                    whdohd.dodesc,
+                    whdodt.dodtdesc,
+                    whbalehd.balenmbr AS no_packing,
+                    whbalehd.refnmbr AS no_bale,
+                    whbaleprod.totqtym,
+                    whbaleprod.totqtyyard,
+                    whbaleprod.countbatch
+                FROM whdohd
+                LEFT JOIN whdodt ON whdohd.dohdid = whdodt.dohdid
+                LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
+                LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
+                LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
+                LEFT JOIN smuom ON whdodt.stduomid = smuom.uomid
+                LEFT JOIN whbaleprod ON whdohd.dohdid = whbaleprod.dohdid
+                LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
                 {$where}
-                ORDER BY a.titipannmbr ASC
+                ORDER BY whdohd.dodate DESC, whdohd.donmbr ASC, whbalehd.refnmbr ASC
                 OFFSET :offset LIMIT :limit
             ";
             $stmtData = $conn3->prepare($sqlData);
@@ -394,13 +421,13 @@ switch ($action) {
             $stmtData->bindValue(':limit', $limit, PDO::PARAM_INT);
             $stmtData->execute();
 
-            // Get existing no_titipan + no_sc combos already in sa_titipan
+            // Get existing combos already in sa_titipan (kunci: no_do + no_sc + product_code + no_bale)
             $existingKeys = [];
             if ($tableReady) {
-                $qExist = sqlsrv_query($conn, "SELECT no_titipan, no_sc, product_code FROM dbo.sa_titipan WHERE is_deleted = 0");
+                $qExist = sqlsrv_query($conn, "SELECT no_do, no_sc, product_code, no_bale FROM dbo.sa_titipan WHERE is_deleted = 0");
                 if ($qExist) {
                     while ($rE = sqlsrv_fetch_array($qExist, SQLSRV_FETCH_ASSOC)) {
-                        $key = trim($rE['no_titipan']) . '|' . trim($rE['no_sc']) . '|' . trim($rE['product_code']);
+                        $key = trim($rE['no_do'] ?? '') . '|' . trim($rE['no_sc'] ?? '') . '|' . trim($rE['product_code'] ?? '') . '|' . trim($rE['no_bale'] ?? '');
                         $existingKeys[$key] = true;
                     }
                 }
@@ -409,38 +436,42 @@ switch ($action) {
             $data = [];
             $seq = $offset + 1;
             while ($row = $stmtData->fetch(PDO::FETCH_ASSOC)) {
-                $noTitipan = trim($row['no_titipan'] ?? '');
+                $noDo = trim($row['no_do'] ?? '');
                 $noSC = trim($row['no_sc'] ?? '');
                 $prodCode = trim($row['product_code'] ?? '');
-                $key = "{$noTitipan}|{$noSC}|{$prodCode}";
+                $noBale = trim($row['no_bale'] ?? '');
+                $noPacking = trim($row['no_packing'] ?? '');
+                $key = "{$noDo}|{$noSC}|{$prodCode}|{$noBale}";
 
-                // Ambil sodate dari insohd (sudah di-LEFT JOIN di sqlData untuk efisiensi)
                 $tglSC = !empty($row['tgl_sc']) ? date('Y-m-d', strtotime($row['tgl_sc'])) : null;
+                $qtyBale = $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : ($row['do_qty'] !== null ? (float)$row['do_qty'] : null);
 
                 $data[] = [
-                    'seq'           => $seq++,
-                    'no_titipan'    => $noTitipan,
-                    'tgl_titipan'   => !empty($row['tgl_titipan']) ? date('d/m/Y', strtotime($row['tgl_titipan'])) : '-',
-                    'tgl_titipan_raw' => !empty($row['tgl_titipan']) ? date('Y-m-d', strtotime($row['tgl_titipan'])) : null,
-                    'no_do'         => trim($row['no_do'] ?? ''),
-                    'tgl_do'        => !empty($row['tgl_do']) ? date('d/m/Y', strtotime($row['tgl_do'])) : '-',
-                    'tgl_do_raw'    => !empty($row['tgl_do']) ? date('Y-m-d', strtotime($row['tgl_do'])) : null,
-                    'cust_id'       => trim($row['cust_id'] ?? ''),
-                    'cust_name'     => trim($row['cust_name'] ?? ''),
-                    'no_sc'         => $noSC,
-                    'tgl_sc'        => $tglSC ? date('d/m/Y', strtotime($tglSC)) : '-',
-                    'tgl_sc_raw'    => $tglSC,
-                    'product_code'  => $prodCode,
-                    'product_name'  => trim($row['product_name'] ?? ''),
-                    'label_jual'    => trim($row['label_jual'] ?? '-'),
-                    'cust_color'    => trim($row['cust_color'] ?? '-'),
-                    'do_qty'        => $row['do_qty'] !== null ? (float)$row['do_qty'] : null,
-                    'qty_kirim'     => $row['qty_kirim'] !== null ? (float)$row['qty_kirim'] : null,
-                    'uom'           => trim($row['uom'] ?? ''),
-                    'ket_titipan_1' => trim($row['ket_titipan_1'] ?? ''),
-                    'ket_titipan_2' => trim($row['ket_titipan_2'] ?? ''),
-                    'dodesc'        => trim($row['dodesc'] ?? ''),
-                    'already_saved' => isset($existingKeys[$key]),
+                    'seq'             => $seq++,
+                    'no_do'           => $noDo,
+                    'tgl_do'          => !empty($row['tgl_do']) ? date('d/m/Y', strtotime($row['tgl_do'])) : '-',
+                    'tgl_do_raw'      => !empty($row['tgl_do']) ? date('Y-m-d', strtotime($row['tgl_do'])) : null,
+                    'cust_id'         => trim($row['cust_id'] ?? ''),
+                    'cust_name'       => trim($row['cust_name'] ?? ''),
+                    'no_sc'           => $noSC,
+                    'tgl_sc'          => $tglSC ? date('d/m/Y', strtotime($tglSC)) : '-',
+                    'tgl_sc_raw'      => $tglSC,
+                    'product_code'    => $prodCode,
+                    'product_name'    => trim($row['product_name'] ?? ''),
+                    'label_jual'      => trim($row['label_jual'] ?? '-'),
+                    'cust_color'      => trim($row['cust_color'] ?? '-'),
+                    'do_qty'          => $row['do_qty'] !== null ? (float)$row['do_qty'] : null,
+                    'qty_kirim'       => $qtyBale,
+                    'uom'             => trim($row['uom'] ?? ''),
+                    'dodesc'          => trim($row['dodesc'] ?? ''),
+                    'dodtdesc'        => trim($row['dodtdesc'] ?? ''),
+                    'no_packing'      => $noPacking,
+                    'no_bale'         => $noBale,
+                    'totqtym'         => $row['totqtym'] !== null ? (float)$row['totqtym'] : null,
+                    'totqtyyard'      => $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : null,
+                    'countbatch'      => $row['countbatch'] !== null ? (int)$row['countbatch'] : null,
+                    'already_saved'   => isset($existingKeys[$key]),
+                    'unique_key'      => $key,
                 ];
             }
 
@@ -455,7 +486,7 @@ switch ($action) {
                 'data'        => $data,
             ]);
         } catch (PDOException $e) {
-            echo json_encode(['status' => 'error', 'message' => 'Gagal memuat data titipan: ' . $e->getMessage()]);
+            echo json_encode(['status' => 'error', 'message' => 'Gagal memuat data DO dari ERP: ' . $e->getMessage()]);
         }
         break;
 
@@ -484,32 +515,38 @@ switch ($action) {
         $skippedCount = 0;
 
         foreach ($items as $item) {
-            $noTitipan = trim($item['no_titipan'] ?? '');
+            $noDo = trim($item['no_do'] ?? '');
             $noSC = trim($item['no_sc'] ?? '');
             $prodCode = trim($item['product_code'] ?? '');
+            $noBale = trim($item['no_bale'] ?? '');
+            $noPacking = trim($item['no_packing'] ?? '');
 
-            if (empty($noTitipan)) continue;
+            if (empty($noDo)) continue;
 
-            // Cek duplikat
+            // Cek duplikat berdasarkan no_do, no_sc, product_code, dan no_bale
             $qDup = sqlsrv_query($conn,
-                "SELECT TOP 1 id FROM dbo.sa_titipan WHERE no_titipan = ? AND no_sc = ? AND product_code = ? AND is_deleted = 0",
-                [$noTitipan, $noSC, $prodCode]);
+                "SELECT TOP 1 id FROM dbo.sa_titipan WHERE no_do = ? AND no_sc = ? AND product_code = ? AND no_bale = ? AND is_deleted = 0",
+                [$noDo, $noSC, $prodCode, $noBale]);
             if ($qDup && sqlsrv_fetch_array($qDup, SQLSRV_FETCH_ASSOC)) {
                 $skippedCount++;
                 continue;
             }
 
+            $qtyKirim = ($item['totqtyyard'] !== null && $item['totqtyyard'] !== '') ? (float)$item['totqtyyard'] : ($item['qty_kirim'] ?? $item['do_qty'] ?? null);
+
             $sqlInsert = "INSERT INTO dbo.sa_titipan
                 (tgl_kirim, no_titipan, tgl_titipan, no_do, tgl_do, cust_id, cust_name,
                  no_sc, tgl_sc, product_code, product_name, label_jual, cust_color, do_qty, qty_kirim,
-                 uom, ket_titipan_1, ket_titipan_2, dodesc, created_by, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
+                 uom, ket_titipan_1, ket_titipan_2, dodesc,
+                 no_packing, no_bale, totqtym, totqtyyard, countbatch, dodtdesc,
+                 created_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
 
             $stmtInsert = sqlsrv_query($conn, $sqlInsert, [
                 $tglKirim,
-                $noTitipan,
+                trim($item['no_titipan'] ?? '') ?: null,
                 !empty($item['tgl_titipan_raw']) ? $item['tgl_titipan_raw'] : null,
-                trim($item['no_do'] ?? ''),
+                $noDo,
                 !empty($item['tgl_do_raw']) ? $item['tgl_do_raw'] : null,
                 trim($item['cust_id'] ?? ''),
                 trim($item['cust_name'] ?? ''),
@@ -520,11 +557,17 @@ switch ($action) {
                 trim($item['label_jual'] ?? ''),
                 trim($item['cust_color'] ?? ''),
                 $item['do_qty'] ?? null,
-                $item['qty_kirim'] ?? null,
+                $qtyKirim,
                 trim($item['uom'] ?? ''),
                 trim($item['ket_titipan_1'] ?? ''),
                 trim($item['ket_titipan_2'] ?? ''),
                 trim($item['dodesc'] ?? ''),
+                $noPacking,
+                $noBale,
+                $item['totqtym'] ?? null,
+                $item['totqtyyard'] ?? null,
+                $item['countbatch'] ?? null,
+                trim($item['dodtdesc'] ?? ''),
                 $currentUser['user']
             ]);
 
@@ -706,6 +749,12 @@ switch ($action) {
             'ket_titipan_1'  => trim($rDetail['ket_titipan_1'] ?? ''),
             'ket_titipan_2'  => trim($rDetail['ket_titipan_2'] ?? ''),
             'dodesc'         => trim($rDetail['dodesc'] ?? ''),
+            'no_packing'     => trim($rDetail['no_packing'] ?? '-'),
+            'no_bale'        => trim($rDetail['no_bale'] ?? '-'),
+            'totqtym'        => $rDetail['totqtym'] !== null ? (float)$rDetail['totqtym'] : null,
+            'totqtyyard'     => $rDetail['totqtyyard'] !== null ? (float)$rDetail['totqtyyard'] : null,
+            'countbatch'     => $rDetail['countbatch'] !== null ? (int)$rDetail['countbatch'] : null,
+            'dodtdesc'       => trim($rDetail['dodtdesc'] ?? ''),
             'packinglist_file' => $rDetail['packinglist_file'],
             'packinglist_type' => $rDetail['packinglist_type'],
             'packinglist_at'   => formatDateSA($rDetail['packinglist_at'], 'd/m/Y H:i'),

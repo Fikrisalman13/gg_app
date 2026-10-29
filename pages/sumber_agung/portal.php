@@ -482,8 +482,9 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                             <th>Tgl Titipan</th>
                             <th>No DO</th>
                             <th>Tgl DO</th>
+                            <th>No Packing</th>
+                            <th>No Bale</th>
                             <th class="text-right">Qty DO</th>
-                            <th class="text-right">Qty Kirim</th>
                             <th>UOM</th>
                             <th>Keterangan</th>
                             <th class="text-center">Packing List</th>
@@ -556,23 +557,31 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                                         <tbody>
                                             <tr>
                                                 <td class="field-label">No DO</td>
-                                                <td class="field-value text-dark" id="pDetNoDO">-</td>
+                                                <td class="field-value text-dark font-weight-bold" id="pDetNoDO">-</td>
                                             </tr>
                                             <tr>
                                                 <td class="field-label">Tgl DO</td>
                                                 <td class="field-value text-dark" id="pDetTglDO">-</td>
                                             </tr>
                                             <tr>
+                                                <td class="field-label">No Packing</td>
+                                                <td class="field-value text-dark font-weight-bold" id="pDetNoPacking">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">No Bale</td>
+                                                <td class="field-value text-primary font-weight-bold" id="pDetNoBale">-</td>
+                                            </tr>
+                                            <tr>
                                                 <td class="field-label">No SO</td>
-                                                <td class="field-value text-dark" id="pDetNoSC">-</td>
+                                                <td class="field-value text-dark font-weight-bold" id="pDetNoSC">-</td>
                                             </tr>
                                             <tr>
                                                 <td class="field-label">Tgl SC</td>
                                                 <td class="field-value text-dark" id="pDetTglSC">-</td>
                                             </tr>
                                             <tr>
-                                                <td class="field-label">Tgl Titipan</td>
-                                                <td class="field-value text-dark" id="pDetTglTitipan">-</td>
+                                                <td class="field-label">No Titipan</td>
+                                                <td class="field-value text-muted" id="pDetRowNoTitipan">-</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -606,7 +615,19 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                                                 </td>
                                             </tr>
                                             <tr>
-                                                <td class="field-label">Qty DO</td>
+                                                <td class="field-label">Rincian Qty</td>
+                                                <td class="field-value font-weight-bold text-dark" id="pDetRincianQty">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Jumlah Batch</td>
+                                                <td class="field-value text-dark" id="pDetBatch">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Ket. DO Detail</td>
+                                                <td class="field-value text-dark small" id="pDetDodtDesc">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="field-label">Total Qty DO</td>
                                                 <td class="field-value text-dark" id="pDetQtyDO">-</td>
                                             </tr>
                                             <tr>
@@ -779,24 +800,32 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     data: 'label_jual',
                     render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
                 },
-                { data: 'no_titipan', render: d => `<span class="badge badge-light border font-weight-bold">${d}</span>` },
+                { data: 'no_titipan', render: d => d && d !== '-' ? `<span class="badge badge-light border font-weight-bold">${d}</span>` : '-' },
                 { data: 'tgl_titipan' },
                 { data: 'no_do' },
                 { data: 'tgl_do' },
+                {
+                    data: 'no_packing',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
+                },
+                {
+                    data: 'no_bale',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
+                },
                 {
                     data: 'do_qty',
                     className: 'text-right',
                     render: d => d !== null ? Number(d).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'
                 },
-                {
-                    data: 'qty_kirim',
-                    className: 'text-right font-weight-bold text-primary',
-                    render: d => d !== null ? Number(d).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'
-                },
                 { data: 'uom' },
                 {
-                    data: 'ket_titipan_2',
-                    render: d => d ? `<span title="${d}">${d.length > 25 ? d.substring(0, 25) + '...' : d}</span>` : '-'
+                    data: 'dodtdesc',
+                    render: function (data, type, row) {
+                        const desc = row.dodtdesc || row.ket_titipan_2 || row.dodesc || '-';
+                        if (!desc || desc === '-') return '-';
+                        const short = desc.length > 30 ? desc.substring(0, 30) + '...' : desc;
+                        return `<span title="${desc}">${short}</span>`;
+                    }
                 },
                 {
                     data: null,
@@ -903,10 +932,13 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 const qtyDOStr = d.do_qty !== null ? `${Number(d.do_qty).toLocaleString('id-ID')} ${d.uom}` : '-';
 
                 $('#pDetTglKirim').text(d.tgl_kirim || '-');
-                $('#pDetNoTitipan').text(d.no_titipan || '-');
-                $('#pDetTglTitipan').text(d.tgl_titipan || '-');
+                const noBaleDisplay = d.no_bale && d.no_bale !== '-' ? `${d.no_do} (Bale: ${d.no_bale})` : (d.no_titipan && d.no_titipan !== '-' ? d.no_titipan : d.no_do);
+                $('#pDetNoTitipan').text(noBaleDisplay);
+                $('#pDetRowNoTitipan').text(d.no_titipan || '-');
                 $('#pDetNoDO').text(d.no_do || '-');
                 $('#pDetTglDO').text(d.tgl_do || '-');
+                $('#pDetNoPacking').text(d.no_packing || '-');
+                $('#pDetNoBale').text(d.no_bale || '-');
                 $('#pDetNoSC').text(d.no_sc || '-');
                 $('#pDetTglSC').text(d.tgl_sc || '-');
                 
@@ -918,6 +950,18 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
 
                 $('#pDetCustColor').text(d.cust_color || '-');
                 $('#pDetLabelJual').text(d.label_jual || '-');
+
+                let rincianQtyText = '';
+                if (d.totqtyyard !== null) {
+                    rincianQtyText += `${Number(d.totqtyyard).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Yard`;
+                }
+                if (d.totqtym !== null) {
+                    rincianQtyText += (rincianQtyText ? ' / ' : '') + `${Number(d.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Meter`;
+                }
+                $('#pDetRincianQty').text(rincianQtyText || qtyKirimStr);
+                $('#pDetBatch').text(d.countbatch !== null && d.countbatch !== undefined ? `${d.countbatch} Roll / Batch` : '-');
+                $('#pDetDodtDesc').text(d.dodtdesc || '-');
+
                 $('#pDetQtyDO').text(qtyDOStr);
                 $('#pDetQty').text(qtyKirimStr);
                 $('#pDetQtySide').text(qtyKirimStr);

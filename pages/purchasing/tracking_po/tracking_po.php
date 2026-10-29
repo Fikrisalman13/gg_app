@@ -661,6 +661,20 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
         min-width: 100%;
     }
 }
+/* Styling opsi Dikirim Ke */
+.option-card {
+    transition: all 0.2s ease;
+    border: 1.5px solid #e2e8f0 !important;
+}
+.option-card:hover {
+    border-color: #3b82f6 !important;
+    background-color: #f8fafc !important;
+}
+.option-card.active-option {
+    border-color: #2563eb !important;
+    background-color: #eff6ff !important;
+    box-shadow: 0 2px 5px rgba(37, 99, 235, 0.12);
+}
 </style>
 
 <div class="wrapper">
@@ -929,6 +943,107 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 </div>
 
 <!-- ========================================================================
+     MODAL: PILIH TUJUAN PENGIRIMAN (DIKIRIM KE)
+     ======================================================================== -->
+<div class="modal fade" id="modalPilihDikirimKe" tabindex="-1" role="dialog" aria-labelledby="modalPilihDikirimKeLabel" aria-hidden="true" data-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-<?= htmlspecialchars($themeColor) ?> text-white">
+                <h5 class="modal-title font-weight-bold" id="modalPilihDikirimKeLabel">
+                    <i class="fas fa-truck-moving mr-2"></i>Pilihan Tujuan Pengiriman (Dikirim Ke)
+                </h5>
+                <button type="button" class="close text-white" id="btnClosePilihDikirimKe" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap" style="gap: 8px;">
+                    <div>
+                        <h6 class="font-weight-bold text-dark mb-1">Tentukan Tujuan Pengiriman</h6>
+                        <small class="text-muted">Pilih lokasi pengiriman untuk berkas / barang Purchase Order yang akan diserahkan.</small>
+                    </div>
+                    <span id="badgeCountPilihDikirimKe" class="badge badge-primary px-3 py-2 font-weight-bold" style="font-size: 0.85rem;">
+                        0 PO Terpilih
+                    </span>
+                </div>
+
+                <!-- Pilihan Radio Card -->
+                <div class="dikirim-ke-options mb-3">
+                    <!-- Opsi 1: PT.SUM -->
+                    <div class="custom-control custom-radio mb-2 p-3 rounded option-card active-option" id="cardOptSum" style="cursor: pointer;">
+                        <input type="radio" id="optDikirimKe1" name="radioDikirimKe" class="custom-control-input" value="PT.SUM" checked>
+                        <label class="custom-control-label font-weight-bold text-dark w-100" for="optDikirimKe1" style="cursor: pointer;">
+                            <span class="d-flex align-items-center justify-content-between flex-wrap">
+                                <span><i class="fas fa-building text-primary mr-2"></i>1. PT.SUM</span>
+                                <span class="badge badge-primary font-weight-normal small px-2 py-1">Pusat</span>
+                            </span>
+                            <small class="d-block text-muted font-weight-normal mt-1" style="font-size: 0.82rem;">
+                                <i class="fas fa-map-marker-alt text-danger mr-1"></i>Jl. Desa Tarajusari, No.8, Tarajusari, Banjaran, Kab.Bandung
+                            </small>
+                        </label>
+                    </div>
+
+                    <!-- Opsi 2: Sanso Berjaya Texindo -->
+                    <div class="custom-control custom-radio mb-2 p-3 rounded option-card" id="cardOptSanso" style="cursor: pointer;">
+                        <input type="radio" id="optDikirimKe2" name="radioDikirimKe" class="custom-control-input" value="Sanso Berjaya Texindo/Toko Sumber SERAGAM">
+                        <label class="custom-control-label font-weight-bold text-dark w-100" for="optDikirimKe2" style="cursor: pointer;">
+                            <span class="d-flex align-items-center justify-content-between flex-wrap">
+                                <span><i class="fas fa-store text-success mr-2"></i>2. Sanso Berjaya Texindo/Toko Sumber SERAGAM</span>
+                                <span class="badge badge-success font-weight-normal small px-2 py-1">Mitra Cabang</span>
+                            </span>
+                            <small class="d-block text-muted font-weight-normal mt-1" style="font-size: 0.82rem;">
+                                <i class="fas fa-map-marker-alt text-danger mr-1"></i>Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631
+                            </small>
+                        </label>
+                    </div>
+
+                    <!-- Opsi 3: Diambil ke Supplier -->
+                    <div class="custom-control custom-radio mb-2 p-3 rounded option-card" id="cardOptSupplier" style="cursor: pointer;">
+                        <input type="radio" id="optDikirimKe3" name="radioDikirimKe" class="custom-control-input" value="Diambil ke Supplier">
+                        <label class="custom-control-label font-weight-bold text-dark w-100" for="optDikirimKe3" style="cursor: pointer;">
+                            <span class="d-flex align-items-center justify-content-between flex-wrap">
+                                <span><i class="fas fa-boxes text-warning mr-2"></i>3. Diambil ke Supplier</span>
+                                <span class="badge badge-warning text-dark font-weight-bold small px-2 py-1">Master Vendor ERP</span>
+                            </span>
+                            <small class="d-block text-muted font-weight-normal mt-1" style="font-size: 0.82rem;">
+                                <i class="fas fa-info-circle text-info mr-1"></i>Alamat otomatis diambil dari master vendor / supplier masing-masing PO
+                            </small>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Textarea Alamat Pengiriman (Editable) -->
+                <div class="form-group mb-2">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <label for="inputAlamatKirim" class="font-weight-bold text-dark small mb-0">
+                            <i class="fas fa-map-marked-alt text-danger mr-1"></i>Detail / Catatan Alamat Pengiriman:
+                        </label>
+                        <small class="text-muted" id="alamatKirimHint">(Dapat disesuaikan jika perlu catatan khusus)</small>
+                    </div>
+                    <textarea id="inputAlamatKirim" class="form-control font-weight-normal" rows="3" placeholder="Masukkan alamat pengiriman lengkap..."></textarea>
+                </div>
+
+                <!-- Preview Alamat Supplier Multi-PO (khusus opsi 3 jika multi PO) -->
+                <div id="supplierMultiPoPreview" class="mt-2 p-2 rounded bg-light border small" style="display: none; max-height: 140px; overflow-y: auto;">
+                    <div class="font-weight-bold text-secondary mb-1">
+                        <i class="fas fa-list mr-1"></i>Daftar Alamat Vendor PO Terpilih (dari Master Supplier):
+                    </div>
+                    <div id="supplierMultiPoList"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light px-3 py-2 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4 font-weight-bold" id="btnBatalDikirimKe">
+                    <i class="fas fa-arrow-left mr-1"></i> Kembali ke Daftar PO
+                </button>
+                <button type="button" class="btn btn-primary btn-sm px-4 font-weight-bold" id="btnConfirmDikirimKe">
+                    <i class="fas fa-check-circle mr-1"></i> Lanjutkan & Serahkan PO
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================
      MODAL: KONFIRMASI KEMBALI
      ======================================================================== -->
 <div class="modal fade" id="modalKonfirmasiKembali" tabindex="-1" role="dialog" aria-hidden="true">
@@ -1040,6 +1155,24 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                     <div style="min-width: 0;">
                                         <small class="text-muted d-block font-weight-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">PIC Pembuat PO</small>
                                         <span id="modalPoPic" class="font-weight-bold text-dark text-truncate d-block" style="font-size: 0.95rem;"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Baris Tambahan: Tujuan Pengiriman (Dikirim Ke) & Alamat -->
+                        <div id="modalPoShippingBox" class="mt-3 pt-2 border-top" style="display: none;">
+                            <div class="d-flex align-items-start">
+                                <div class="info-icon-wrapper bg-warning text-dark mr-3 shadow-sm" style="width: 38px; height: 38px; font-size: 15px;">
+                                    <i class="fas fa-truck-moving"></i>
+                                </div>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block font-weight-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Tujuan Pengiriman (Dikirim Ke)</small>
+                                    <div class="d-flex align-items-center flex-wrap mt-1" style="gap: 6px;">
+                                        <span id="modalPoDikirimKe" class="badge badge-primary px-2 py-1 font-weight-bold" style="font-size: 0.85rem;"></span>
+                                    </div>
+                                    <div class="small text-dark mt-1" id="modalPoAlamatKirimWrap">
+                                        <i class="fas fa-map-marker-alt text-danger mr-1"></i><span id="modalPoAlamatKirim" class="text-muted font-weight-bold"></span>
                                     </div>
                                 </div>
                             </div>
@@ -1450,12 +1583,22 @@ $(document).ready(function () {
                         '<input type="checkbox" class="row-select-checkbox" value="' + row.detail_id + '" ' + checkAttr + ' data-ponmbr="' + row.ponmbr + '" data-status="' + row.status + '" data-approved-erp="' + (row.is_approved_erp ? '1' : '0') + '">' +
                         '</td>';
 
+                    var dikirimBadge = '';
+                    if (row.dikirim_ke) {
+                        var titleAttr = row.alamat_kirim ? (' title="' + $('<div>').text(row.alamat_kirim).html() + '"') : '';
+                        dikirimBadge = '<div class="mt-1">' +
+                            '<span class="badge badge-light border text-primary" style="font-size: 11px; font-weight: 600;"' + titleAttr + '>' +
+                                '<i class="fas fa-truck-moving text-info mr-1"></i>' + row.dikirim_ke +
+                            '</span>' +
+                        '</div>';
+                    }
+
                     html += '<tr>' +
                         checkCol +
                         '<td class="text-center">' + row.no + '</td>' +
                         '<td class="text-center">' + row.tanggal_kirim + '</td>' +
                         '<td><span class="po-badge-code">' + row.ponmbr + '</span></td>' +
-                        '<td class="font-weight-bold" style="font-size:12px;">' + row.povendorname + '</td>' +
+                        '<td class="font-weight-bold" style="font-size:12px;">' + row.povendorname + dikirimBadge + '</td>' +
                         '<td class="text-center">' + row.podate + '</td>' +
                         '<td style="font-size:12px;">' + row.diserahkan_oleh + '</td>' +
                         '<td class="text-center">' + getStatusBadge(row.status, row) + '</td>' +
@@ -2114,9 +2257,97 @@ $(document).ready(function () {
         $('#inputTanggalKirim').val('');
     });
 
-    // Submit batch PO yang diserahkan
+    // ─── LOGIKA PILIHAN DIKIRIM KE ────────────────────────────────────────
+    var defaultAddresses = {
+        'PT.SUM': 'Jl. Desa Tarajusari, No.8, Tarajusari, Banjaran, Kab.Bandung',
+        'Sanso Berjaya Texindo/Toko Sumber SERAGAM': 'Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631',
+        'Diambil ke Supplier': ''
+    };
+
+    function updateDikirimKeUI() {
+        var selectedOpt = $('input[name="radioDikirimKe"]:checked').val();
+        $('.option-card').removeClass('active-option');
+        $('input[name="radioDikirimKe"]:checked').closest('.option-card').addClass('active-option');
+
+        var selectedList = Object.values(selectedPoMap);
+        var count = selectedList.length;
+
+        if (selectedOpt === 'PT.SUM') {
+            $('#inputAlamatKirim').val(defaultAddresses['PT.SUM']);
+            $('#supplierMultiPoPreview').hide();
+            $('#alamatKirimHint').text('(Dapat disesuaikan jika perlu catatan khusus)');
+        } else if (selectedOpt === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') {
+            $('#inputAlamatKirim').val(defaultAddresses['Sanso Berjaya Texindo/Toko Sumber SERAGAM']);
+            $('#supplierMultiPoPreview').hide();
+            $('#alamatKirimHint').text('(Dapat disesuaikan jika perlu catatan khusus)');
+        } else if (selectedOpt === 'Diambil ke Supplier') {
+            if (count === 1) {
+                var singlePo = selectedList[0];
+                var addr = singlePo.vendoraddr ? singlePo.vendoraddr : 'Alamat vendor belum tercatat di ERP';
+                $('#inputAlamatKirim').val(addr);
+                $('#supplierMultiPoPreview').hide();
+                $('#alamatKirimHint').text('(Alamat dari master supplier ERP)');
+            } else {
+                $('#inputAlamatKirim').val('Diambil langsung ke masing-masing supplier (Alamat otomatis disimpan per vendor PO dari database ERP)');
+                var listHtml = '';
+                $.each(selectedList, function (idx, item) {
+                    var vAddr = item.vendoraddr ? item.vendoraddr : '<i class="text-danger">Alamat belum tercatat di ERP</i>';
+                    listHtml += '<div class="py-1 border-bottom">' +
+                        '<strong>' + item.ponmbr + '</strong> <span class="badge badge-light border text-dark ml-1">' + (item.povendorname || '-') + '</span>: ' +
+                        '<span class="text-muted">' + vAddr + '</span>' +
+                    '</div>';
+                });
+                $('#supplierMultiPoList').html(listHtml);
+                $('#supplierMultiPoPreview').slideDown(150);
+                $('#alamatKirimHint').text('(Daftar master vendor masing-masing PO tercantum di bawah)');
+            }
+        }
+    }
+
+    $(document).on('click', '.option-card', function (e) {
+        if ($(e.target).is('input[type="radio"]')) return;
+        var $radio = $(this).find('input[type="radio"]');
+        if (!$radio.prop('checked')) {
+            $radio.prop('checked', true).trigger('change');
+        }
+    });
+
+    $(document).on('change', 'input[name="radioDikirimKe"]', function () {
+        updateDikirimKeUI();
+    });
+
+    // Buka Modal Pilih Dikirim Ke saat tombol Submit di Modal Search PO diklik
     $('#btnSubmitPoSearch').on('click', function () {
+        var selectedKeys = Object.keys(selectedPoMap);
+
+        if (selectedKeys.length === 0) {
+            Swal.fire('Perhatian', 'Pilih minimal 1 PO untuk diserahkan.', 'warning');
+            return;
+        }
+
+        $('#badgeCountPilihDikirimKe').text(selectedKeys.length + ' PO Terpilih');
+        $('#modalSerahkanPo').modal('hide');
+
+        // Pastikan opsi 1 (PT.SUM) terpilih default jika belum ada yang terpilih
+        if (!$('input[name="radioDikirimKe"]:checked').length) {
+            $('#optDikirimKe1').prop('checked', true);
+        }
+        updateDikirimKeUI();
+
+        $('#modalPilihDikirimKe').modal('show');
+    });
+
+    // Batal / Kembali dari Modal Pilih Dikirim Ke ke Modal Search PO
+    $('#btnBatalDikirimKe, #btnClosePilihDikirimKe').on('click', function () {
+        $('#modalPilihDikirimKe').modal('hide');
+        $('#modalSerahkanPo').modal('show');
+    });
+
+    // Konfirmasi Eksekusi Penyerahan PO dari Modal Pilih Dikirim Ke
+    $('#btnConfirmDikirimKe').on('click', function () {
         var tanggalKirim = $.trim($('#inputTanggalKirim').val());
+        var dikirimKe = $('input[name="radioDikirimKe"]:checked').val() || 'PT.SUM';
+        var alamatKirim = $.trim($('#inputAlamatKirim').val());
         var selectedKeys = Object.keys(selectedPoMap);
 
         if (selectedKeys.length === 0) {
@@ -2130,6 +2361,7 @@ $(document).ready(function () {
                 ponmbr: r.ponmbr,
                 pohdid: r.pohdid,
                 povendorname: r.povendorname || '-',
+                vendoraddr: r.vendoraddr || '',
                 podate_raw: r.podate_raw || null
             });
         });
@@ -2140,15 +2372,17 @@ $(document).ready(function () {
         var confirmColor = '#28a745';
         var iconType = 'question';
 
+        var badgeDikirimHtml = '<br><span class="badge badge-info px-2 py-1 mt-2 font-weight-bold" style="font-size: 0.85rem;"><i class="fas fa-truck mr-1"></i>Dikirim ke: ' + dikirimKe + '</span>';
+
         if (!tanggalKirim) {
             confirmTitle = 'Tunggu Tanggal Penyerahan';
-            confirmHtml = 'Tanggal penyerahan <b>dikosongkan</b>.<br><br>Simpan <b>' + poItems.length + ' PO</b> dengan status <b><span class="badge badge-warning text-dark font-weight-bold px-2 py-1">Tunggu Tanggal Penyerahan</span></b>?<br><small class="text-muted">Tanggal penyerahan dapat diinputkan menyusul nanti.</small>';
+            confirmHtml = 'Tanggal penyerahan <b>dikosongkan</b>.<br><br>Simpan <b>' + poItems.length + ' PO</b> dengan status <b><span class="badge badge-warning text-dark font-weight-bold px-2 py-1">Tunggu Tanggal Penyerahan</span></b>?' + badgeDikirimHtml + '<br><small class="text-muted mt-2 d-block">Tanggal penyerahan dapat diinputkan menyusul nanti.</small>';
             confirmBtnText = '<i class="fas fa-save mr-1"></i> Ya, Simpan';
             confirmColor = '#ea580c';
             iconType = 'info';
         } else {
             confirmTitle = 'Konfirmasi Penyerahan';
-            confirmHtml = 'Serahkan <b>' + poItems.length + ' PO</b> ke Direktur pada tanggal <b>' + tanggalKirim + '</b>?';
+            confirmHtml = 'Serahkan <b>' + poItems.length + ' PO</b> ke Direktur pada tanggal <b>' + tanggalKirim + '</b>?' + badgeDikirimHtml;
             confirmBtnText = '<i class="fas fa-paper-plane mr-1"></i> Ya, Serahkan!';
             confirmColor = '#28a745';
             iconType = 'question';
@@ -2165,16 +2399,19 @@ $(document).ready(function () {
         }).then(function (result) {
             if (!result.isConfirmed) return;
 
-            var $btn = $('#btnSubmitPoSearch');
+            var $btn = $('#btnConfirmDikirimKe');
             $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...');
 
             $.post(BASE_URL, {
                 action: 'submit_serah',
                 tanggal_kirim: tanggalKirim,
+                dikirim_ke: dikirimKe,
+                alamat_kirim: alamatKirim,
                 po_items: JSON.stringify(poItems)
             }, function (res) {
-                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane mr-1"></i> Submit');
+                $btn.prop('disabled', false).html('<i class="fas fa-check-circle mr-1"></i> Lanjutkan & Serahkan PO');
                 if (res.status === 'ok') {
+                    $('#modalPilihDikirimKe').modal('hide');
                     $('#modalSerahkanPo').modal('hide');
                     Swal.fire('Berhasil!', res.message || 'PO berhasil diproses.', 'success');
                     selectedPoMap = {};
@@ -2184,7 +2421,7 @@ $(document).ready(function () {
                     Swal.fire('Gagal', res.message || 'Gagal menyerahkan PO.', 'error');
                 }
             }, 'json').fail(function () {
-                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane mr-1"></i> Submit');
+                $btn.prop('disabled', false).html('<i class="fas fa-check-circle mr-1"></i> Lanjutkan & Serahkan PO');
                 Swal.fire('Error', 'Gagal menghubungi server.', 'error');
             });
         });
@@ -2367,6 +2604,14 @@ $(document).ready(function () {
             $('#modalPoDate').text(h.podate);
             $('#modalPoVendor').text(h.povendorname + (h.povendorcode ? ' (' + h.povendorcode + ')' : ''));
             $('#modalPoPic').text(h.pic_pembuat || '-');
+
+            if (h.dikirim_ke) {
+                $('#modalPoDikirimKe').text(h.dikirim_ke);
+                $('#modalPoAlamatKirim').text(h.alamat_kirim || '-');
+                $('#modalPoShippingBox').show();
+            } else {
+                $('#modalPoShippingBox').hide();
+            }
 
             // Render items
             var itemsHtml = '';

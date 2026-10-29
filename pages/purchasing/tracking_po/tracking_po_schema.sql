@@ -18,6 +18,8 @@ BEGIN
         [id]              BIGINT IDENTITY(1,1) NOT NULL,
         [tanggal_kirim]   DATE NULL,
         [diserahkan_oleh] NVARCHAR(200) NOT NULL,
+        [dikirim_ke]      NVARCHAR(100) NULL,
+        [alamat_kirim]    NVARCHAR(MAX) NULL,
         [created_by]      VARCHAR(100) NULL,
         [created_at]      DATETIME NOT NULL CONSTRAINT [DF_tracking_po_header_created_at] DEFAULT (GETDATE()),
         [updated_by]      VARCHAR(100) NULL,
@@ -50,6 +52,8 @@ BEGIN
         [povendorname]    NVARCHAR(255) NULL,
         [podate]          DATE NULL,
         [tanggal_kirim]   DATE NULL,
+        [dikirim_ke]      NVARCHAR(100) NULL,
+        [alamat_kirim]    NVARCHAR(MAX) NULL,
         [status]          VARCHAR(50) NOT NULL CONSTRAINT [DF_tracking_po_detail_status] DEFAULT ('Diserahkan'),
         [is_signed]       BIT NOT NULL CONSTRAINT [DF_tracking_po_detail_is_signed] DEFAULT (0),
         [tanggal_kembali] DATE NULL,
@@ -136,5 +140,13 @@ GO
 -- IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[tracking_po_detail]') AND name = 'tanggal_kirim')
 -- BEGIN
 --     ALTER TABLE [dbo].[tracking_po_detail] ADD [tanggal_kirim] DATE NULL;
+-- END
+-- IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[tracking_po_header]') AND name = 'dikirim_ke')
+-- BEGIN
+--     ALTER TABLE [dbo].[tracking_po_header] ADD [dikirim_ke] NVARCHAR(100) NULL, [alamat_kirim] NVARCHAR(MAX) NULL;
+-- END
+-- IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[tracking_po_detail]') AND name = 'dikirim_ke')
+-- BEGIN
+--     ALTER TABLE [dbo].[tracking_po_detail] ADD [dikirim_ke] NVARCHAR(100) NULL, [alamat_kirim] NVARCHAR(MAX) NULL;
 -- END
 -- GO

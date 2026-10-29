@@ -609,8 +609,9 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                 <th>Tgl Titipan</th>
                                 <th>No DO</th>
                                 <th>Tgl DO</th>
+                                <th>No Packing</th>
+                                <th>No Bale</th>
                                 <th class="text-right">Qty DO</th>
-                                <th class="text-right">Qty Kirim</th>
                                 <th>UOM</th>
                                 <th>Keterangan</th>
                                 <th class="text-center">Packing List</th>
@@ -672,11 +673,17 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                 <!-- Toolbar Pencarian Model Search CP and Routing -->
                 <div class="po-search-toolbar mb-3 p-2 rounded">
                     <div class="po-search-toolbar-left d-flex align-items-center flex-wrap" style="gap: 8px;">
-                        <label for="erpSearchField" class="po-search-inline-label mb-0 font-weight-bold text-muted small">Search For</label>
-                        <select id="erpSearchField" class="form-control form-control-sm po-search-select" style="width: auto; min-width: 170px;">
+                        <label for="erpDateFrom" class="po-search-inline-label mb-0 font-weight-bold text-muted small"><i class="fas fa-calendar-alt mr-1"></i> Tgl DO:</label>
+                        <input type="date" id="erpDateFrom" class="form-control form-control-sm po-search-input" value="<?= date('Y-m-d') ?>" style="width: 135px;" title="Dari Tanggal DO">
+                        <span class="text-muted small font-weight-bold">s/d</span>
+                        <input type="date" id="erpDateTo" class="form-control form-control-sm po-search-input" value="<?= date('Y-m-d') ?>" style="width: 135px;" title="Sampai Tanggal DO">
+
+                        <label for="erpSearchField" class="po-search-inline-label mb-0 font-weight-bold text-muted small ml-1">Search For</label>
+                        <select id="erpSearchField" class="form-control form-control-sm po-search-select" style="width: auto; min-width: 160px;">
                             <option value="all">Semua Kolom</option>
-                            <option value="no_titipan">No Titipan</option>
                             <option value="no_do">No DO</option>
+                            <option value="no_packing">No Packing</option>
+                            <option value="no_bale">No Bale</option>
                             <option value="cust_name">Vendor / Supplier / Cust</option>
                             <option value="sonmbr">No SO (Sales Order)</option>
                             <option value="prodcode">Prod Code</option>
@@ -685,8 +692,8 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                             <option value="cust_color">Cust Color</option>
                         </select>
                         <input type="text" id="erpSearchKeyword" class="form-control form-control-sm po-search-input" 
-                               placeholder="Ketik keyword pencarian..." style="width: 240px;" autocomplete="off">
-                        <button type="button" id="btnErpSearchApply" class="btn btn-outline-secondary btn-sm font-weight-bold">
+                               placeholder="Ketik keyword pencarian..." style="width: 220px;" autocomplete="off">
+                        <button type="button" id="btnErpSearchApply" class="btn btn-primary btn-sm font-weight-bold">
                             <i class="fas fa-search mr-1"></i> Search
                         </button>
                         <button type="button" id="btnErpSearchReset" class="btn btn-outline-secondary btn-sm font-weight-bold">
@@ -703,22 +710,24 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                     <table id="erpSearchTable" class="table table-bordered table-sm w-100 mb-0">
                         <thead>
                             <tr>
-                                <th class="po-select-col text-center" style="width: 75px; min-width: 75px;">Seq</th>
-                                <th style="width: 140px; min-width: 140px;" class="text-center">No Titipan</th>
-                                <th style="width: 95px; min-width: 95px;" class="text-center">Tgl Titipan</th>
+                                <th class="po-select-col text-center" style="width: 70px; min-width: 70px;">Seq</th>
                                 <th style="width: 130px; min-width: 130px;" class="text-center">No DO</th>
                                 <th style="width: 95px; min-width: 95px;" class="text-center">Tgl DO</th>
-                                <th style="min-width: 190px;">Vendor / Supplier</th>
-                                <th style="min-width: 140px;" class="text-center">No SO</th>
+                                <th style="width: 115px; min-width: 115px;" class="text-center">No Packing</th>
+                                <th style="width: 110px; min-width: 110px;" class="text-center">No Bale</th>
+                                <th style="width: 95px; min-width: 95px;" class="text-right">Qty Yard</th>
+                                <th style="width: 95px; min-width: 95px;" class="text-right">Qty Meter</th>
+                                <th style="width: 70px; min-width: 70px;" class="text-center">Batch</th>
+                                <th style="min-width: 185px;">Vendor / Supplier</th>
+                                <th style="min-width: 135px;" class="text-center">No SO</th>
                                 <th style="width: 95px; min-width: 95px;" class="text-center">Tgl SC</th>
-                                <th style="width: 140px; min-width: 140px;" class="text-center">Prod Code</th>
-                                <th style="min-width: 200px;">Nama Produk</th>
-                                <th style="min-width: 110px;">Label Jual</th>
-                                <th style="width: 100px; min-width: 100px;" class="text-center">Cust Color</th>
-                                <th style="width: 100px; min-width: 100px;" class="text-right">Qty Kirim</th>
+                                <th style="width: 135px; min-width: 135px;" class="text-center">Prod Code</th>
+                                <th style="min-width: 190px;">Nama Produk</th>
+                                <th style="min-width: 95px;" class="text-center">Label Jual</th>
+                                <th style="width: 95px; min-width: 95px;" class="text-center">Cust Color</th>
                                 <th style="width: 60px; min-width: 60px;" class="text-center">UOM</th>
-                                <th style="min-width: 240px;">Keterangan</th>
-                                <th style="width: 110px; min-width: 110px;" class="text-center">Status</th>
+                                <th style="min-width: 220px;">Keterangan</th>
+                                <th style="width: 105px; min-width: 105px;" class="text-center">Status</th>
                             </tr>
                         </thead>
                         <tbody id="erpSearchTableBody">
@@ -834,11 +843,19 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                         </tr>
                                         <tr>
                                             <td class="sa-field-label">No DO</td>
-                                            <td class="sa-field-val text-dark" id="detNoDO">-</td>
+                                            <td class="sa-field-val text-dark font-weight-bold" id="detNoDO">-</td>
                                         </tr>
                                         <tr>
                                             <td class="sa-field-label">Tgl DO</td>
                                             <td class="sa-field-val text-dark" id="detTglDO">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">No Packing</td>
+                                            <td class="sa-field-val text-dark" id="detNoPacking">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">No Bale</td>
+                                            <td class="sa-field-val font-weight-bold text-primary" id="detNoBale">-</td>
                                         </tr>
                                         <tr>
                                             <td class="sa-field-label">No SO</td>
@@ -849,8 +866,8 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                             <td class="sa-field-val text-dark" id="detTglSC">-</td>
                                         </tr>
                                         <tr>
-                                            <td class="sa-field-label">Tgl Titipan</td>
-                                            <td class="sa-field-val text-dark" id="detTglTitipan">-</td>
+                                            <td class="sa-field-label">No Titipan</td>
+                                            <td class="sa-field-val text-muted" id="detRowNoTitipan">-</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -882,6 +899,18 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                             <td class="sa-field-val">
                                                 <span class="badge badge-light text-primary border font-weight-bold px-2 py-1" id="detCustColor">-</span>
                                             </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Rincian Qty</td>
+                                            <td class="sa-field-val text-dark font-weight-bold" id="detRincianQty">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Jumlah Batch</td>
+                                            <td class="sa-field-val text-dark" id="detBatch">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="sa-field-label">Ket. DO Detail</td>
+                                            <td class="sa-field-val text-dark small" id="detDodtDesc" style="line-height: 1.4;">-</td>
                                         </tr>
                                         <tr>
                                             <td class="sa-field-label">Keterangan</td>
@@ -1180,24 +1209,32 @@ $(document).ready(function () {
                     className: 'text-center',
                     render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
                 },
-                { data: 'no_titipan', render: d => `<span class="badge badge-light border font-weight-bold">${d}</span>` },
+                { data: 'no_titipan', render: d => d && d !== '-' ? `<span class="badge badge-light border font-weight-bold">${d}</span>` : '-' },
                 { data: 'tgl_titipan' },
                 { data: 'no_do' },
                 { data: 'tgl_do' },
+                {
+                    data: 'no_packing',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
+                },
+                {
+                    data: 'no_bale',
+                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
+                },
                 {
                     data: 'do_qty',
                     className: 'text-right',
                     render: d => d !== null ? Number(d).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'
                 },
-                {
-                    data: 'qty_kirim',
-                    className: 'text-right font-weight-bold',
-                    render: d => d !== null ? Number(d).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'
-                },
                 { data: 'uom' },
                 {
-                    data: 'ket_titipan_2',
-                    render: d => d ? `<span title="${d}">${d.length > 25 ? d.substring(0, 25) + '...' : d}</span>` : '-'
+                    data: 'dodtdesc',
+                    render: function (data, type, row) {
+                        const desc = row.dodtdesc || row.ket_titipan_2 || row.dodesc || '-';
+                        if (!desc || desc === '-') return '-';
+                        const short = desc.length > 30 ? desc.substring(0, 30) + '...' : desc;
+                        return `<span title="${desc}">${short}</span>`;
+                    }
                 },
                 {
                     data: null,
@@ -1524,6 +1561,8 @@ $(document).ready(function () {
             action: 'search_titipan',
             page: currentErpSearchPage,
             limit: 25,
+            date_from: $.trim($('#erpDateFrom').val()),
+            date_to: $.trim($('#erpDateTo').val()),
             search_field: $('#erpSearchField').val(),
             keyword: $.trim($('#erpSearchKeyword').val())
         };
@@ -1531,7 +1570,7 @@ $(document).ready(function () {
         $.getJSON(API_URL, params, function (res) {
             $('#loadingOverlayErpSearch').fadeOut(100);
             if (res.status !== 'ok') {
-                Swal.fire('Error', res.message || 'Gagal memuat data titipan.', 'error');
+                Swal.fire('Error', res.message || 'Gagal memuat data DO dari ERP.', 'error');
                 return;
             }
 
@@ -1540,10 +1579,10 @@ $(document).ready(function () {
             let rowsHtml = '';
 
             if (currentErpGridData.length === 0) {
-                rowsHtml = '<tr><td colspan="16" class="text-center py-4 text-muted"><i class="fas fa-info-circle mr-1"></i> Tidak ada data Titipan DO ditemukan.</td></tr>';
+                rowsHtml = '<tr><td colspan="18" class="text-center py-4 text-muted"><i class="fas fa-info-circle mr-1"></i> Tidak ada data Delivery Order (DO) ditemukan pada periode tanggal ini.</td></tr>';
             } else {
                 $.each(currentErpGridData, function (i, r) {
-                    const key = r.no_titipan + '|' + r.no_sc + '|' + r.product_code;
+                    const key = r.unique_key || (r.no_do + '|' + r.no_sc + '|' + r.product_code + '|' + (r.no_bale || ''));
                     const isSelected = !!selectedErpMap[key];
                     const isSaved = !!r.already_saved;
 
@@ -1552,7 +1591,7 @@ $(document).ready(function () {
                     else if (isSelected) trClass = 'table-active';
 
                     let checkAttr = '';
-                    if (isSaved) checkAttr = 'disabled title="Data titipan ini sudah tersimpan"';
+                    if (isSaved) checkAttr = 'disabled title="Data DO/Bale ini sudah tersimpan"';
                     else if (isSelected) checkAttr = 'checked';
 
                     const statusBadge = isSaved
@@ -1562,7 +1601,10 @@ $(document).ready(function () {
                     const custDisplay = '<span class="font-weight-bold text-dark">' + (r.cust_name || '-') + '</span>' +
                         (r.cust_id ? ' <span class="badge badge-light border text-muted small">' + r.cust_id + '</span>' : '');
 
-                    const desc = r.ket_titipan_2 || r.ket_titipan_1 || r.dodesc || '-';
+                    const desc = r.dodtdesc || r.dodesc || '-';
+                    const qtyYardDisplay = r.totqtyyard !== null ? Number(r.totqtyyard).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-';
+                    const qtyMDisplay = r.totqtym !== null ? Number(r.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-';
+                    const batchDisplay = r.countbatch !== null ? r.countbatch : '-';
 
                     rowsHtml += '<tr class="' + trClass + '" data-key="' + key + '" data-index="' + i + '">' +
                         '<td class="po-select-col">' +
@@ -1571,20 +1613,22 @@ $(document).ready(function () {
                                 '<span class="po-row-seq">' + r.seq + '</span>' +
                             '</div>' +
                         '</td>' +
-                        '<td class="text-center font-weight-bold"><span class="po-badge-code">' + r.no_titipan + '</span></td>' +
-                        '<td class="text-center text-muted">' + r.tgl_titipan + '</td>' +
-                        '<td class="text-center font-weight-bold text-dark">' + r.no_do + '</td>' +
-                        '<td class="text-center text-muted">' + r.tgl_do + '</td>' +
+                        '<td class="text-center font-weight-bold text-dark">' + (r.no_do || '-') + '</td>' +
+                        '<td class="text-center text-muted">' + (r.tgl_do || '-') + '</td>' +
+                        '<td class="text-center"><span class="badge badge-light border text-dark font-weight-bold">' + (r.no_packing || '-') + '</span></td>' +
+                        '<td class="text-center font-weight-bold"><span class="po-badge-code">' + (r.no_bale || '-') + '</span></td>' +
+                        '<td class="text-right font-weight-bold text-primary">' + qtyYardDisplay + '</td>' +
+                        '<td class="text-right text-muted">' + qtyMDisplay + '</td>' +
+                        '<td class="text-center"><span class="badge badge-light border text-info font-weight-bold">' + batchDisplay + '</span></td>' +
                         '<td>' + custDisplay + '</td>' +
                         '<td class="text-center font-weight-bold text-primary">' + (r.no_sc || '-') + '</td>' +
                         '<td class="text-center text-muted">' + (r.tgl_sc || '-') + '</td>' +
                         '<td class="text-center"><span class="badge-prodcode">' + (r.product_code || '-') + '</span></td>' +
                         '<td><b>' + (r.product_name || '-') + '</b></td>' +
-                        '<td><span class="badge badge-light border text-dark font-weight-bold">' + (r.label_jual || '-') + '</span></td>' +
+                        '<td class="text-center"><span class="badge badge-light border text-dark font-weight-bold">' + (r.label_jual || '-') + '</span></td>' +
                         '<td class="text-center"><span class="badge badge-light border text-primary font-weight-bold">' + (r.cust_color || '-') + '</span></td>' +
-                        '<td class="text-right font-weight-bold">' + (r.qty_kirim !== null ? Number(r.qty_kirim).toLocaleString('id-ID') : '-') + '</td>' +
-                        '<td class="text-center">' + r.uom + '</td>' +
-                        '<td class="text-truncate text-break" style="max-width: 240px;" title="' + desc + '">' + desc + '</td>' +
+                        '<td class="text-center">' + (r.uom || '-') + '</td>' +
+                        '<td class="text-truncate text-break" style="max-width: 220px;" title="' + desc + '">' + desc + '</td>' +
                         '<td class="text-center">' + statusBadge + '</td>' +
                     '</tr>';
                 });
@@ -1601,7 +1645,10 @@ $(document).ready(function () {
 
     // Buka Modal Search Titipan saat tombol Tambah Data diklik
     $('#btnTambahData').on('click', function () {
-        $('#inputErpTanggalKirim').val(new Date().toISOString().split('T')[0]);
+        const today = new Date().toISOString().split('T')[0];
+        $('#inputErpTanggalKirim').val(today);
+        $('#erpDateFrom').val(today);
+        $('#erpDateTo').val(today);
         $('#erpSearchKeyword').val('');
         $('#erpSearchField').val('all');
         selectedErpMap = {};
@@ -1629,8 +1676,16 @@ $(document).ready(function () {
         }
     });
 
+    // Event perubahan tanggal DO
+    $('#erpDateFrom, #erpDateTo').on('change', function () {
+        loadErpSearchGrid(1);
+    });
+
     // Reset toolbar pencarian
     $('#btnErpSearchReset').on('click', function () {
+        const today = new Date().toISOString().split('T')[0];
+        $('#erpDateFrom').val(today);
+        $('#erpDateTo').val(today);
         $('#erpSearchKeyword').val('');
         $('#erpSearchField').val('all');
         loadErpSearchGrid(1);
@@ -1642,12 +1697,12 @@ $(document).ready(function () {
         if (availableRows.length === 0) return;
 
         const allSelectedInView = availableRows.every(function (r) {
-            const key = r.no_titipan + '|' + r.no_sc + '|' + r.product_code;
+            const key = r.unique_key || (r.no_do + '|' + r.no_sc + '|' + r.product_code + '|' + (r.no_bale || ''));
             return !!selectedErpMap[key];
         });
 
         $.each(availableRows, function (i, r) {
-            const key = r.no_titipan + '|' + r.no_sc + '|' + r.product_code;
+            const key = r.unique_key || (r.no_do + '|' + r.no_sc + '|' + r.product_code + '|' + (r.no_bale || ''));
             if (allSelectedInView) {
                 delete selectedErpMap[key];
             } else {
@@ -1666,7 +1721,7 @@ $(document).ready(function () {
         const idx = $(this).data('index');
         const r = currentErpGridData[idx];
         if (!r) return;
-        const key = r.no_titipan + '|' + r.no_sc + '|' + r.product_code;
+        const key = r.unique_key || (r.no_do + '|' + r.no_sc + '|' + r.product_code + '|' + (r.no_bale || ''));
 
         if (selectedErpMap[key]) {
             delete selectedErpMap[key];
@@ -1760,19 +1815,33 @@ $(document).ready(function () {
 
             const d = res.data;
             $('#detTglKirim').text(d.tgl_kirim || '-');
-            $('#detNoTitipan').text(d.no_titipan);
-            $('#detTglTitipan').text(d.tgl_titipan);
-            $('#detNoDO').text(d.no_do);
-            $('#detTglDO').text(d.tgl_do);
+            const noBaleDisplay = d.no_bale && d.no_bale !== '-' ? `${d.no_do} (Bale: ${d.no_bale})` : (d.no_titipan && d.no_titipan !== '-' ? d.no_titipan : d.no_do);
+            $('#detNoTitipan').text(noBaleDisplay);
+            $('#detRowNoTitipan').text(d.no_titipan || '-');
+            $('#detNoDO').text(d.no_do || '-');
+            $('#detTglDO').text(d.tgl_do || '-');
+            $('#detNoPacking').text(d.no_packing || '-');
+            $('#detNoBale').text(d.no_bale || '-');
             $('#detCustomer').text(d.cust_name ? `${d.cust_name} (${d.cust_id})` : '-');
 
-            $('#detNoSC').text(d.no_sc);
-            $('#detTglSC').text(d.tgl_sc);
+            $('#detNoSC').text(d.no_sc || '-');
+            $('#detTglSC').text(d.tgl_sc || '-');
             $('#detProduct').text(`${d.product_name} (${d.product_code})`);
             $('#detLabelJual').text(d.label_jual || '-');
             $('#detCustColor').text(d.cust_color || '-');
+
+            let rincianQtyText = '';
+            if (d.totqtyyard !== null) {
+                rincianQtyText += `${Number(d.totqtyyard).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Yard`;
+            }
+            if (d.totqtym !== null) {
+                rincianQtyText += (rincianQtyText ? ' / ' : '') + `${Number(d.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Meter`;
+            }
+            $('#detRincianQty').text(rincianQtyText || (d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-'));
+            $('#detBatch').text(d.countbatch !== null && d.countbatch !== undefined ? `${d.countbatch} Roll / Batch` : '-');
+            $('#detDodtDesc').text(d.dodtdesc || '-');
             $('#detQty').text(d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-');
-            $('#detKet2').text(d.ket_titipan_2 || '-');
+            $('#detKet2').text(d.ket_titipan_2 || d.dodesc || '-');
 
             // Packing List status
             if (d.packinglist_file) {

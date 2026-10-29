@@ -166,6 +166,7 @@ switch ($action) {
         $sql = "SELECT d.id AS detail_id, d.header_id, d.ponmbr, d.pohdid, d.povendorname, 
                        d.podate, d.status, d.is_signed, d.tanggal_kembali, 
                        d.konfirmasi_oleh, d.konfirmasi_at, d.approved_by, d.approved_at, d.catatan,
+                       d.dikirim_ke, d.alamat_kirim,
                        {$tglExpr} AS tanggal_kirim, h.diserahkan_oleh, h.created_at
                 FROM dbo.tracking_po_detail d
                 INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id
@@ -228,6 +229,8 @@ switch ($action) {
                     'konfirmasi_oleh'  => $row['konfirmasi_oleh'] ? trim($row['konfirmasi_oleh']) : null,
                     'approved_by'      => $row['approved_by'] ? trim($row['approved_by']) : null,
                     'is_approved_erp'  => !empty($row['approved_by']),
+                    'dikirim_ke'       => !empty($row['dikirim_ke']) ? trim($row['dikirim_ke']) : null,
+                    'alamat_kirim'     => !empty($row['alamat_kirim']) ? trim($row['alamat_kirim']) : null,
                     'catatan'          => $row['catatan'] ? trim($row['catatan']) : null,
                 ];
             }
@@ -447,10 +450,12 @@ switch ($action) {
                     h.createdby,
                     e.empnik AS requested_by_id,
                     e.empname AS requested_by_name,
+                    TRIM(v.vendoraddr) AS vendoraddr,
                     TRIM(h.fgstatus) AS po_status
                 FROM prpohd h
                 LEFT JOIN msuser u ON TRIM(h.createdby) = TRIM(u.userid)
                 LEFT JOIN smemployee e ON h.poinitiatorid = e.empid
+                LEFT JOIN smvendor v ON h.povendorid = v.vendorid
                 $where
                 ORDER BY h.podate DESC, h.pohdid DESC
                 OFFSET :offset LIMIT :limit
@@ -480,6 +485,7 @@ switch ($action) {
                     'podate_raw'        => !empty($row['podate']) ? date('Y-m-d', strtotime($row['podate'])) : null,
                     'povendorcode'      => trim($row['povendorcode'] ?? ''),
                     'povendorname'      => trim($row['povendorname'] ?? '-'),
+                    'vendoraddr'        => trim($row['vendoraddr'] ?? ''),
                     'requested_by_name' => $reqName,
                     'requested_by_id'   => $reqNik,
                     'pic_pembuat'       => $picPembuat,
@@ -574,7 +580,22 @@ switch ($action) {
         }
 
         $tanggalKirim = trim($_POST['tanggal_kirim'] ?? '');
+        $dikirimKe = trim($_POST['dikirim_ke'] ?? '');
+        $alamatKirim = trim($_POST['alamat_kirim'] ?? '');
         $poItems = json_decode($_POST['po_items'] ?? '[]', true);
+
+        if (empty($dikirimKe)) {
+            $dikirimKe = 'PT.SUM';
+        }
+        if (empty($alamatKirim)) {
+            if ($dikirimKe === 'PT.SUM') {
+                $alamatKirim = 'Jl. Desa Tarajusari, No.8, Tarajusari, Banjaran, Kab.Bandung';
+            } elseif ($dikirimKe === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') {
+                $alamatKirim = 'Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631';
+            } elseif ($dikirimKe === 'Diambil ke Supplier') {
+                $alamatKirim = 'Diambil langsung ke supplier masing-masing';
+            }
+        }
 
         if (empty($poItems) || !is_array($poItems)) {
             echo json_encode(['status' => 'error', 'message' => 'Pilih minimal 1 PO untuk diserahkan.']);
@@ -619,12 +640,14 @@ switch ($action) {
         }
 
         // Insert header
-        $sqlHeader = "INSERT INTO dbo.tracking_po_header (tanggal_kirim, diserahkan_oleh, created_by, created_at)
+        $sqlHeader = "INSERT INTO dbo.tracking_po_header (tanggal_kirim, diserahkan_oleh, dikirim_ke, alamat_kirim, created_by, created_at)
                       OUTPUT INSERTED.id
-                      VALUES (?, ?, ?, GETDATE())";
+                      VALUES (?, ?, ?, ?, ?, GETDATE())";
         $stmtHeader = sqlsrv_query($conn, $sqlHeader, [
             $dbTanggalKirim,
             $currentUser['formatted'],
+            $dikirimKe,
+            $alamatKirim,
             $currentUser['user']
         ]);
 
@@ -654,10 +677,29 @@ switch ($action) {
             $vendor = trim($item['povendorname'] ?? '-');
             $podate = !empty($item['podate_raw']) ? $item['podate_raw'] : null;
 
-            $sqlDetail = "INSERT INTO dbo.tracking_po_detail (header_id, ponmbr, pohdid, povendorname, podate, tanggal_kirim, status, created_at)
+            // Khusus opsi Diambil ke Supplier, ambil alamat dari master vendor
+            $itemAlamat = $alamatKirim;
+            if ($dikirimKe === 'Diambil ke Supplier') {
+                $itemAlamat = !empty($item['vendoraddr']) ? trim($item['vendoraddr']) : '';
+                if (empty($itemAlamat) && isset($conn3) && $conn3 && !empty($pohdid)) {
+                    try {
+                        $qAddr = $conn3->prepare("SELECT TRIM(v.vendoraddr) AS vendoraddr FROM prpohd h LEFT JOIN smvendor v ON h.povendorid = v.vendorid WHERE h.pohdid = :pohdid LIMIT 1");
+                        $qAddr->execute([':pohdid' => $pohdid]);
+                        $rAddr = $qAddr->fetch(PDO::FETCH_ASSOC);
+                        if (!empty($rAddr['vendoraddr'])) {
+                            $itemAlamat = trim($rAddr['vendoraddr']);
+                        }
+                    } catch (Exception $e) {}
+                }
+                if (empty($itemAlamat)) {
+                    $itemAlamat = !empty($alamatKirim) ? $alamatKirim : 'Alamat vendor belum tercatat di ERP';
+                }
+            }
+
+            $sqlDetail = "INSERT INTO dbo.tracking_po_detail (header_id, ponmbr, pohdid, povendorname, podate, tanggal_kirim, dikirim_ke, alamat_kirim, status, created_at)
                           OUTPUT INSERTED.id
-                          VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())";
-            $stmtDetail = sqlsrv_query($conn, $sqlDetail, [$headerId, $ponmbr, $pohdid, $vendor, $podate, $dbTanggalKirim, $initialStatus]);
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())";
+            $stmtDetail = sqlsrv_query($conn, $sqlDetail, [$headerId, $ponmbr, $pohdid, $vendor, $podate, $dbTanggalKirim, $dikirimKe, $itemAlamat, $initialStatus]);
 
             if ($stmtDetail) {
                 // Get detail ID for log
@@ -668,13 +710,14 @@ switch ($action) {
 
                 // Insert log
                 if ($detailId > 0) {
+                    $itemLogKeterangan = $logKeterangan . (!empty($dikirimKe) ? " [Dikirim ke: {$dikirimKe}]" : "");
                     sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
                         VALUES (?, ?, NULL, ?, ?, GETDATE(), ?)", [
                         $detailId,
                         ($hasTanggal ? 'Diserahkan' : 'Catat Tracking'),
                         $initialStatus,
                         $currentUser['formatted'],
-                        $logKeterangan
+                        $itemLogKeterangan
                     ]);
                 }
                 $insertedCount++;
@@ -1747,7 +1790,17 @@ switch ($action) {
                         'povendorcode' => trim($row['povendorcode'] ?? ''),
                         'povendorname' => trim($row['povendorname'] ?? '-'),
                         'pic_pembuat'  => trim($row['pic_pembuat'] ?? '-'),
+                        'dikirim_ke'   => null,
+                        'alamat_kirim' => null,
                     ];
+
+                    if ($tableReady) {
+                        $qTrack = sqlsrv_query($conn, "SELECT TOP 1 dikirim_ke, alamat_kirim FROM dbo.tracking_po_detail WHERE ponmbr = ? ORDER BY id DESC", [$ponmbr]);
+                        if ($qTrack && $rTrack = sqlsrv_fetch_array($qTrack, SQLSRV_FETCH_ASSOC)) {
+                            $header['dikirim_ke'] = !empty($rTrack['dikirim_ke']) ? trim($rTrack['dikirim_ke']) : null;
+                            $header['alamat_kirim'] = !empty($rTrack['alamat_kirim']) ? trim($rTrack['alamat_kirim']) : null;
+                        }
+                    }
                 }
 
                 $qty = (float)($row['poqty'] ?? 0);
