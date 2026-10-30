@@ -2,6 +2,7 @@
 session_start();
 include_once file_exists(__DIR__ . '/../../koneksi.php') ? __DIR__ . '/../../koneksi.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi.php');
 include_once file_exists(__DIR__ . '/../../includes/permissions.php') ? __DIR__ . '/../../includes/permissions.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/permissions.php');
+require_once $_SERVER['DOCUMENT_ROOT'] . '/gg_app/pages/Issues_purchasing/purchasing_activity_issue.php';
 
 // Menu ID Purchasing (dapat disesuaikan jika sudah didaftarkan di dbo.SMMenu)
 $menuId = 1330; 
@@ -673,6 +674,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
             </div>
             
             <form id="formTambahPurchasing">
+                <input type="hidden" name="purchasing_activity_csrf" value="<?= htmlspecialchars(purchasingActivityCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
                 <div class="modal-body">
                     <!-- Form Header Info -->
                     <div class="row bg-light p-3 rounded mb-3 border">
@@ -2263,11 +2265,34 @@ $(document).ready(function() {
         `;
     }
 
+    /**
+     * Membuat ID permintaan aktivitas unik untuk setiap baris dokumen.
+     *
+     * Browser HTTPS memakai `crypto.randomUUID()`. Fallback menjaga form tetap
+     * dapat dibuka pada HTTP/IP publik yang tidak menyediakan API tersebut.
+     *
+     * @returns {string} ID dengan pola UUID versi 4.
+     */
+    function purchasingActivityRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (character) {
+            var value = Math.floor(Math.random() * 16);
+            var digit = character === 'x' ? value : ((value & 0x3) | 0x8);
+            return digit.toString(16);
+        });
+    }
+
     function createRowTemplate(index, defaultType = 'PO') {
         var isMulti = (defaultType === 'PO' || defaultType === 'PO Untuk dibuat Cek');
         return `
             <tr class="item-row" data-row="${index}">
-                <td class="align-middle font-weight-bold row-num text-center">${index + 1}</td>
+                <td class="align-middle font-weight-bold row-num text-center">
+                    <span class="row-number">${index + 1}</span>
+                    <input type="hidden" class="purchasing-activity-request" name="items[${index}][activity_request_id]" value="${purchasingActivityRequestId()}">
+                </td>
                 <td class="align-top text-left" style="min-width: 170px;">
                     <select class="form-control form-control-sm select-type mb-1 font-weight-bold" name="items[${index}][type]" required>
                         <option value="PO" ${(defaultType === 'PO' || defaultType === 'PO Untuk dibuat Cek') ? 'selected' : ''}>PO</option>
@@ -3195,8 +3220,9 @@ $(document).ready(function() {
 
     function reindexRows() {
         $('#tbodyDynamicRows tr.item-row').each(function(idx) {
-            $(this).find('.row-num').text(idx + 1);
+            $(this).find('.row-number').text(idx + 1);
             $(this).attr('data-row', idx);
+            $(this).find('.purchasing-activity-request').attr('name', `items[${idx}][activity_request_id]`);
             $(this).find('select[name*="[type]"]').attr('name', `items[${idx}][type]`);
             $(this).find('input[name*="[type_keterangan]"]').attr('name', `items[${idx}][type_keterangan]`);
             $(this).find('input[name*="[vendor]"]').attr('name', `items[${idx}][vendor]`);

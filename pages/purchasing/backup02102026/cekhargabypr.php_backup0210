@@ -1,0 +1,203 @@
+<?php
+session_start();
+ob_start();
+include '../../koneksi.php';
+include '../../koneksi3.php';
+require_once __DIR__ . '/cekhargabypr_lib.php';
+
+function jsonResponse(array $data): void
+{
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($data);
+    exit;
+}
+
+if (isset($_GET['ajax']) && in_array($_GET['ajax'], ['prs', 'filtered_prs'], true)) {
+    if (!isset($_SESSION['UserName'])) {
+        jsonResponse(['draw' => (int) ($_GET['draw'] ?? 0), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => [], 'success' => false, 'error' => 'Silakan login terlebih dahulu!']);
+    }
+    if (!$conn3) {
+        jsonResponse(['draw' => (int) ($_GET['draw'] ?? 0), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => [], 'success' => false, 'error' => 'Koneksi ke database gagal.']);
+    }
+
+    $search = trim((string) ($_GET['search']['value'] ?? $_GET['search_value'] ?? ''));
+    $where = "WHERE h.fgstatus = 'V'";
+    $params = [];
+    if ($search !== '') {
+        $where .= ' AND h.ppnmbr ILIKE :search';
+        $params[':search'] = '%' . $search . '%';
+    }
+    if ($_GET['ajax'] === 'filtered_prs') {
+        $stmt = $conn3->prepare("SELECT h.pphdid AS pr_id, h.ppnmbr AS no_pr FROM prpphd h $where ORDER BY h.ppnmbr");
+        foreach ($params as $key => $value) $stmt->bindValue($key, $value);
+        $stmt->execute();
+        jsonResponse(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    }
+
+    $draw = (int) ($_GET['draw'] ?? 0);
+    $start = max(0, (int) ($_GET['start'] ?? 0));
+    $length = (int) ($_GET['length'] ?? 10);
+    $length = $length > 0 ? min($length, 100) : 10;
+    $total = (int) $conn3->query("SELECT COUNT(*) FROM prpphd WHERE fgstatus = 'V'")->fetchColumn();
+    $count = $conn3->prepare("SELECT COUNT(*) FROM prpphd h $where");
+    foreach ($params as $key => $value) $count->bindValue($key, $value);
+    $count->execute();
+    $filtered = (int) $count->fetchColumn();
+    $stmt = $conn3->prepare("SELECT h.pphdid AS pr_id, h.ppnmbr AS no_pr FROM prpphd h $where ORDER BY h.ppnmbr LIMIT :length OFFSET :start");
+    foreach ($params as $key => $value) $stmt->bindValue($key, $value);
+    $stmt->bindValue(':length', $length, PDO::PARAM_INT);
+    $stmt->bindValue(':start', $start, PDO::PARAM_INT);
+    $stmt->execute();
+    jsonResponse(['draw' => $draw, 'recordsTotal' => $total, 'recordsFiltered' => $filtered, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+include '../../includes/header.php';
+include '../../includes/sidebar.php';
+if (!isset($_SESSION['UserName'])) {
+    $_SESSION['error'] = 'Silakan login terlebih dahulu!';
+    header('Location: /gg_app/login.php');
+    exit;
+}
+date_default_timezone_set('Asia/Jakarta');
+if (!$conn || !$conn3) die('Koneksi ke database gagal.');
+
+$themeColor = $_SESSION['Theme'] ?? 'primary';
+$prNumbersInput = trim((string) ($_POST['prnumbers'] ?? ''));
+$prNumbers = parseSelectedPrNumbers($prNumbersInput);
+$selectedPrs = [];
+if ($prNumbers) {
+    $keys = [];
+    $params = [];
+    foreach ($prNumbers as $i => $number) { $keys[] = ':selected' . $i; $params[':selected' . $i] = $number; }
+    $selectedStmt = $conn3->prepare("SELECT pphdid AS pr_id, ppnmbr AS no_pr FROM prpphd WHERE fgstatus = 'V' AND UPPER(BTRIM(ppnmbr)) IN (" . implode(', ', $keys) . ")");
+    foreach ($params as $key => $value) $selectedStmt->bindValue($key, $value, PDO::PARAM_STR);
+    $selectedStmt->execute();
+    foreach ($selectedStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) $selectedPrs[strtoupper((string) $pr['no_pr'])] = ['pr_id' => (string) $pr['pr_id'], 'no_pr' => (string) $pr['no_pr']];
+    $prNumbers = array_keys($selectedPrs);
+    if ($prNumbers) $prNumbersInput = implode("\n", array_column($selectedPrs, 'no_pr'));
+}
+$historyMode = isset($_POST['history_mode']) && $_POST['history_mode'] === '1';
+$showAllHistory = isset($_POST['toggle_history']) ? !$historyMode : $historyMode;
+$groups = [];
+$errorMessage = '';
+$isSubmitted = $_SERVER['REQUEST_METHOD'] === 'POST';
+if ($isSubmitted) {
+    if (!$prNumbers) {
+        $errorMessage = $prNumbersInput === ''
+            ? 'Masukkan atau pilih minimal 1 nomor PR berstatus V.'
+            : 'Nomor PR tidak ditemukan atau statusnya bukan V.';
+    } else {
+        try {
+            $groups = fetchPrPriceGroups($conn3, $prNumbers, $showAllHistory);
+            $prNumbers = array_column($groups, 'no_pr');
+            $prNumbersInput = implode("\n", $prNumbers);
+            if (!$prNumbers) $errorMessage = 'Nomor PR tidak ditemukan atau statusnya bukan V.';
+        } catch (Throwable $e) {
+            $errorMessage = 'Gagal mengambil data: ' . $e->getMessage();
+        }
+    }
+}
+$totalRows = array_sum(array_map(static fn($group) => count($group['rows']), $groups));
+?>
+<div class="wrapper"><div class="content-wrapper">
+    <div class="content-header"><div class="container-fluid"><div class="row mb-2">
+        <div class="col-sm-6"><h1 class="m-0">Cek Harga By Purchase Requisition</h1></div>
+        <div class="col-sm-6"><ol class="breadcrumb float-sm-right"><li class="breadcrumb-item"><a href="/gg_app/index.php">Beranda</a></li><li class="breadcrumb-item active">CEK HARGA BY PURCHASE REQUISITION</li></ol></div>
+    </div></div></div>
+    <div class="content"><div class="container-fluid">
+        <div class="card"><div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white"><h3 class="card-title"><i class="fas fa-file-alt mr-1"></i> Filter Purchase Requisition</h3></div>
+            <div class="card-body">
+                <form method="post" id="priceByPrForm">
+                    <div class="form-group"><label for="prnumbers">Selected PR</label>
+                        <textarea id="prnumbers" name="prnumbers" class="form-control form-control-sm" rows="3" placeholder="Masukkan nomor PR, pisahkan dengan baris baru atau koma"><?= htmlspecialchars($prNumbersInput) ?></textarea>
+                        <div id="selectedPrList" class="mt-2"></div>
+                    </div>
+                    <input type="hidden" name="history_mode" value="<?= $showAllHistory ? '1' : '0' ?>">
+                    <button type="button" class="btn btn-info btn-sm" data-toggle="modal" data-target="#prModal"><i class="fas fa-plus"></i> Add PR</button>
+                    <button type="submit" class="btn btn-<?= htmlspecialchars($themeColor) ?> btn-sm"><i class="fas fa-search"></i> Search</button>
+                    <button type="button" class="btn btn-warning btn-sm" id="clearSelectedPrs"><i class="fas fa-trash"></i> Hapus Filter</button>
+                    <?php if ($isSubmitted && $prNumbers && $errorMessage === ''): ?>
+                        <button type="submit" name="toggle_history" value="1" class="btn btn-secondary btn-sm"><i class="fas fa-history"></i> <?= $showAllHistory ? 'Show Latest PO' : 'Show All History' ?></button>
+                        <?php if ($totalRows > 0): ?>
+                            <button type="submit" class="btn btn-success btn-sm" formaction="export_excel_cekhargabypr.php" formtarget="_blank"><i class="fas fa-file-excel"></i> Export Excel</button>
+                            <button type="submit" class="btn btn-danger btn-sm" formaction="export_pdf_cekhargabypr.php" formtarget="_blank"><i class="fas fa-file-pdf"></i> Export PDF</button>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </form>
+                <?php if ($errorMessage !== ''): ?><div class="alert alert-danger mt-3 mb-0"><?= htmlspecialchars($errorMessage) ?></div><?php endif; ?>
+            </div>
+        </div>
+
+        <?php if ($isSubmitted && $groups): ?>
+            <?php foreach ($groups as $group): ?>
+                <div class="card"><div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white"><h3 class="card-title"><strong>No PR</strong> &nbsp; <?= htmlspecialchars($group['no_pr']) ?></h3></div>
+                    <div class="card-body"><div class="table-responsive"><table class="table table-hover table-bordered table-sm priceTable">
+                        <thead class="thead-light"><tr class="text-center"><th>No</th><th>Kode Product</th><th>Product Name</th><th>Struct Name</th><th>No PO</th><th>PO Date</th><th>Vendor Name</th><th>Price PO (Rupiah)</th><th>Satuan</th><th>Deskripsi</th><th>Stock Saat Ini</th><th>Nama Gudang</th></tr></thead>
+                        <tbody>
+                        <?php if ($group['rows']): foreach ($group['rows'] as $index => $row): ?>
+                            <tr><td class="text-center"><?= $index + 1 ?></td><td class="text-center"><?= htmlspecialchars((string) $row['kode_product']) ?></td><td><?= htmlspecialchars((string) $row['product_name']) ?></td><td><?= htmlspecialchars((string) ($row['structname'] ?? '')) ?></td><td class="text-center"><?= htmlspecialchars((string) ($row['no_po'] ?? '')) ?></td><td class="text-center"><?= !empty($row['po_date']) ? date('d/m/Y', strtotime((string) $row['po_date'])) : '' ?></td><td><?= htmlspecialchars((string) ($row['vendor_name'] ?? '')) ?></td><td class="text-right"><?= is_numeric($row['price_po_rupiah'] ?? null) ? number_format((float) $row['price_po_rupiah'], 4, ',', '.') : '' ?></td><td class="text-center"><?= htmlspecialchars((string) ($row['satuan'] ?? '')) ?></td><td><?= htmlspecialchars((string) ($row['deskripsi'] ?? '')) ?></td><td class="text-right"><?php $stockValue = $row['current_stock'] ?? null; echo is_numeric($stockValue) && (float) $stockValue != 0.0 ? number_format((float) $stockValue, 2, ',', '.') : '-'; ?></td><td class="text-center"><?= trim((string) ($row['warehouse_name'] ?? '')) !== '' ? htmlspecialchars((string) $row['warehouse_name']) : '-' ?></td></tr>
+                        <?php endforeach; else: ?><tr><td colspan="12" class="text-center text-muted">Tidak ada data PO untuk produk di PR ini.</td></tr><?php endif; ?>
+                        </tbody>
+                    </table></div></div>
+                </div>
+            <?php endforeach; ?>
+        <?php elseif ($isSubmitted && $errorMessage === ''): ?><div class="card"><div class="card-body text-center text-muted">Data tidak ditemukan.</div></div><?php endif; ?>
+    </div></div>
+</div></div>
+
+<div class="modal fade" id="prModal" tabindex="-1" role="dialog" aria-labelledby="prModalLabel" aria-hidden="true"><div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+    <div class="modal-header bg-<?= htmlspecialchars($themeColor) ?> text-white"><h5 class="modal-title" id="prModalLabel">Add PR (Status V)</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+    <div class="modal-body"><div class="table-responsive"><table id="prLookupTable" class="table table-hover table-sm w-100"><thead class="thead-light"><tr><th class="text-center"><input type="checkbox" id="checkAllFilteredPrs"> All</th><th>No PR</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="modal-footer"><span class="mr-auto text-muted" id="selectedPrCount">0 PR dipilih</span><button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button><button type="button" class="btn btn-<?= htmlspecialchars($themeColor) ?> btn-sm" id="savePrs"><i class="fas fa-save"></i> Save</button></div>
+</div></div></div>
+
+<?php include '../../includes/footer.php'; ?>
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+<style>
+    .priceTable { min-width: 1500px; }
+</style>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
+<script>
+$(function () {
+    var selected = <?= json_encode($selectedPrs, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    function syncFromInput() {
+        var current = selected;
+        selected = {};
+        $('#prnumbers').val().split(/[\s,]+/).forEach(function (number) { number = $.trim(number).toUpperCase(); if (number) selected[number] = current[number] || { no_pr: number }; });
+        render();
+    }
+    function render() {
+        var numbers = Object.keys(selected).sort();
+        $('#selectedPrCount').text(numbers.length + ' PR dipilih');
+        if (!numbers.length) { $('#selectedPrList').html('<small class="text-muted">Belum ada PR dipilih.</small>'); return; }
+        var html = '';
+        numbers.forEach(function (number) {
+            var escaped = $('<div>').text(number).html();
+            html += '<span class="badge badge-light border mr-1 mb-1 p-2">' + escaped + ' <button type="button" class="btn btn-xs btn-link text-danger p-0 ml-1 remove-pr" data-number="' + escaped + '"><i class="fas fa-times"></i></button></span>';
+        });
+        $('#selectedPrList').html(html);
+    }
+    function writeInput() { $('#prnumbers').val(Object.keys(selected).sort().join('\n')); render(); refreshChecks(); }
+    function refreshChecks() { if ($.fn.DataTable.isDataTable('#prLookupTable')) prTable.rows().invalidate().draw(false); }
+    $('#prnumbers').on('input', syncFromInput); syncFromInput();
+    $('.priceTable').each(function () {
+        var $table = $(this);
+        if ($table.find('tbody td[colspan]').length) return;
+        $table.DataTable({ responsive: false, autoWidth: false, pageLength: 25, order: [], language: { lengthMenu: 'Tampilkan _MENU_ data per halaman', zeroRecords: 'Tidak ada data ditemukan', info: 'Menampilkan _START_ - _END_ dari _TOTAL_ data', infoEmpty: 'Tidak ada data tersedia', search: 'Cari:', paginate: { first: 'Pertama', last: 'Terakhir', next: 'Selanjutnya', previous: 'Sebelumnya' } } });
+    });
+    var prTable = $('#prLookupTable').DataTable({ serverSide: true, processing: true, ajax: { url: 'cekhargabypr.php', type: 'GET', data: function (d) { d.ajax = 'prs'; } }, columns: [
+        { data: null, orderable: false, searchable: false, className: 'text-center', render: function (data, type, row) { var number = String(row.no_pr); return '<input type="checkbox" class="pr-check" value="' + $('<div>').text(number).html() + '" ' + (selected[number] ? 'checked' : '') + '>'; } },
+        { data: 'no_pr' }
+    ], pageLength: 10, order: [[1, 'asc']], language: { processing: 'Memproses...', lengthMenu: 'Tampilkan _MENU_ PR per halaman', zeroRecords: 'PR tidak ditemukan', info: 'Menampilkan _START_ - _END_ dari _TOTAL_ PR', infoEmpty: 'Tidak ada PR tersedia', search: 'Cari No PR:', paginate: { first: 'Pertama', last: 'Terakhir', next: 'Selanjutnya', previous: 'Sebelumnya' } } });
+    $('#prLookupTable').on('change', '.pr-check', function () { var row = prTable.row($(this).closest('tr')).data(); var number = String(row.no_pr); if (this.checked) selected[number] = { pr_id: String(row.pr_id), no_pr: number }; else delete selected[number]; render(); $('#checkAllFilteredPrs').prop('checked', false); });
+    $('#checkAllFilteredPrs').on('change', function () { var check = this.checked, $box = $(this); $box.prop('disabled', true); $.getJSON('cekhargabypr.php', { ajax: 'filtered_prs', search_value: prTable.search() }).done(function (res) { if (!res.success) { alert(res.error || 'Gagal mengambil data PR.'); $box.prop('checked', false); return; } res.data.forEach(function (pr) { var number = String(pr.no_pr); if (check) selected[number] = { pr_id: String(pr.pr_id), no_pr: number }; else delete selected[number]; }); writeInput(); }).fail(function () { alert('Gagal mengambil data PR.'); $box.prop('checked', false); }).always(function () { $box.prop('disabled', false); }); });
+    $('#prModal').on('shown.bs.modal', function () { prTable.columns.adjust(); });
+    $('#savePrs').on('click', function () { writeInput(); $('#prModal').modal('hide'); });
+    $('#selectedPrList').on('click', '.remove-pr', function () { delete selected[String($(this).data('number'))]; writeInput(); });
+    $('#clearSelectedPrs').on('click', function () { selected = {}; writeInput(); $('#checkAllFilteredPrs').prop('checked', false); });
+});
+</script>

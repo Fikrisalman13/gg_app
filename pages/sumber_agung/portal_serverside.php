@@ -59,18 +59,18 @@ switch ($action) {
         $params = [];
 
         if (!empty($dateFrom) && !empty($dateTo)) {
-            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) BETWEEN ? AND ?";
+            $where .= " AND tgl_do BETWEEN ? AND ?";
             $params[] = $dateFrom;
             $params[] = $dateTo;
         } elseif (!empty($dateFrom)) {
-            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) >= ?";
+            $where .= " AND tgl_do >= ?";
             $params[] = $dateFrom;
         } elseif (!empty($dateTo)) {
-            $where .= " AND COALESCE(tgl_kirim, tgl_titipan) <= ?";
+            $where .= " AND tgl_do <= ?";
             $params[] = $dateTo;
         }
 
-        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY COALESCE(tgl_kirim, tgl_titipan) DESC, id DESC";
+        $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY tgl_do DESC, id DESC";
         $stmt = sqlsrv_query($conn, $sql, $params);
         $data = [];
         $no = 1;

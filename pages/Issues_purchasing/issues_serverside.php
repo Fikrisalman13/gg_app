@@ -1,6 +1,31 @@
 <?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi.php';
+
+/**
+ * Menormalisasi filter tanggal-waktu HTML menjadi format ISO menit yang ketat.
+ *
+ * @param mixed $value Nilai mentah dari permintaan DataTables.
+ * @return string|null Nilai SQL Server `Y-m-d H:i:s`, string kosong, atau null bila tidak valid.
+ */
+function purchasingIssueDateTimeFilter($value): ?string
+{
+    if ($value === '') {
+        return '';
+    }
+
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $dateTime = DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i', $value);
+    if ($dateTime === false || $dateTime->format('Y-m-d\\TH:i') !== $value) {
+        return null;
+    }
+
+    return $dateTime->format('Y-m-d H:i:s');
+}
+
 /**
  * @param resource|null $conn Koneksi SQL Server aktif dari bootstrap aplikasi.
  * @return void Mengirim respons JSON sesuai kontrak DataTables.
@@ -94,23 +119,17 @@ function sendPurchasingIssueListResponse($conn): void
         $parameters[] = $categoryId;
     }
 
-    $dateStart = trim((string) ($_REQUEST['filterTanggalStart'] ?? ''));
-    $dateEnd = trim((string) ($_REQUEST['filterTanggalEnd'] ?? ''));
-    foreach (['filterTanggalStart' => $dateStart, 'filterTanggalEnd' => $dateEnd] as $field => $dateValue) {
-        if ($dateValue === '') {
-            continue;
-        }
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateValue);
-        if ($date === false || $date->format('Y-m-d') !== $dateValue) {
-            http_response_code(400);
-            $response['error'] = $field === 'filterTanggalStart' ? 'Tanggal mulai tidak valid.' : 'Tanggal akhir tidak valid.';
-            echo json_encode($response, JSON_UNESCAPED_UNICODE);
-            return;
-        }
+    $dateStart = purchasingIssueDateTimeFilter($_REQUEST['filterTanggalStart'] ?? '');
+    $dateEnd = purchasingIssueDateTimeFilter($_REQUEST['filterTanggalEnd'] ?? '');
+    if ($dateStart === null || $dateEnd === null) {
+        http_response_code(400);
+        $response['error'] = $dateStart === null ? 'Tanggal dan jam mulai tidak valid.' : 'Tanggal dan jam akhir tidak valid.';
+        echo json_encode($response, JSON_UNESCAPED_UNICODE);
+        return;
     }
     if ($dateStart !== '' && $dateEnd !== '' && $dateStart > $dateEnd) {
         http_response_code(400);
-        $response['error'] = 'Rentang tanggal tidak valid.';
+        $response['error'] = 'Rentang tanggal dan jam tidak valid.';
         echo json_encode($response, JSON_UNESCAPED_UNICODE);
         return;
     }
@@ -119,7 +138,7 @@ function sendPurchasingIssueListResponse($conn): void
         $parameters[] = $dateStart;
     }
     if ($dateEnd !== '') {
-        $filters[] = 'i.created_at < DATEADD(day, 1, ?)';
+        $filters[] = 'i.created_at < DATEADD(minute, 1, ?)';
         $parameters[] = $dateEnd;
     }
 
@@ -135,7 +154,9 @@ function sendPurchasingIssueListResponse($conn): void
         ? 'i.status = ?'
         : '(i.status <> ? OR i.status IS NULL)';
     $baseFrom = 'FROM dbo.purchasing_issues i
-                 LEFT JOIN dbo.purchasing_issue_categories c ON c.category_id = i.category_id';
+                 LEFT JOIN dbo.purchasing_issue_categories c ON c.category_id = i.category_id
+                 LEFT JOIN dbo.purchasing_issue_sub_categories s
+                    ON s.sub_id = i.sub_id AND s.category_id = i.category_id';
     $scopeCountStatement = sqlsrv_query(
         $conn,
         'SELECT COUNT_BIG(*) AS total FROM dbo.purchasing_issues i WHERE ' . $scopeWhere,
@@ -163,11 +184,11 @@ function sendPurchasingIssueListResponse($conn): void
     if ($search !== '') {
         $searchPattern = str_replace(['\\', '%', '_', '['], ['\\\\', '\\%', '\\_', '\\['], $search);
         $searchPattern = '%' . $searchPattern . '%';
-        $filteredWhere .= ' AND (i.issue_name LIKE ? ESCAPE \'\\\' OR i.issue_type LIKE ? ESCAPE \'\\\' OR i.status LIKE ? ESCAPE \'\\\' OR i.priority LIKE ? ESCAPE \'\\\' OR i.created_by LIKE ? ESCAPE \'\\\')';
-        array_push($filteredParameters, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern);
+        $filteredWhere .= ' AND (i.issue_name LIKE ? ESCAPE \'\\\' OR i.issue_type LIKE ? ESCAPE \'\\\' OR c.category_name LIKE ? ESCAPE \'\\\' OR s.sub_name LIKE ? ESCAPE \'\\\' OR i.status LIKE ? ESCAPE \'\\\' OR i.priority LIKE ? ESCAPE \'\\\' OR i.created_by LIKE ? ESCAPE \'\\\')';
+        array_push($filteredParameters, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern);
     }
 
-    $filteredCountSql = 'SELECT COUNT_BIG(*) AS total FROM dbo.purchasing_issues i ' . $filteredWhere;
+    $filteredCountSql = 'SELECT COUNT_BIG(*) AS total ' . $baseFrom . ' ' . $filteredWhere;
     $filteredCountStatement = sqlsrv_query($conn, $filteredCountSql, $filteredParameters);
     if ($filteredCountStatement === false) {
         http_response_code(500);
@@ -190,18 +211,20 @@ function sendPurchasingIssueListResponse($conn): void
         2 => 'i.issue_name',
         3 => 'i.issue_type',
         4 => 'c.category_name',
-        5 => 'i.status',
-        6 => 'i.priority',
-        7 => 'i.created_at'
+        5 => 's.sub_name',
+        6 => 'i.status',
+        7 => 'i.priority',
+        8 => 'i.created_at'
     ];
     $historyOrderColumns = [
         1 => 'i.created_by',
         2 => 'i.issue_name',
         3 => 'i.issue_type',
         4 => 'c.category_name',
-        5 => 'i.priority',
-        6 => 'i.created_at',
-        7 => 'i.tanggal_selesai'
+        5 => 's.sub_name',
+        6 => 'i.priority',
+        7 => 'i.created_at',
+        8 => 'i.tanggal_selesai'
     ];
     $orderIndex = filter_var($_REQUEST['order'][0]['column'] ?? 0, FILTER_VALIDATE_INT);
     $orderColumns = $scope === 'history' ? $historyOrderColumns : $activeOrderColumns;
@@ -209,7 +232,7 @@ function sendPurchasingIssueListResponse($conn): void
     $orderDirection = strtolower((string) ($_REQUEST['order'][0]['dir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
     $orderColumn = $orderColumn ?? 'i.created_at';
     $dataSql = 'SELECT i.issue_id, i.issue_name, i.issue_type, i.category_id,
-                       c.category_name, i.created_by, i.status, i.priority,
+                       c.category_name, s.sub_name, i.created_by, i.status, i.priority,
                                                i.due_date, i.description, i.created_at, i.tanggal_selesai
                 ' . $baseFrom . ' ' . $filteredWhere . '
                 ORDER BY ' . $orderColumn . ' ' . $orderDirection . ', i.issue_id DESC
@@ -261,6 +284,7 @@ function sendPurchasingIssueListResponse($conn): void
             'type' => $escapeText($row['issue_type']),
             'category_id' => (int) ($row['category_id'] ?? 0),
             'kategori' => $escapeText($row['category_name']),
+            'subkategori' => $escapeText($row['sub_name']),
             'nama_pemohon' => $escapeText($row['created_by']),
             'status' => $escapeText($row['status']),
             'priority' => $escapeText($row['priority']),

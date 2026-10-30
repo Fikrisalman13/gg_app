@@ -598,15 +598,13 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                     <input type="checkbox" id="checkAll">
                                 </th>
                                 <th style="width: 35px;" class="text-center">#</th>
-                                <th>Tgl Kirim</th>
+                                <th>Tgl Input</th>
                                 <th>No SO</th>
                                 <th>Tgl SC</th>
                                 <th>Prod Code</th>
                                 <th>Nama Produk</th>
                                 <th>Label Jual</th>
                                 <th>Cust Color</th>
-                                <th>No Titipan</th>
-                                <th>Tgl Titipan</th>
                                 <th>No DO</th>
                                 <th>Tgl DO</th>
                                 <th>No Packing</th>
@@ -810,7 +808,7 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                             <i class="fas fa-truck-loading"></i>
                         </div>
                         <div>
-                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Nomor DO Titipan</small>
+                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Nomor DO / Bale</small>
                             <span class="font-weight-bold text-dark" style="font-family: monospace; font-size: 1.15rem;" id="detNoTitipan">-</span>
                         </div>
                     </div>
@@ -820,7 +818,7 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                             <span class="badge badge-light border text-dark font-weight-bold px-2 py-1" style="font-size: 13px;" id="detTglKirim">-</span>
                         </div>
                         <div class="text-right">
-                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Total Qty Kirim</small>
+                            <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;">Total Qty DO</small>
                             <span class="font-weight-bold text-primary" style="font-size: 1.2rem;" id="detQty">-</span>
                         </div>
                     </div>
@@ -864,10 +862,6 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                         <tr>
                                             <td class="sa-field-label">Tgl SC</td>
                                             <td class="sa-field-val text-dark" id="detTglSC">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="sa-field-label">No Titipan</td>
-                                            <td class="sa-field-val text-muted" id="detRowNoTitipan">-</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1209,17 +1203,21 @@ $(document).ready(function () {
                     className: 'text-center',
                     render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
                 },
-                { data: 'no_titipan', render: d => d && d !== '-' ? `<span class="badge badge-light border font-weight-bold">${d}</span>` : '-' },
-                { data: 'tgl_titipan' },
                 { data: 'no_do' },
                 { data: 'tgl_do' },
                 {
                     data: 'no_packing',
-                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
+                    render: function (d) {
+                        if (!d || d === '-') return '-';
+                        return d.split(',').map(s => `<span class="badge badge-light border text-dark font-weight-bold mr-1 mb-1">${s.trim()}</span>`).join('');
+                    }
                 },
                 {
                     data: 'no_bale',
-                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
+                    render: function (d) {
+                        if (!d || d === '-') return '-';
+                        return d.split(',').map(s => `<span class="badge badge-light border text-primary font-weight-bold mr-1 mb-1">${s.trim()}</span>`).join('');
+                    }
                 },
                 {
                     data: 'do_qty',
@@ -1279,7 +1277,7 @@ $(document).ready(function () {
                                 <button type="button" class="btn btn-action-item btn-action-detail btn-detail" data-id="${row.id}" title="Detail & Upload Dokumen">
                                     <i class="fas fa-search-plus"></i>
                                 </button>
-                                <button type="button" class="btn btn-action-item btn-action-delete btn-delete" data-id="${row.id}" data-no="${row.no_titipan}" title="Hapus Data">
+                                <button type="button" class="btn btn-action-item btn-action-delete btn-delete" data-id="${row.id}" data-no="${row.no_do || row.no_bale || '-'}" title="Hapus Data">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </div>
@@ -1605,6 +1603,12 @@ $(document).ready(function () {
                     const qtyYardDisplay = r.totqtyyard !== null ? Number(r.totqtyyard).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-';
                     const qtyMDisplay = r.totqtym !== null ? Number(r.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-';
                     const batchDisplay = r.countbatch !== null ? r.countbatch : '-';
+                    const packingDisplay = r.no_packing
+                        ? r.no_packing.split(',').map(function (s) { return '<span class="badge badge-light border text-dark font-weight-bold mr-1 mb-1">' + s.trim() + '</span>'; }).join('')
+                        : '-';
+                    const baleDisplay = r.no_bale
+                        ? r.no_bale.split(',').map(function (s) { return '<span class="po-badge-code mr-1 mb-1">' + s.trim() + '</span>'; }).join('')
+                        : '-';
 
                     rowsHtml += '<tr class="' + trClass + '" data-key="' + key + '" data-index="' + i + '">' +
                         '<td class="po-select-col">' +
@@ -1615,8 +1619,8 @@ $(document).ready(function () {
                         '</td>' +
                         '<td class="text-center font-weight-bold text-dark">' + (r.no_do || '-') + '</td>' +
                         '<td class="text-center text-muted">' + (r.tgl_do || '-') + '</td>' +
-                        '<td class="text-center"><span class="badge badge-light border text-dark font-weight-bold">' + (r.no_packing || '-') + '</span></td>' +
-                        '<td class="text-center font-weight-bold"><span class="po-badge-code">' + (r.no_bale || '-') + '</span></td>' +
+                        '<td class="text-center" style="white-space: normal; min-width: 130px;">' + packingDisplay + '</td>' +
+                        '<td class="text-center font-weight-bold" style="white-space: normal; min-width: 130px;">' + baleDisplay + '</td>' +
                         '<td class="text-right font-weight-bold text-primary">' + qtyYardDisplay + '</td>' +
                         '<td class="text-right text-muted">' + qtyMDisplay + '</td>' +
                         '<td class="text-center"><span class="badge badge-light border text-info font-weight-bold">' + batchDisplay + '</span></td>' +
@@ -1817,7 +1821,6 @@ $(document).ready(function () {
             $('#detTglKirim').text(d.tgl_kirim || '-');
             const noBaleDisplay = d.no_bale && d.no_bale !== '-' ? `${d.no_do} (Bale: ${d.no_bale})` : (d.no_titipan && d.no_titipan !== '-' ? d.no_titipan : d.no_do);
             $('#detNoTitipan').text(noBaleDisplay);
-            $('#detRowNoTitipan').text(d.no_titipan || '-');
             $('#detNoDO').text(d.no_do || '-');
             $('#detTglDO').text(d.tgl_do || '-');
             $('#detNoPacking').text(d.no_packing || '-');
@@ -1837,10 +1840,10 @@ $(document).ready(function () {
             if (d.totqtym !== null) {
                 rincianQtyText += (rincianQtyText ? ' / ' : '') + `${Number(d.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Meter`;
             }
-            $('#detRincianQty').text(rincianQtyText || (d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-'));
+            $('#detRincianQty').text(rincianQtyText || (d.do_qty !== null ? `${Number(d.do_qty).toLocaleString('id-ID')} ${d.uom}` : '-'));
             $('#detBatch').text(d.countbatch !== null && d.countbatch !== undefined ? `${d.countbatch} Roll / Batch` : '-');
             $('#detDodtDesc').text(d.dodtdesc || '-');
-            $('#detQty').text(d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-');
+            $('#detQty').text(d.do_qty !== null ? `${Number(d.do_qty).toLocaleString('id-ID')} ${d.uom}` : '-');
             $('#detKet2').text(d.ket_titipan_2 || d.dodesc || '-');
 
             // Packing List status

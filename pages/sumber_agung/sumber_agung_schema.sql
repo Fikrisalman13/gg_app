@@ -38,8 +38,8 @@ BEGIN
         [ket_titipan_2]     NVARCHAR(500) NULL,
         [dodesc]            NVARCHAR(500) NULL,
         -- Rincian Bale / Packing List (Query DO ERP)
-        [no_packing]        NVARCHAR(100) NULL,
-        [no_bale]           NVARCHAR(100) NULL,
+        [no_packing]        NVARCHAR(500) NULL,
+        [no_bale]           NVARCHAR(500) NULL,
         [totqtym]           DECIMAL(18,4) NULL,
         [totqtyyard]        DECIMAL(18,4) NULL,
         [countbatch]        INT NULL,

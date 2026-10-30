@@ -1,0 +1,104 @@
+<?php
+
+function parseSelectedPrNumbers(string $input): array
+{
+    $parts = preg_split('/[\s,]+/', trim($input), -1, PREG_SPLIT_NO_EMPTY);
+    $numbers = [];
+    foreach ($parts ?: [] as $part) {
+        $number = strtoupper(trim($part));
+        if ($number !== '' && preg_match('/^[A-Z0-9._\/-]+$/', $number)) {
+            $numbers[$number] = $number;
+        }
+    }
+    return array_values($numbers);
+}
+
+/** Return PR groups with either every PO line or every line in the latest PO per product. */
+function fetchPrPriceGroups(PDO $conn3, array $prNumbers, bool $showAllHistory): array
+{
+    if (!$prNumbers) {
+        return [];
+    }
+
+    $placeholders = [];
+    $params = [];
+    foreach ($prNumbers as $i => $number) {
+        $key = ':pr' . $i;
+        $placeholders[] = $key;
+        $params[$key] = $number;
+    }
+
+    $prStmt = $conn3->prepare("SELECT pphdid AS pr_id, ppnmbr AS no_pr FROM prpphd WHERE fgstatus = 'V' AND UPPER(BTRIM(ppnmbr)) IN (" . implode(', ', $placeholders) . ") ORDER BY ppnmbr");
+    foreach ($params as $key => $value) {
+        $prStmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $prStmt->execute();
+    $groups = [];
+    foreach ($prStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+        $groups[(int) $pr['pr_id']] = ['pr_id' => (int) $pr['pr_id'], 'no_pr' => (string) $pr['no_pr'], 'rows' => []];
+    }
+    if (!$groups) {
+        return [];
+    }
+
+    $latestFilter = $showAllHistory ? '' : 'WHERE po_rank = 1';
+    $sql = "
+        WITH selected_pr AS (
+            SELECT h.pphdid AS pr_id, h.ppnmbr AS no_pr
+            FROM prpphd h
+            WHERE h.fgstatus = 'V' AND UPPER(BTRIM(h.ppnmbr)) IN (" . implode(', ', $placeholders) . ")
+        ), pr_products AS (
+            SELECT DISTINCT sp.pr_id, sp.no_pr, d.ppprodid, UPPER(BTRIM(d.ppprodcode)) AS prodcode
+            FROM selected_pr sp
+            JOIN prppdt d ON d.pphdid = sp.pr_id
+            WHERE COALESCE(BTRIM(d.ppprodcode), '') <> ''
+        ), current_stock AS (
+            SELECT prodid, wrhsid, SUM(prodqty) AS current_stock
+            FROM whcurrentstock
+            GROUP BY prodid, wrhsid
+        ), po_headers AS (
+            SELECT DISTINCT pp.pr_id, pp.no_pr, pp.prodcode, pp.ppprodid, p.prodid, p.prodname, p.prodstructid,
+                h.pohdid, h.ponmbr, h.powrhsid, h.createdate, h.podate, h.povendorname, h.pocurrrate, h.podesc
+            FROM pr_products pp
+            JOIN smproduct p ON UPPER(BTRIM(p.prodcode)) = pp.prodcode
+            JOIN prpodt d ON d.poprodid = p.prodid
+            JOIN prpohd h ON h.pohdid = d.pohdid
+        ), ranked_po AS (
+            SELECT ph.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ph.pr_id, ph.prodcode
+                    ORDER BY ph.podate DESC NULLS LAST, ph.pohdid DESC
+                ) AS po_rank
+            FROM po_headers ph
+        ), chosen_po AS (
+            SELECT * FROM ranked_po $latestFilter
+        )
+        SELECT po.pr_id, po.no_pr, po.prodcode AS kode_product,
+            po.prodname AS product_name, s.structname, po.ponmbr AS no_po,
+            po.createdate AS po_date, po.povendorname AS vendor_name,
+            CAST(d.poprice * po.pocurrrate AS numeric(18,4)) AS price_po_rupiah,
+            u.uomcode AS satuan, po.podesc AS deskripsi,
+            COALESCE(cs.current_stock, 0) AS current_stock, warehouse.wrhsname AS warehouse_name
+        FROM chosen_po po
+        JOIN prpodt d ON d.pohdid = po.pohdid AND d.poprodid = po.prodid
+        JOIN smuom u ON d.pouomid = u.uomid
+        LEFT JOIN smprodstruct s ON po.prodstructid = s.prodstructid
+        LEFT JOIN current_stock cs ON cs.prodid = po.ppprodid AND cs.wrhsid = po.powrhsid
+        LEFT JOIN whwrhs warehouse ON warehouse.wrhsid = po.powrhsid
+        ORDER BY po.no_pr, po.prodcode, po.podate DESC NULLS LAST, po.pohdid DESC
+    ";
+    $stmt = $conn3->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $stmt->execute();
+
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+        $id = (int) $row['pr_id'];
+        if (isset($groups[$id])) {
+            $groups[$id]['rows'][] = $row;
+        }
+    }
+    return array_values($groups);
+}

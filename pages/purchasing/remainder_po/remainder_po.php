@@ -46,6 +46,7 @@ if ($startDate > $endDate) {
 $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : '';
 $picFilter = isset($_GET['pic']) ? trim($_GET['pic']) : '';
 $paymentStatusFilter = isset($_GET['payment_status']) ? trim($_GET['payment_status']) : '';
+$dikirimKeFilter = isset($_GET['dikirim_ke']) ? trim($_GET['dikirim_ke']) : '';
 $includeRange = isset($_GET['range']) && $_GET['range'] === '1' ? 1 : 0;
 
 $errorMessage = null;
@@ -568,6 +569,59 @@ if (!isset($conn3) || !$conn3) {
                 return empty($g['is_paid']);
             });
         }
+
+        // 6. Ambil data tujuan pengiriman dari SQL Server dbo.tracking_po_detail berdasarkan No PO (ponmbr)
+        $allPoNumbers = [];
+        foreach ($poGroups as $g) {
+            $pNum = trim($g['ponmbr'] ?? '');
+            if ($pNum !== '' && $pNum !== '-') {
+                $allPoNumbers[$pNum] = true;
+            }
+        }
+
+        $trackingLookup = [];
+        if (!empty($allPoNumbers) && isset($conn) && $conn) {
+            $poListKeys = array_keys($allPoNumbers);
+            foreach (array_chunk($poListKeys, 1000) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $sqlTrack = "
+                    SELECT d.ponmbr, d.dikirim_ke, d.alamat_kirim, d.status
+                    FROM dbo.tracking_po_detail d
+                    INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id
+                    WHERE h.is_deleted = 0 AND d.ponmbr IN ($placeholders)
+                    ORDER BY d.id ASC
+                ";
+                $stmtTrack = sqlsrv_query($conn, $sqlTrack, $chunk);
+                if ($stmtTrack) {
+                    while ($rTrack = sqlsrv_fetch_array($stmtTrack, SQLSRV_FETCH_ASSOC)) {
+                        $pNum = trim($rTrack['ponmbr']);
+                        $trackingLookup[$pNum] = [
+                            'dikirim_ke'   => !empty($rTrack['dikirim_ke']) ? trim($rTrack['dikirim_ke']) : null,
+                            'alamat_kirim' => !empty($rTrack['alamat_kirim']) ? trim($rTrack['alamat_kirim']) : null,
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Tempelkan data dikirim_ke dan alamat_kirim ke masing-masing group PO
+        foreach ($poGroups as $pohdid => &$group) {
+            $pNum = trim($group['ponmbr'] ?? '');
+            $track = $trackingLookup[$pNum] ?? null;
+            $group['dikirim_ke'] = $track['dikirim_ke'] ?? null;
+            $group['alamat_kirim'] = $track['alamat_kirim'] ?? null;
+        }
+        unset($group);
+
+        // 7. Filter berdasarkan Tujuan Pengiriman (Dikirim Ke) jika dipilih oleh user
+        if ($dikirimKeFilter !== '') {
+            $poGroups = array_filter($poGroups, function ($g) use ($dikirimKeFilter) {
+                if ($dikirimKeFilter === 'belum_ditracking') {
+                    return empty($g['dikirim_ke']);
+                }
+                return ($g['dikirim_ke'] ?? '') === $dikirimKeFilter;
+            });
+        }
     } catch (PDOException $e) {
         $errorMessage = "Gagal mengambil data dari database ERP: " . htmlspecialchars($e->getMessage());
     }
@@ -922,6 +976,18 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                         </select>
                                     </div>
                                     <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                        <label class="small mb-1 font-weight-bold text-dark" for="filterDikirimKe">
+                                            <i class="fas fa-truck text-info mr-1"></i>Dikirim Ke
+                                        </label>
+                                        <select class="form-control form-control-sm" id="filterDikirimKe" name="dikirim_ke">
+                                            <option value="">-- Semua Dikirim Ke --</option>
+                                            <option value="PT.SUM" <?php echo $dikirimKeFilter === 'PT.SUM' ? 'selected' : ''; ?>>PT.SUM</option>
+                                            <option value="Sanso Berjaya Texindo/Toko Sumber SERAGAM" <?php echo $dikirimKeFilter === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM' ? 'selected' : ''; ?>>Sanso Berjaya Texindo/Toko Sumber SERAGAM</option>
+                                            <option value="Diambil ke Supplier" <?php echo $dikirimKeFilter === 'Diambil ke Supplier' ? 'selected' : ''; ?>>Diambil ke Supplier</option>
+                                            <option value="belum_ditracking" <?php echo $dikirimKeFilter === 'belum_ditracking' ? 'selected' : ''; ?>>Belum Ditracking</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
                                         <label class="small mb-1 font-weight-bold text-dark" for="filterPic">PIC Pembuat PO</label>
                                         <select class="form-control form-control-sm" id="filterPic" name="pic">
                                             <option value="">-- Semua PIC --</option>
@@ -932,26 +998,24 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                    <div class="col-lg-2 col-md-4 col-sm-12 mb-2">
-                                        <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap: 6px;">
-                                            <div class="custom-control custom-switch mt-1">
-                                                <input type="checkbox" class="custom-control-input" id="switchRange" name="range" value="1"
-                                                    <?php echo $includeRange === 1 ? 'checked' : ''; ?> <?php echo $statusFilter === 'Overdue' ? 'disabled' : ''; ?>>
-                                                <label class="custom-control-label small font-weight-bold" for="switchRange" title="Sertakan PO yang jadwal pengirimannya sedang berjalan pada rentang ini">
-                                                    Rentang Berjalan
-                                                </label>
-                                            </div>
-                                            <div class="btn-group btn-group-sm w-100">
-                                                <button type="submit" class="btn btn-primary font-weight-bold" title="Terapkan Filter">
-                                                    <i class="fas fa-filter mr-1"></i> Filter
-                                                </button>
-                                                <button type="button" id="btnToday" class="btn btn-outline-primary" title="Set Tanggal Hari Ini">
-                                                    Hari Ini
-                                                </button>
-                                                <button type="button" id="btnReset" class="btn btn-secondary" title="Reset Filter">
-                                                    <i class="fas fa-sync"></i>
-                                                </button>
-                                            </div>
+                                    <div class="col-12 mt-2 pt-2 border-top d-flex align-items-center justify-content-between flex-wrap" style="gap: 8px;">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="switchRange" name="range" value="1"
+                                                <?php echo $includeRange === 1 ? 'checked' : ''; ?> <?php echo $statusFilter === 'Overdue' ? 'disabled' : ''; ?>>
+                                            <label class="custom-control-label small font-weight-bold" for="switchRange" title="Sertakan PO yang jadwal pengirimannya sedang berjalan pada rentang ini">
+                                                Rentang Berjalan
+                                            </label>
+                                        </div>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="submit" class="btn btn-primary font-weight-bold px-3" title="Terapkan Filter">
+                                                <i class="fas fa-filter mr-1"></i> Filter
+                                            </button>
+                                            <button type="button" id="btnToday" class="btn btn-outline-primary font-weight-bold" title="Set Tanggal Hari Ini">
+                                                Hari Ini
+                                            </button>
+                                            <button type="button" id="btnReset" class="btn btn-secondary font-weight-bold" title="Reset Filter">
+                                                <i class="fas fa-sync"></i>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -971,7 +1035,7 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                     <th class="text-center">Rentang Delivery</th>
                                     <th class="text-center">Status Delivery</th>
                                     <th class="text-center">Status Bayar</th>
-                                    <th style="width: 70px;" class="text-center">Aksi</th>
+                                    <th style="width: 85px;" class="text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -990,6 +1054,9 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                     $aksi .= '<button type="button" class="btn btn-info btn-sm action-btn btn-view-po" data-pohdid="' . $pohdid . '" title="Lihat Detail Product">'
                                            . '<i class="fas fa-eye"></i>'
                                            . '</button>';
+                                    $aksi .= '<button type="button" class="btn btn-warning btn-sm action-btn btn-add-issue ml-1" data-pohdid="' . $pohdid . '" title="Tambahkan ke Issue Purchasing (Follow Up Pengiriman)">'
+                                           . '<i class="fas fa-clipboard-check"></i>'
+                                           . '</button>';
                                     $aksi .= '</div>';
                                 ?>
                                     <tr>
@@ -1003,6 +1070,13 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <?= htmlspecialchars($group['povendorname']) ?>
                                             <?php if (!empty($group['povendorcode'])): ?>
                                                 <span class="badge badge-light border text-muted ml-1"><?= htmlspecialchars($group['povendorcode']) ?></span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($group['dikirim_ke'])): ?>
+                                                <div class="mt-1">
+                                                    <span class="badge badge-light border text-primary" style="font-size: 11px; font-weight: 600;" title="<?= htmlspecialchars($group['alamat_kirim'] ?? '') ?>">
+                                                        <i class="fas fa-truck text-info mr-1"></i><?= htmlspecialchars($group['dikirim_ke']) ?>
+                                                    </span>
+                                                </div>
                                             <?php endif; ?>
                                         </td>
                                         <td class="text-center align-middle">
@@ -1130,6 +1204,17 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                         <div id="modalPoPaymentBadge" class="d-inline-block"></div>
                                         <div id="modalPoPaymentList" class="d-inline-flex align-items-center flex-wrap" style="gap: 8px;"></div>
                                     </div>
+
+                                    <!-- Baris Tujuan Pengiriman (Dikirim Ke) & Alamat -->
+                                    <div id="modalPoShippingBox" class="mt-2 pt-2 border-top d-flex align-items-center flex-wrap" style="border-top: 1px dashed #e2e8f0 !important; gap: 8px; display: none;">
+                                        <span class="badge badge-light border text-muted px-2 py-1 font-weight-bold" style="font-size: 0.78rem;">
+                                            <i class="fas fa-truck text-primary mr-1"></i>Tujuan Pengiriman (Dikirim Ke) :
+                                        </span>
+                                        <span id="modalPoDikirimKe" class="badge badge-primary px-2 py-1 font-weight-bold"></span>
+                                        <span class="small text-muted ml-2" id="modalPoAlamatKirimWrap">
+                                            <i class="fas fa-map-marker-alt text-danger mr-1"></i><span id="modalPoAlamatKirim"></span>
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <!-- Tabel Detail Item / Product -->
@@ -1169,6 +1254,117 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                 <button type="button" class="btn btn-secondary btn-sm px-3 font-weight-bold" data-dismiss="modal">
                                     <i class="fas fa-times mr-1"></i> Tutup
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Tambah Issue Follow Up PO ke Issues Purchasing -->
+                <div class="modal fade" id="modalAddIssueFollowUp" tabindex="-1" role="dialog" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+                        <div class="modal-content shadow-lg border-0">
+                            <div class="modal-header bg-warning text-dark px-3 py-2 d-flex align-items-center">
+                                <h5 class="modal-title font-weight-bold d-flex align-items-center mb-0" style="font-size: 1.1rem;">
+                                    <i class="fas fa-clipboard-check mr-2 text-dark"></i> Tambahkan ke Issue Purchasing (Follow Up Pengiriman)
+                                </h5>
+                                <button type="button" class="close text-dark" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body p-3">
+                                <input type="hidden" id="issueFollowUpPoNumber" value="">
+                                
+                                <!-- Info Singkat Akun & PO -->
+                                <div class="card bg-light border-0 mb-3 shadow-none">
+                                    <div class="card-body p-2 d-flex flex-wrap justify-content-between align-items-center" style="gap: 8px;">
+                                        <div>
+                                            <span class="text-muted small d-block">Nomor Purchase Order (PO):</span>
+                                            <span class="badge badge-light border font-weight-bold text-dark px-2 py-1" style="font-size: 0.95rem;">
+                                                <i class="fas fa-file-invoice mr-1 text-primary"></i><span id="issueFollowUpBadgePo">-</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted small d-block">Vendor / Supplier:</span>
+                                            <span class="font-weight-bold text-dark" id="issueFollowUpBadgeVendor">-</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted small d-block">Akun Pembuat Issue:</span>
+                                            <span class="badge badge-info px-2 py-1 font-weight-bold">
+                                                <i class="fas fa-user mr-1"></i><?php echo htmlspecialchars($_SESSION['NamaLengkap'] ?? $_SESSION['UserName']); ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <!-- Issue Name -->
+                                    <div class="col-12 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1" for="issueFollowUpName">
+                                            Issue Name <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control font-weight-bold bg-light" id="issueFollowUpName" readonly>
+                                    </div>
+
+                                    <!-- Kategori & Subkategori -->
+                                    <div class="col-md-6 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Kategori</label>
+                                        <input type="text" class="form-control bg-light" value="Vendor" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Subkategori</label>
+                                        <input type="text" class="form-control bg-light" value="Follow UP Pengiriman" readonly>
+                                    </div>
+
+                                    <!-- Type, Status, Priority, Due Date -->
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Type</label>
+                                        <input type="text" class="form-control bg-light" value="Task" readonly>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Status</label>
+                                        <div class="form-control bg-light d-flex align-items-center">
+                                            <span class="badge badge-success px-2 py-1 font-weight-bold">
+                                                <i class="fas fa-check-circle mr-1"></i>Done
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Priority</label>
+                                        <div class="form-control bg-light d-flex align-items-center">
+                                            <span class="badge badge-warning text-dark px-2 py-1 font-weight-bold">
+                                                <i class="fas fa-flag mr-1"></i>Medium
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <label class="font-weight-bold text-dark mb-1">Due Date</label>
+                                        <input type="text" class="form-control bg-light" value="<?php echo date('d/m/Y'); ?>" readonly>
+                                    </div>
+
+                                    <!-- Deskripsi & Catatan Follow Up -->
+                                    <div class="col-12 mb-2">
+                                        <label class="font-weight-bold text-dark mb-1" for="issueFollowUpDescription">
+                                            <i class="fas fa-align-left mr-1 text-primary"></i>Deskripsi & Catatan Hasil Follow Up
+                                        </label>
+                                        <textarea class="form-control" id="issueFollowUpDescription" rows="8" style="font-family: inherit; font-size: 0.9rem;" placeholder="Tuliskan catatan hasil follow-up..."></textarea>
+                                        <small class="form-text text-muted">
+                                            <i class="fas fa-info-circle mr-1 text-info"></i>Ringkasan data PO telah terisi otomatis di atas. Anda dapat menambahkan catatan hasil komunikasi/follow-up dengan vendor di bawah garis pemisah.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light px-3 py-2 border-top d-flex justify-content-between align-items-center">
+                                <span class="text-muted small">
+                                    <i class="fas fa-history mr-1"></i>Data akan tercatat pada <b>Riwayat Issues Purchasing</b>.
+                                </span>
+                                <div>
+                                    <button type="button" class="btn btn-secondary btn-sm px-3 font-weight-bold" data-dismiss="modal">
+                                        <i class="fas fa-times mr-1"></i> Batal
+                                    </button>
+                                    <button type="button" class="btn btn-success btn-sm px-4 font-weight-bold" id="btnSubmitIssueFollowUp">
+                                        <i class="fas fa-save mr-1"></i> Simpan ke Issue
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1229,7 +1425,7 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
         });
 
         // ─── Filter Form Event Listeners ──────────────────────────────────────────
-        $('#filterStatus, #filterPic, #filterPaymentStatus, #switchRange').on('change', function () {
+        $('#filterStatus, #filterPic, #filterPaymentStatus, #filterDikirimKe, #switchRange').on('change', function () {
             $('#filterForm').submit();
         });
 
@@ -1336,6 +1532,15 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
             } else {
                 $('#modalPoPaymentBadge').html('<span class="badge badge-secondary px-2 py-1 text-white font-weight-normal"><i class="fas fa-clock mr-1"></i>Belum Dibayar</span>');
                 $('#modalPoPaymentList').html('<span class="badge badge-light border text-muted px-2 py-1 font-weight-normal"><i class="fas fa-info-circle mr-1"></i>Belum ada bukti pembayaran (CP)</span>');
+            }
+
+            // Render Tujuan Pengiriman (Dikirim Ke) pada Header Modal
+            if (po.dikirim_ke) {
+                $('#modalPoDikirimKe').text(po.dikirim_ke);
+                $('#modalPoAlamatKirim').text(po.alamat_kirim || '-');
+                $('#modalPoShippingBox').show();
+            } else {
+                $('#modalPoShippingBox').hide();
             }
 
             // Render Baris Item Barang
@@ -1455,6 +1660,152 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
 
             $('#modalItemsBody').html(itemsHtml);
             $('#modalDetailPo').modal('show');
+        });
+
+        // ─── Modal & Aksi Tambah Issue Follow Up PO ke Issues Purchasing ─────────
+        function openModalIssueFollowUp(po, issueTitle) {
+            $('#issueFollowUpPoNumber').val(po.ponmbr);
+            $('#issueFollowUpName').val(issueTitle);
+            $('#issueFollowUpBadgePo').text(po.ponmbr);
+            $('#issueFollowUpBadgeVendor').text((po.povendorname || '-') + (po.povendorcode ? ' (' + po.povendorcode + ')' : ''));
+
+            var d1Format = po.min_d1 ? po.min_d1 : '-';
+            var d2Format = po.max_d2 ? po.max_d2 : '-';
+            if (d1Format !== '-' && d1Format.indexOf('-') !== -1) {
+                var p1 = d1Format.split('-');
+                d1Format = p1[2] + '/' + p1[1] + '/' + p1[0];
+            }
+            if (d2Format !== '-' && d2Format.indexOf('-') !== -1) {
+                var p2 = d2Format.split('-');
+                d2Format = p2[2] + '/' + p2[1] + '/' + p2[0];
+            }
+            var deliveryRange = (d1Format === d2Format) ? d1Format : (d1Format + ' s/d ' + d2Format);
+
+            var descTemplate = 'Vendor: ' + (po.povendorname || '-') + '\n' +
+                               'Tanggal PO: ' + (po.podate || '-') + '\n' +
+                               'Jadwal Delivery: ' + deliveryRange + '\n' +
+                               'Status Delivery: ' + (po.status_label || '-') + '\n' +
+                               'Jumlah Item: ' + (po.items ? po.items.length : 0) + ' Item\n' +
+                               '--------------------------------------------------\n' +
+                               'Catatan Follow Up:\n';
+
+            $('#issueFollowUpDescription').val(descTemplate);
+            $('#modalAddIssueFollowUp').modal('show');
+        }
+
+        $(document).on('click', '.btn-add-issue', function () {
+            var btn = $(this);
+            var pohdid = btn.data('pohdid');
+            var po = poDataLookup[pohdid];
+
+            if (!po) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Gagal',
+                    text: 'Data PO tidak ditemukan.'
+                });
+                return;
+            }
+
+            var noPo = po.ponmbr;
+            var issueTitle = 'Follow Up Pengiriman PO ' + noPo;
+            var originalBtnHtml = btn.html();
+
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+            // Cek apakah nomor PO ini sudah pernah dibuatkan issue hari ini
+            $.ajax({
+                url: 'remainder_po_to_issue.php?action=check_today',
+                type: 'GET',
+                data: { ponmbr: noPo },
+                dataType: 'json',
+                success: function (res) {
+                    btn.prop('disabled', false).html(originalBtnHtml);
+                    if (res && res.exists) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Peringatan Follow Up',
+                            html: 'PO <b>' + noPo + '</b> sudah pernah dibuatkan Issue Follow Up sebanyak <b>' + res.count + 'x</b> pada hari ini.<br><br>Apakah Anda ingin tetap menambahkan issue follow-up baru?',
+                            showCancelButton: true,
+                            confirmButtonColor: '#ffc107',
+                            cancelButtonColor: '#6c757d',
+                            confirmButtonText: '<span class="text-dark font-weight-bold"><i class="fas fa-plus-circle mr-1"></i> Ya, Tetap Tambahkan</span>',
+                            cancelButtonText: '<i class="fas fa-times mr-1"></i> Batal'
+                        }).then(function (result) {
+                            if (result.isConfirmed) {
+                                openModalIssueFollowUp(po, issueTitle);
+                            }
+                        });
+                    } else {
+                        openModalIssueFollowUp(po, issueTitle);
+                    }
+                },
+                error: function () {
+                    btn.prop('disabled', false).html(originalBtnHtml);
+                    // Jika gagal cek koneksi, tetap izinkan user membuka modal
+                    openModalIssueFollowUp(po, issueTitle);
+                }
+            });
+        });
+
+        $('#btnSubmitIssueFollowUp').on('click', function () {
+            var btn = $(this);
+            var noPo = $('#issueFollowUpPoNumber').val();
+            var description = $('#issueFollowUpDescription').val();
+
+            if (!noPo) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Nomor PO tidak valid.'
+                });
+                return;
+            }
+
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menyimpan...');
+
+            $.ajax({
+                url: 'remainder_po_to_issue.php?action=add',
+                type: 'POST',
+                data: {
+                    ponmbr: noPo,
+                    description: description
+                },
+                dataType: 'json',
+                success: function (res) {
+                    btn.prop('disabled', false).html('<i class="fas fa-save mr-1"></i> Simpan ke Issue');
+                    if (res && res.success) {
+                        $('#modalAddIssueFollowUp').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil Ditambahkan!',
+                            html: res.message + '<br><small class="text-muted">ID Issue: #' + res.issue_id + ' | Nama: ' + res.issue_name + '</small>',
+                            confirmButtonText: '<i class="fas fa-check mr-1"></i> OK'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
+                            text: (res && res.message) ? res.message : 'Gagal menyimpan issue follow-up.'
+                        });
+                    }
+                },
+                error: function (xhr) {
+                    btn.prop('disabled', false).html('<i class="fas fa-save mr-1"></i> Simpan ke Issue');
+                    var errMsg = 'Terjadi kesalahan saat menyimpan data ke server.';
+                    try {
+                        var json = JSON.parse(xhr.responseText);
+                        if (json && json.message) {
+                            errMsg = json.message;
+                        }
+                    } catch (e) {}
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal Menyimpan',
+                        text: errMsg
+                    });
+                }
+            });
         });
     });
 </script>

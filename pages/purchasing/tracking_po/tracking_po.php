@@ -14,6 +14,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $rootPath = dirname(__DIR__, 3);
 require_once $rootPath . '/koneksi.php';
 require_once $rootPath . '/includes/permissions.php';
+require_once __DIR__ . '/tracking_po_issue.php';
 
 // Menu ID Tracking PO (sesuaikan jika sudah didaftarkan di dbo.SMMenu)
 $menuId = null;
@@ -324,6 +325,9 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 .po-search-modal .modal-dialog {
     max-width: 96% !important;
     width: 96% !important;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    max-height: calc(100vh - 1rem);
 }
 
 .po-search-modal .modal-content {
@@ -331,6 +335,40 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     border: none;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 1rem);
+}
+
+.po-search-modal .modal-body {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.po-search-modal .modal-footer {
+    flex-shrink: 0;
+}
+
+/* Menjaga aksi pengiriman tetap terlihat saat tinggi viewport terbatas. */
+#modalPilihDikirimKe .modal-dialog {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    max-height: calc(100vh - 1rem);
+}
+
+#modalPilihDikirimKe .modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 1rem);
+}
+
+#modalPilihDikirimKe .modal-body {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+#modalPilihDikirimKe .modal-footer {
+    flex-shrink: 0;
 }
 
 .po-search-header {
@@ -1300,6 +1338,25 @@ include($footerPath);
 <script>
 $(document).ready(function () {
     var BASE_URL = '/gg_app/pages/purchasing/tracking_po/tracking_po_serverside.php';
+    var trackingPoCsrfToken = <?= json_encode(trackingPoIssueCsrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var trackingPoActivityRequestId = trackingPoNewRequestId();
+
+    /**
+     * Menghasilkan UUID v4 untuk satu percobaan submit batch Tracking PO.
+     *
+     * @returns {string} UUID yang dipakai server untuk idempotensi.
+     */
+    function trackingPoNewRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (character) {
+            var value = Math.floor(Math.random() * 16);
+            var digit = character === 'x' ? value : ((value & 0x3) | 0x8);
+            return digit.toString(16);
+        });
+    }
     var activeCardFilter = '';
     var dataTable = null;
     var userPerms = { can_input: false, can_confirm: false, can_approve: false, is_admin: false };
@@ -2407,7 +2464,9 @@ $(document).ready(function () {
                 tanggal_kirim: tanggalKirim,
                 dikirim_ke: dikirimKe,
                 alamat_kirim: alamatKirim,
-                po_items: JSON.stringify(poItems)
+                po_items: JSON.stringify(poItems),
+                csrf_token: trackingPoCsrfToken,
+                activity_request_id: trackingPoActivityRequestId
             }, function (res) {
                 $btn.prop('disabled', false).html('<i class="fas fa-check-circle mr-1"></i> Lanjutkan & Serahkan PO');
                 if (res.status === 'ok') {
@@ -2415,6 +2474,7 @@ $(document).ready(function () {
                     $('#modalSerahkanPo').modal('hide');
                     Swal.fire('Berhasil!', res.message || 'PO berhasil diproses.', 'success');
                     selectedPoMap = {};
+                    trackingPoActivityRequestId = trackingPoNewRequestId();
                     loadSummary();
                     loadData();
                 } else {

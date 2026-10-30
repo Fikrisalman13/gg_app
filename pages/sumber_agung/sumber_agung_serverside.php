@@ -318,10 +318,10 @@ switch ($action) {
             if (!empty($keyword)) {
                 $term = '%' . $keyword . '%';
                 if ($searchField === 'no_packing') {
-                    $where .= " AND whbalehd.balenmbr ILIKE :kw ";
+                    $where .= " AND bale_agg.no_packing ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'no_bale') {
-                    $where .= " AND whbalehd.refnmbr ILIKE :kw ";
+                    $where .= " AND bale_agg.no_bale ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'no_do') {
                     $where .= " AND whdohd.donmbr ILIKE :kw ";
@@ -330,31 +330,31 @@ switch ($action) {
                     $where .= " AND (smcustomer.cusname ILIKE :kw OR smcustomer.cuscode ILIKE :kw) ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'prodcode') {
-                    $where .= " AND whdodt.prodcode ILIKE :kw ";
+                    $where .= " AND item_agg.product_code ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'prodname') {
-                    $where .= " AND (whdodt.prodname ILIKE :kw OR whdodt.prodcode ILIKE :kw) ";
+                    $where .= " AND (item_agg.product_name ILIKE :kw OR item_agg.product_code ILIKE :kw) ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'label_jual') {
-                    $where .= " AND smprodtechdata.labeljual ILIKE :kw ";
+                    $where .= " AND item_agg.label_jual ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'cust_color') {
-                    $where .= " AND smprodtechdata.cuscolor ILIKE :kw ";
+                    $where .= " AND item_agg.cust_color ILIKE :kw ";
                     $params[':kw'] = $term;
                 } elseif ($searchField === 'sonmbr') {
-                    $where .= " AND insohd.sonmbr ILIKE :kw ";
+                    $where .= " AND item_agg.no_sc ILIKE :kw ";
                     $params[':kw'] = $term;
                 } else {
                     $where .= " AND (
                         whdohd.donmbr ILIKE :kw1 OR
-                        whbalehd.balenmbr ILIKE :kw2 OR
-                        whbalehd.refnmbr ILIKE :kw3 OR
+                        bale_agg.no_packing ILIKE :kw2 OR
+                        bale_agg.no_bale ILIKE :kw3 OR
                         smcustomer.cusname ILIKE :kw4 OR
-                        whdodt.prodname ILIKE :kw5 OR
-                        insohd.sonmbr ILIKE :kw6 OR
-                        whdodt.prodcode ILIKE :kw7 OR
-                        smprodtechdata.labeljual ILIKE :kw8 OR
-                        smprodtechdata.cuscolor ILIKE :kw9
+                        item_agg.product_name ILIKE :kw5 OR
+                        item_agg.no_sc ILIKE :kw6 OR
+                        item_agg.product_code ILIKE :kw7 OR
+                        item_agg.label_jual ILIKE :kw8 OR
+                        item_agg.cust_color ILIKE :kw9
                     )";
                     for ($i = 1; $i <= 9; $i++) {
                         $params[":kw{$i}"] = $term;
@@ -363,18 +363,41 @@ switch ($action) {
             }
 
             // Count total
-            $sqlCount = "
-                SELECT COUNT(*) AS total
-                FROM whdohd
-                LEFT JOIN whdodt ON whdohd.dohdid = whdodt.dohdid
-                LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
-                LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
-                LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
-                LEFT JOIN smuom ON whdodt.stduomid = smuom.uomid
-                LEFT JOIN whbaleprod ON whdohd.dohdid = whbaleprod.dohdid
-                LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
-                {$where}
-            ";
+            if (empty($keyword)) {
+                $sqlCount = "
+                    SELECT COUNT(*) AS total
+                    FROM whdohd
+                    LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
+                    {$where}
+                ";
+            } else {
+                $sqlCount = "
+                    SELECT COUNT(*) AS total
+                    FROM whdohd
+                    LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            MAX(insohd.sonmbr) AS no_sc,
+                            STRING_AGG(DISTINCT whdodt.prodcode, ', ') AS product_code,
+                            STRING_AGG(DISTINCT whdodt.prodname, ', ') AS product_name,
+                            STRING_AGG(DISTINCT smprodtechdata.cuscolor, ', ') AS cust_color,
+                            STRING_AGG(DISTINCT smprodtechdata.labeljual, ', ') AS label_jual
+                        FROM whdodt
+                        LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
+                        LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
+                        WHERE whdodt.dohdid = whdohd.dohdid
+                    ) item_agg ON true
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            STRING_AGG(DISTINCT whbalehd.balenmbr, ', ') AS no_packing,
+                            STRING_AGG(DISTINCT whbalehd.refnmbr, ', ') AS no_bale
+                        FROM whbaleprod
+                        LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
+                        WHERE whbaleprod.dohdid = whdohd.dohdid
+                    ) bale_agg ON true
+                    {$where}
+                ";
+            }
             $stmtCount = $conn3->prepare($sqlCount);
             $stmtCount->execute($params);
             $totalRows = (int)($stmtCount->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
@@ -382,35 +405,58 @@ switch ($action) {
             // Data query
             $sqlData = "
                 SELECT
+                    whdohd.dohdid,
                     whdohd.donmbr AS no_do,
                     whdohd.dodate AS tgl_do,
                     smcustomer.cusname AS cust_name,
                     smcustomer.cuscode AS cust_id,
-                    insohd.sonmbr AS no_sc,
-                    insohd.sodate AS tgl_sc,
-                    whdodt.prodcode AS product_code,
-                    whdodt.prodname AS product_name,
-                    smprodtechdata.cuscolor AS cust_color,
-                    smprodtechdata.labeljual AS label_jual,
-                    whdodt.doqty AS do_qty,
-                    smuom.uomname AS uom,
                     whdohd.dodesc,
-                    whdodt.dodtdesc,
-                    whbalehd.balenmbr AS no_packing,
-                    whbalehd.refnmbr AS no_bale,
-                    whbaleprod.totqtym,
-                    whbaleprod.totqtyyard,
-                    whbaleprod.countbatch
+                    item_agg.no_sc,
+                    item_agg.tgl_sc,
+                    item_agg.product_code,
+                    item_agg.product_name,
+                    item_agg.cust_color,
+                    item_agg.label_jual,
+                    item_agg.do_qty,
+                    item_agg.uom,
+                    item_agg.dodtdesc,
+                    bale_agg.no_packing,
+                    bale_agg.no_bale,
+                    bale_agg.totqtym,
+                    bale_agg.totqtyyard,
+                    bale_agg.countbatch
                 FROM whdohd
-                LEFT JOIN whdodt ON whdohd.dohdid = whdodt.dohdid
                 LEFT JOIN smcustomer ON whdohd.cusid = smcustomer.cusid
-                LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
-                LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
-                LEFT JOIN smuom ON whdodt.stduomid = smuom.uomid
-                LEFT JOIN whbaleprod ON whdohd.dohdid = whbaleprod.dohdid
-                LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
+                LEFT JOIN LATERAL (
+                    SELECT
+                        MAX(insohd.sonmbr) AS no_sc,
+                        MAX(insohd.sodate) AS tgl_sc,
+                        STRING_AGG(DISTINCT whdodt.prodcode, ', ') AS product_code,
+                        STRING_AGG(DISTINCT whdodt.prodname, ', ') AS product_name,
+                        STRING_AGG(DISTINCT smprodtechdata.cuscolor, ', ') AS cust_color,
+                        STRING_AGG(DISTINCT smprodtechdata.labeljual, ', ') AS label_jual,
+                        SUM(whdodt.doqty) AS do_qty,
+                        MAX(smuom.uomname) AS uom,
+                        STRING_AGG(DISTINCT whdodt.dodtdesc, ' | ') AS dodtdesc
+                    FROM whdodt
+                    LEFT JOIN smprodtechdata ON whdodt.prodid = smprodtechdata.prodid
+                    LEFT JOIN insohd ON whdodt.sohdid = insohd.sohdid
+                    LEFT JOIN smuom ON whdodt.stduomid = smuom.uomid
+                    WHERE whdodt.dohdid = whdohd.dohdid
+                ) item_agg ON true
+                LEFT JOIN LATERAL (
+                    SELECT
+                        STRING_AGG(DISTINCT whbalehd.balenmbr, ', ' ORDER BY whbalehd.balenmbr) AS no_packing,
+                        STRING_AGG(DISTINCT whbalehd.refnmbr, ', ' ORDER BY whbalehd.refnmbr) AS no_bale,
+                        SUM(whbaleprod.totqtym) AS totqtym,
+                        SUM(whbaleprod.totqtyyard) AS totqtyyard,
+                        SUM(whbaleprod.countbatch) AS countbatch
+                    FROM whbaleprod
+                    LEFT JOIN whbalehd ON whbaleprod.balehdid = whbalehd.balehdid
+                    WHERE whbaleprod.dohdid = whdohd.dohdid
+                ) bale_agg ON true
                 {$where}
-                ORDER BY whdohd.dodate DESC, whdohd.donmbr ASC, whbalehd.refnmbr ASC
+                ORDER BY whdohd.dodate DESC, whdohd.donmbr ASC
                 OFFSET :offset LIMIT :limit
             ";
             $stmtData = $conn3->prepare($sqlData);
@@ -421,14 +467,16 @@ switch ($action) {
             $stmtData->bindValue(':limit', $limit, PDO::PARAM_INT);
             $stmtData->execute();
 
-            // Get existing combos already in sa_titipan (kunci: no_do + no_sc + product_code + no_bale)
+            // Get existing DOs already in sa_titipan (kunci: no_do)
             $existingKeys = [];
             if ($tableReady) {
-                $qExist = sqlsrv_query($conn, "SELECT no_do, no_sc, product_code, no_bale FROM dbo.sa_titipan WHERE is_deleted = 0");
+                $qExist = sqlsrv_query($conn, "SELECT no_do FROM dbo.sa_titipan WHERE is_deleted = 0");
                 if ($qExist) {
                     while ($rE = sqlsrv_fetch_array($qExist, SQLSRV_FETCH_ASSOC)) {
-                        $key = trim($rE['no_do'] ?? '') . '|' . trim($rE['no_sc'] ?? '') . '|' . trim($rE['product_code'] ?? '') . '|' . trim($rE['no_bale'] ?? '');
-                        $existingKeys[$key] = true;
+                        $key = trim($rE['no_do'] ?? '');
+                        if (!empty($key)) {
+                            $existingKeys[$key] = true;
+                        }
                     }
                 }
             }
@@ -441,10 +489,10 @@ switch ($action) {
                 $prodCode = trim($row['product_code'] ?? '');
                 $noBale = trim($row['no_bale'] ?? '');
                 $noPacking = trim($row['no_packing'] ?? '');
-                $key = "{$noDo}|{$noSC}|{$prodCode}|{$noBale}";
+                $key = $noDo;
 
                 $tglSC = !empty($row['tgl_sc']) ? date('Y-m-d', strtotime($row['tgl_sc'])) : null;
-                $qtyBale = $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : ($row['do_qty'] !== null ? (float)$row['do_qty'] : null);
+                $totQtyYard = $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : ($row['do_qty'] !== null ? (float)$row['do_qty'] : null);
 
                 $data[] = [
                     'seq'             => $seq++,
@@ -461,14 +509,14 @@ switch ($action) {
                     'label_jual'      => trim($row['label_jual'] ?? '-'),
                     'cust_color'      => trim($row['cust_color'] ?? '-'),
                     'do_qty'          => $row['do_qty'] !== null ? (float)$row['do_qty'] : null,
-                    'qty_kirim'       => $qtyBale,
+                    'qty_kirim'       => $totQtyYard,
                     'uom'             => trim($row['uom'] ?? ''),
                     'dodesc'          => trim($row['dodesc'] ?? ''),
                     'dodtdesc'        => trim($row['dodtdesc'] ?? ''),
                     'no_packing'      => $noPacking,
                     'no_bale'         => $noBale,
                     'totqtym'         => $row['totqtym'] !== null ? (float)$row['totqtym'] : null,
-                    'totqtyyard'      => $row['totqtyyard'] !== null ? (float)$row['totqtyyard'] : null,
+                    'totqtyyard'      => $totQtyYard,
                     'countbatch'      => $row['countbatch'] !== null ? (int)$row['countbatch'] : null,
                     'already_saved'   => isset($existingKeys[$key]),
                     'unique_key'      => $key,
@@ -523,10 +571,10 @@ switch ($action) {
 
             if (empty($noDo)) continue;
 
-            // Cek duplikat berdasarkan no_do, no_sc, product_code, dan no_bale
+            // Cek duplikat berdasarkan no_do
             $qDup = sqlsrv_query($conn,
-                "SELECT TOP 1 id FROM dbo.sa_titipan WHERE no_do = ? AND no_sc = ? AND product_code = ? AND no_bale = ? AND is_deleted = 0",
-                [$noDo, $noSC, $prodCode, $noBale]);
+                "SELECT TOP 1 id FROM dbo.sa_titipan WHERE no_do = ? AND is_deleted = 0",
+                [$noDo]);
             if ($qDup && sqlsrv_fetch_array($qDup, SQLSRV_FETCH_ASSOC)) {
                 $skippedCount++;
                 continue;

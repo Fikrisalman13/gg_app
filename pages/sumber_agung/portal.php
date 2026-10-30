@@ -184,7 +184,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 background-color: #f1f5f9 !important;
             }
 
-            /* Garis pembatas di sebelah kanan kolom No SO (kolom ke-3 pada portal) */
+            /* Garis pembatas di sebelah kanan kolom Tgl DO (kolom ke-3 pada portal) */
             #tablePortal thead th.dtfc-fixed-left:nth-child(3),
             #tablePortal tbody td.dtfc-fixed-left:nth-child(3) {
                 box-shadow: 4px 0 6px -3px rgba(0, 0, 0, 0.12);
@@ -429,11 +429,11 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             <div class="card-body py-3 px-4">
                 <form id="portalFilterForm" class="row align-items-end">
                     <div class="col-md-4 col-sm-6 mb-2">
-                        <label class="small text-muted font-weight-bold mb-1">Dari Tgl Kirim</label>
+                        <label class="small text-muted font-weight-bold mb-1">Dari Tgl DO</label>
                         <input type="date" class="form-control form-control-sm" id="portalDateFrom" value="<?= date('Y-m-01') ?>">
                     </div>
                     <div class="col-md-4 col-sm-6 mb-2">
-                        <label class="small text-muted font-weight-bold mb-1">Sampai Tgl Kirim</label>
+                        <label class="small text-muted font-weight-bold mb-1">Sampai Tgl DO</label>
                         <input type="date" class="form-control form-control-sm" id="portalDateTo" value="<?= date('Y-m-d') ?>">
                     </div>
                     <div class="col-md-4 col-sm-12 mb-2 text-right">
@@ -472,16 +472,13 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     <thead>
                         <tr>
                             <th style="width: 35px;" class="text-center">#</th>
-                            <th>Tgl Kirim</th>
+                            <th>No DO</th>
+                            <th>Tgl DO</th>
                             <th>No SO</th>
                             <th>Tgl SC</th>
                             <th>Nama Produk</th>
                             <th>Cust Color</th>
                             <th>Label Jual</th>
-                            <th>No Titipan</th>
-                            <th>Tgl Titipan</th>
-                            <th>No DO</th>
-                            <th>Tgl DO</th>
                             <th>No Packing</th>
                             <th>No Bale</th>
                             <th class="text-right">Qty DO</th>
@@ -529,17 +526,17 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                                 <i class="fas fa-truck-loading"></i>
                             </div>
                             <div>
-                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Nomor DO Titipan</small>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Nomor DO / Bale</small>
                                 <span class="font-weight-bold text-dark" style="font-family: monospace; font-size: 1.1rem;" id="pDetNoTitipan">-</span>
                             </div>
                         </div>
                         <div class="d-flex align-items-center" style="gap: 20px;">
                             <div>
-                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Tgl Kirim (Transaksi)</small>
-                                <span class="font-weight-bold text-dark" id="pDetTglKirim">-</span>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Tanggal DO</small>
+                                <span class="font-weight-bold text-dark" id="pDetTglDOHeader">-</span>
                             </div>
                             <div class="text-right">
-                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Total Qty Kirim</small>
+                                <small class="text-muted font-weight-bold d-block text-uppercase" style="font-size: 11px;">Total Qty DO</small>
                                 <span class="font-weight-bold text-success" style="font-size: 1.15rem;" id="pDetQty">-</span>
                             </div>
                         </div>
@@ -578,10 +575,6 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                                             <tr>
                                                 <td class="field-label">Tgl SC</td>
                                                 <td class="field-value text-dark" id="pDetTglSC">-</td>
-                                            </tr>
-                                            <tr>
-                                                <td class="field-label">No Titipan</td>
-                                                <td class="field-value text-muted" id="pDetRowNoTitipan">-</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -629,10 +622,6 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                                             <tr>
                                                 <td class="field-label">Total Qty DO</td>
                                                 <td class="field-value text-dark" id="pDetQtyDO">-</td>
-                                            </tr>
-                                            <tr>
-                                                <td class="field-label">Qty Kirim</td>
-                                                <td class="field-value text-success font-weight-bold" id="pDetQtySide">-</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -778,12 +767,9 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
             },
             columns: [
                 { data: 'no', className: 'text-center' },
-                {
-                    data: 'tgl_kirim',
-                    className: 'font-weight-bold text-dark',
-                    render: d => d && d !== '-' ? d : '<span class="text-muted">-</span>'
-                },
-                { data: 'no_sc', render: d => `<strong>${d}</strong>` },
+                { data: 'no_do', render: d => `<strong>${d}</strong>` },
+                { data: 'tgl_do' },
+                { data: 'no_sc' },
                 { data: 'tgl_sc' },
                 {
                     data: null,
@@ -800,17 +786,19 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     data: 'label_jual',
                     render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
                 },
-                { data: 'no_titipan', render: d => d && d !== '-' ? `<span class="badge badge-light border font-weight-bold">${d}</span>` : '-' },
-                { data: 'tgl_titipan' },
-                { data: 'no_do' },
-                { data: 'tgl_do' },
                 {
                     data: 'no_packing',
-                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-dark font-weight-bold">${d}</span>` : '-'
+                    render: function (d) {
+                        if (!d || d === '-') return '-';
+                        return d.split(',').map(s => `<span class="badge badge-light border text-dark font-weight-bold mr-1 mb-1">${s.trim()}</span>`).join('');
+                    }
                 },
                 {
                     data: 'no_bale',
-                    render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
+                    render: function (d) {
+                        if (!d || d === '-') return '-';
+                        return d.split(',').map(s => `<span class="badge badge-light border text-primary font-weight-bold mr-1 mb-1">${s.trim()}</span>`).join('');
+                    }
                 },
                 {
                     data: 'do_qty',
@@ -832,7 +820,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     className: 'text-center',
                     render: function (data, type, row) {
                         if (row.has_packinglist) {
-                            return `<button type="button" class="btn-view-doc btn-open-pdf" data-id="${row.id}" data-url="${row.packinglist_file}" data-title="Packing List - ${row.no_titipan}"><i class="fas fa-file-pdf"></i> Lihat PL</button>`;
+                            return `<button type="button" class="btn-view-doc btn-open-pdf" data-id="${row.id}" data-url="${row.packinglist_file}" data-title="Packing List - ${row.no_do || row.no_bale || '-'}"><i class="fas fa-file-pdf"></i> Lihat PL</button>`;
                         }
                         return '<span class="text-muted small">-</span>';
                     }
@@ -842,7 +830,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     className: 'text-center',
                     render: function (data, type, row) {
                         if (row.has_suratjalan) {
-                            return `<button type="button" class="btn-view-doc-green btn-open-pdf" data-id="${row.id}" data-url="${row.suratjalan_file}" data-title="Surat Jalan - ${row.no_titipan}"><i class="fas fa-file-alt"></i> Lihat SJ</button>`;
+                            return `<button type="button" class="btn-view-doc-green btn-open-pdf" data-id="${row.id}" data-url="${row.suratjalan_file}" data-title="Surat Jalan - ${row.no_do || row.no_bale || '-'}"><i class="fas fa-file-alt"></i> Lihat SJ</button>`;
                         }
                         return '<span class="text-muted small">-</span>';
                     }
@@ -860,7 +848,7 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                     }
                 }
             ],
-            order: [[1, 'desc']], // Urut berdasarkan Tanggal Kirim
+            order: [[2, 'desc']], // Urut berdasarkan Tanggal DO terbaru
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Semua"]],
             pagingType: "simple_numbers",
@@ -928,13 +916,11 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 }
 
                 const d = res.data;
-                const qtyKirimStr = d.qty_kirim !== null ? `${Number(d.qty_kirim).toLocaleString('id-ID')} ${d.uom}` : '-';
                 const qtyDOStr = d.do_qty !== null ? `${Number(d.do_qty).toLocaleString('id-ID')} ${d.uom}` : '-';
 
-                $('#pDetTglKirim').text(d.tgl_kirim || '-');
+                $('#pDetTglDOHeader').text(d.tgl_do || '-');
                 const noBaleDisplay = d.no_bale && d.no_bale !== '-' ? `${d.no_do} (Bale: ${d.no_bale})` : (d.no_titipan && d.no_titipan !== '-' ? d.no_titipan : d.no_do);
                 $('#pDetNoTitipan').text(noBaleDisplay);
-                $('#pDetRowNoTitipan').text(d.no_titipan || '-');
                 $('#pDetNoDO').text(d.no_do || '-');
                 $('#pDetTglDO').text(d.tgl_do || '-');
                 $('#pDetNoPacking').text(d.no_packing || '-');
@@ -958,13 +944,12 @@ $theme = strtolower($_SESSION['Theme'] ?? 'primary');
                 if (d.totqtym !== null) {
                     rincianQtyText += (rincianQtyText ? ' / ' : '') + `${Number(d.totqtym).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Meter`;
                 }
-                $('#pDetRincianQty').text(rincianQtyText || qtyKirimStr);
+                $('#pDetRincianQty').text(rincianQtyText || qtyDOStr);
                 $('#pDetBatch').text(d.countbatch !== null && d.countbatch !== undefined ? `${d.countbatch} Roll / Batch` : '-');
                 $('#pDetDodtDesc').text(d.dodtdesc || '-');
 
                 $('#pDetQtyDO').text(qtyDOStr);
-                $('#pDetQty').text(qtyKirimStr);
-                $('#pDetQtySide').text(qtyKirimStr);
+                $('#pDetQty').text(qtyDOStr);
                 $('#pDetKeterangan').text(d.ket_titipan_2 || d.ket_titipan_1 || d.dodesc || 'Tidak ada catatan tambahan.');
 
                 // Action PL

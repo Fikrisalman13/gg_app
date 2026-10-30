@@ -27,13 +27,13 @@ function purchasingIssuePdfFail(int $status, string $message): void
 }
 
 /**
- * Menormalisasi tanggal filter PDF dengan format ISO yang ketat.
+ * Menormalisasi tanggal-waktu filter PDF dengan format ISO menit yang ketat.
  *
  * @param mixed $value Nilai mentah dari query string.
  * @param string $label Label aman untuk pesan validasi.
  * @return array{valid: bool, value: string|null, message: string} Hasil normalisasi tanggal.
  */
-function purchasingIssuePdfDateFilter($value, string $label): array
+function purchasingIssuePdfDateTimeFilter($value, string $label): array
 {
     if ($value === null || $value === '') {
         return ['valid' => true, 'value' => null, 'message' => ''];
@@ -43,12 +43,12 @@ function purchasingIssuePdfDateFilter($value, string $label): array
         return ['valid' => false, 'value' => null, 'message' => $label . ' tidak valid.'];
     }
 
-    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-    if ($date === false || $date->format('Y-m-d') !== $value) {
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i', $value);
+    if ($date === false || $date->format('Y-m-d\\TH:i') !== $value) {
         return ['valid' => false, 'value' => null, 'message' => $label . ' tidak valid.'];
     }
 
-    return ['valid' => true, 'value' => $date->format('Y-m-d'), 'message' => ''];
+    return ['valid' => true, 'value' => $date->format('Y-m-d H:i:s'), 'message' => ''];
 }
 
 /**
@@ -90,7 +90,7 @@ function purchasingIssuePdfDate($value, string $format = 'd/m/Y H:i'): string
 }
 
 /**
- * Menghasilkan label periode berdasarkan filter tanggal PDF.
+ * Menghasilkan label periode berdasarkan filter tanggal-waktu PDF.
  *
  * @param string|null $startDate Filter tanggal mulai yang telah tervalidasi.
  * @param string|null $endDate Filter tanggal akhir yang telah tervalidasi.
@@ -99,15 +99,15 @@ function purchasingIssuePdfDate($value, string $format = 'd/m/Y H:i'): string
 function purchasingIssuePdfPeriodLabel(?string $startDate, ?string $endDate): string
 {
     if ($startDate !== null && $endDate !== null) {
-        return 'Periode: ' . date('d/m/Y', strtotime($startDate)) . ' - ' . date('d/m/Y', strtotime($endDate));
+        return 'Periode: ' . date('d/m/Y H:i', strtotime($startDate)) . ' - ' . date('d/m/Y H:i', strtotime($endDate));
     }
 
     if ($startDate !== null) {
-        return 'Dibuat mulai: ' . date('d/m/Y', strtotime($startDate));
+        return 'Dibuat mulai: ' . date('d/m/Y H:i', strtotime($startDate));
     }
 
     if ($endDate !== null) {
-        return 'Dibuat sampai: ' . date('d/m/Y', strtotime($endDate));
+        return 'Dibuat sampai: ' . date('d/m/Y H:i', strtotime($endDate));
     }
 
     return 'Semua tanggal';
@@ -149,8 +149,8 @@ function exportPurchasingIssuesPdf($conn): void
         purchasingIssuePdfFail(400, 'Filter status tidak valid.');
     }
 
-    $startDate = purchasingIssuePdfDateFilter($_GET['filterTanggalStart'] ?? null, 'Tanggal mulai');
-    $endDate = purchasingIssuePdfDateFilter($_GET['filterTanggalEnd'] ?? null, 'Tanggal akhir');
+    $startDate = purchasingIssuePdfDateTimeFilter($_GET['filterTanggalStart'] ?? null, 'Tanggal dan jam mulai');
+    $endDate = purchasingIssuePdfDateTimeFilter($_GET['filterTanggalEnd'] ?? null, 'Tanggal dan jam akhir');
     if (!$startDate['valid']) {
         purchasingIssuePdfFail(400, $startDate['message']);
     }
@@ -158,7 +158,7 @@ function exportPurchasingIssuesPdf($conn): void
         purchasingIssuePdfFail(400, $endDate['message']);
     }
     if ($startDate['value'] !== null && $endDate['value'] !== null && $startDate['value'] > $endDate['value']) {
-        purchasingIssuePdfFail(400, 'Rentang tanggal tidak valid.');
+        purchasingIssuePdfFail(400, 'Rentang tanggal dan jam tidak valid.');
     }
 
     $conditions = [];
@@ -184,7 +184,7 @@ function exportPurchasingIssuesPdf($conn): void
         $parameters[] = $startDate['value'];
     }
     if ($endDate['value'] !== null) {
-        $conditions[] = 'i.created_at < DATEADD(day, 1, ?)';
+        $conditions[] = 'i.created_at < DATEADD(minute, 1, ?)';
         $parameters[] = $endDate['value'];
     }
 
@@ -220,7 +220,6 @@ function exportPurchasingIssuesPdf($conn): void
                 i.created_by,
                 i.status,
                 i.priority,
-                i.due_date,
                 i.tanggal_selesai,
                 i.created_at
          FROM dbo.purchasing_issues AS i
@@ -353,7 +352,6 @@ function exportPurchasingIssuesPdf($conn): void
             . '<th style="width:8%">Status</th>'
             . '<th style="width:7%">Prioritas</th>'
             . '<th class="nowrap" style="width:8%">Dibuat</th>'
-            . '<th class="nowrap" style="width:7%">Due Date</th>'
             . '<th class="nowrap" style="width:8%">Selesai</th>'
             . '</tr></thead><tbody>'
         );
@@ -373,7 +371,6 @@ function exportPurchasingIssuesPdf($conn): void
                 . '<td style="text-align:center">' . purchasingIssuePdfText($row['status'] ?? null) . '</td>'
                 . '<td style="text-align:center">' . purchasingIssuePdfText($row['priority'] ?? null) . '</td>'
                 . '<td class="nowrap">' . purchasingIssuePdfDate($row['created_at'] ?? null) . '</td>'
-                . '<td class="nowrap">' . purchasingIssuePdfDate($row['due_date'] ?? null, 'd/m/Y') . '</td>'
                 . '<td class="nowrap">' . purchasingIssuePdfDate($row['tanggal_selesai'] ?? null) . '</td>'
                 . '</tr>';
             $rowNumber++;
@@ -387,7 +384,7 @@ function exportPurchasingIssuesPdf($conn): void
             $pdf->WriteHTML($batchHtml);
         }
         if ($exportRows === []) {
-            $pdf->WriteHTML('<tr><td colspan="11" style="text-align:center;padding:10px;">Tidak ada issue sesuai filter.</td></tr>');
+            $pdf->WriteHTML('<tr><td colspan="10" style="text-align:center;padding:10px;">Tidak ada issue sesuai filter.</td></tr>');
         }
         $pdf->WriteHTML('</tbody></table>');
         $pdf->SetHTMLFooter('<div style="text-align:right;font-size:8px;">Halaman {PAGENO} dari {nbpg}</div>');

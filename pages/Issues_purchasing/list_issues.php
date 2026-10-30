@@ -73,11 +73,11 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
                             </div>
                             <div class="form-group col-md-3">
                                 <label for="purchasing-filter-date-start">Dibuat mulai</label>
-                                <input class="form-control form-control-sm" type="date" id="purchasing-filter-date-start">
+                                <input class="form-control form-control-sm" type="datetime-local" id="purchasing-filter-date-start">
                             </div>
                             <div class="form-group col-md-3">
                                 <label for="purchasing-filter-date-end">Dibuat sampai</label>
-                                <input class="form-control form-control-sm" type="date" id="purchasing-filter-date-end">
+                                <input class="form-control form-control-sm" type="datetime-local" id="purchasing-filter-date-end">
                             </div>
                             <div class="form-group col-12 mb-0">
                                 <button type="button" class="btn btn-default btn-sm" id="purchasing-reset-filters" title="Reset filter">
@@ -98,6 +98,7 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
                                         <th>Issue Name</th>
                                         <th>Type</th>
                                         <th>Kategori Kegiatan</th>
+                                        <th>Sub Kategori</th>
                                         <th>Status</th>
                                         <th>Priority</th>
                                         <th>Tanggal Dibuat</th>
@@ -388,14 +389,26 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
     var pendingTemplateData = null;
 
     /**
-     * Menghasilkan tanggal kalender lokal untuk nilai awal input Due Date.
+     * Menghasilkan tanggal kalender lokal dengan pergeseran hari bila diperlukan.
      *
+     * @param {number} dayOffset Pergeseran hari relatif terhadap hari ini.
      * @return {string} Tanggal dengan format YYYY-MM-DD.
      */
-    function currentLocalDateInputValue() {
+    function currentLocalDateInputValue(dayOffset) {
         var currentDate = new Date();
+        currentDate.setDate(currentDate.getDate() + Number(dayOffset || 0));
         var timezoneOffsetMilliseconds = currentDate.getTimezoneOffset() * 60 * 1000;
         return new Date(currentDate.getTime() - timezoneOffsetMilliseconds).toISOString().slice(0, 10);
+    }
+
+    /**
+     * Mengisi rentang filter tanggal-waktu default untuk daftar Issue aktif.
+     *
+     * @returns {void}
+     */
+    function resetPurchasingDateTimeFilters() {
+        $('#purchasing-filter-date-start').val(currentLocalDateInputValue(-1) + 'T16:15');
+        $('#purchasing-filter-date-end').val(currentLocalDateInputValue(0) + 'T16:15');
     }
 
     function newRequestId() {
@@ -702,6 +715,8 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
         offerTemplateSave(templateData);
     }
 
+    resetPurchasingDateTimeFilters();
+
     var table = $('#purchasing-issues-table').DataTable({
         processing: true,
         serverSide: true,
@@ -721,8 +736,11 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
                 request.filterTanggalStart = $('#purchasing-filter-date-start').val();
                 request.filterTanggalEnd = $('#purchasing-filter-date-end').val();
             },
-            error: function () {
-                $('#purchasing-list-error').text('Daftar issue tidak dapat dimuat.').prop('hidden', false);
+            error: function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error
+                    : 'Daftar issue tidak dapat dimuat.';
+                $('#purchasing-list-error').text(message).prop('hidden', false);
             }
         },
         order: [],
@@ -730,8 +748,8 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
             { className: 'dtr-control', orderable: false, targets: 0 },
             { responsivePriority: 1, targets: -1 },
             { responsivePriority: 2, targets: 2 },
-            { responsivePriority: 3, targets: 5 },
-            { responsivePriority: 4, targets: 6 }
+            { responsivePriority: 3, targets: 6 },
+            { responsivePriority: 4, targets: 7 }
         ],
         columns: [
             {
@@ -752,6 +770,7 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
                 }
             },
             { data: 'kategori', render: $.fn.dataTable.render.text() },
+            { data: 'subkategori', render: $.fn.dataTable.render.text() },
             {
                 data: 'status',
                 render: function (data, type) {
@@ -798,6 +817,12 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
     });
 
     var searchInput = $('#purchasing-issues-table_filter input[type="search"]');
+    table.on('xhr.dt', function (_event, _settings, response, xhr) {
+        if (xhr && xhr.status === 200 && !(response && response.error)) {
+            $('#purchasing-list-error').prop('hidden', true).text('');
+        }
+    });
+
     searchInput.attr({
         id: 'purchasing-issues-search',
         'aria-label': 'Cari issue Purchasing'
@@ -808,7 +833,8 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/header.php';
     });
 
     $('#purchasing-reset-filters').on('click', function () {
-        $('#purchasing-filter-type, #purchasing-filter-status, #purchasing-filter-date-start, #purchasing-filter-date-end').val('');
+        $('#purchasing-filter-type, #purchasing-filter-status').val('');
+        resetPurchasingDateTimeFilters();
         table.ajax.reload();
     });
 

@@ -21,6 +21,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $rootPath = dirname(__DIR__, 3);
 require_once $rootPath . '/koneksi.php';   // SQL Server GG
 require_once $rootPath . '/koneksi3.php';  // PostgreSQL ERP (READ-ONLY)
+require_once __DIR__ . '/tracking_po_issue.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -51,6 +52,9 @@ function getTrackingUserIdentity($conn) {
             if (isset($row['id_dept'])) $idDept = (int)$row['id_dept'];
             if (!empty($row['GroupId'])) $groupId = $row['GroupId'];
             if (!empty($row['GroupName'])) $groupName = trim($row['GroupName']);
+        }
+        if ($q) {
+            sqlsrv_free_stmt($q);
         }
     }
     if (empty($nama)) $nama = $user;
@@ -109,6 +113,9 @@ if (!empty($conn)) {
     $qCheck = sqlsrv_query($conn, "SELECT 1 FROM sys.tables WHERE name = 'tracking_po_header'");
     if ($qCheck && sqlsrv_has_rows($qCheck)) {
         $tableReady = true;
+    }
+    if ($qCheck) {
+        sqlsrv_free_stmt($qCheck);
     }
 }
 
@@ -579,6 +586,19 @@ switch ($action) {
             exit;
         }
 
+        if (!trackingPoIssueCsrfIsValid($_POST['csrf_token'] ?? null)) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Sesi formulir tidak valid. Muat ulang halaman lalu coba kembali.']);
+            exit;
+        }
+
+        $activityRequestId = trim((string) ($_POST['activity_request_id'] ?? ''));
+        if (!trackingPoIssueIsUuid($activityRequestId)) {
+            http_response_code(422);
+            echo json_encode(['status' => 'error', 'message' => 'Token submit tidak valid. Muat ulang halaman lalu coba kembali.']);
+            exit;
+        }
+
         $tanggalKirim = trim($_POST['tanggal_kirim'] ?? '');
         $dikirimKe = trim($_POST['dikirim_ke'] ?? '');
         $alamatKirim = trim($_POST['alamat_kirim'] ?? '');
@@ -602,6 +622,20 @@ switch ($action) {
             exit;
         }
 
+        $requestedPoNumbers = [];
+        foreach ($poItems as $item) {
+            $poNumber = trim((string) ($item['ponmbr'] ?? ''));
+            if ($poNumber === '') {
+                echo json_encode(['status' => 'error', 'message' => 'Nomor PO pada daftar penyerahan tidak valid.']);
+                exit;
+            }
+            if (isset($requestedPoNumbers[$poNumber])) {
+                echo json_encode(['status' => 'error', 'message' => 'Nomor PO ' . $poNumber . ' dipilih lebih dari satu kali.']);
+                exit;
+            }
+            $requestedPoNumbers[$poNumber] = true;
+        }
+
         // Tentukan apakah ada tanggal kirim atau status Tunggu Tanggal Penyerahan
         $hasTanggal = false;
         $dbTanggalKirim = null;
@@ -619,19 +653,53 @@ switch ($action) {
             $logKeterangan = 'PO diserahkan ke direktur pada ' . $tanggalKirim;
         }
 
+        if (!sqlsrv_begin_transaction($conn)) {
+            echo json_encode(['status' => 'error', 'message' => 'Transaksi penyerahan PO tidak dapat dimulai.']);
+            exit;
+        }
+
+        $existingStatement = sqlsrv_query(
+            $conn,
+            'SELECT TOP 1 id FROM dbo.tracking_po_header WITH (UPDLOCK, HOLDLOCK) WHERE activity_request_id = ?',
+            [$activityRequestId]
+        );
+        $existingHeader = $existingStatement ? sqlsrv_fetch_array($existingStatement, SQLSRV_FETCH_ASSOC) : false;
+        if ($existingStatement) {
+            sqlsrv_free_stmt($existingStatement);
+        }
+        if (is_array($existingHeader)) {
+            sqlsrv_commit($conn);
+            echo json_encode([
+                'status' => 'ok',
+                'message' => 'Penyerahan PO sebelumnya digunakan kembali.',
+                'header_id' => (int) $existingHeader['id'],
+                'idempotent' => true
+            ]);
+            exit;
+        }
+
         // Cek duplikat: apakah ada PO yang sudah pernah diserahkan dan belum Approved
         $duplikat = [];
         foreach ($poItems as $item) {
             $ponmbr = trim($item['ponmbr'] ?? '');
             if (empty($ponmbr)) continue;
-            $qDup = sqlsrv_query($conn, "SELECT TOP 1 d.ponmbr FROM dbo.tracking_po_detail d 
-                INNER JOIN dbo.tracking_po_header h ON d.header_id = h.id
+            $qDup = sqlsrv_query($conn, "SELECT TOP 1 d.ponmbr FROM dbo.tracking_po_detail d WITH (UPDLOCK, HOLDLOCK)
+                INNER JOIN dbo.tracking_po_header h WITH (UPDLOCK, HOLDLOCK) ON d.header_id = h.id
                 WHERE d.ponmbr = ? AND d.status != 'Approved' AND h.is_deleted = 0", [$ponmbr]);
+            if ($qDup === false) {
+                sqlsrv_rollback($conn);
+                echo json_encode(['status' => 'error', 'message' => 'Data Tracking PO tidak dapat diperiksa. Tidak ada PO baru yang disimpan.']);
+                exit;
+            }
             if ($qDup && sqlsrv_fetch_array($qDup, SQLSRV_FETCH_ASSOC)) {
                 $duplikat[] = $ponmbr;
             }
+            if ($qDup) {
+                sqlsrv_free_stmt($qDup);
+            }
         }
         if (!empty($duplikat)) {
+            sqlsrv_rollback($conn);
             echo json_encode([
                 'status' => 'error',
                 'message' => 'PO berikut sudah ada dalam tracking dan belum selesai: ' . implode(', ', $duplikat)
@@ -640,19 +708,21 @@ switch ($action) {
         }
 
         // Insert header
-        $sqlHeader = "INSERT INTO dbo.tracking_po_header (tanggal_kirim, diserahkan_oleh, dikirim_ke, alamat_kirim, created_by, created_at)
+        $sqlHeader = "INSERT INTO dbo.tracking_po_header (tanggal_kirim, diserahkan_oleh, dikirim_ke, alamat_kirim, created_by, created_at, activity_request_id)
                       OUTPUT INSERTED.id
-                      VALUES (?, ?, ?, ?, ?, GETDATE())";
+                      VALUES (?, ?, ?, ?, ?, GETDATE(), ?)";
         $stmtHeader = sqlsrv_query($conn, $sqlHeader, [
             $dbTanggalKirim,
             $currentUser['formatted'],
             $dikirimKe,
             $alamatKirim,
-            $currentUser['user']
+            $currentUser['user'],
+            $activityRequestId
         ]);
 
         if (!$stmtHeader) {
-            echo json_encode(['status' => 'error', 'message' => 'Gagal menyimpan header: ' . print_r(sqlsrv_errors(), true)]);
+            sqlsrv_rollback($conn);
+            echo json_encode(['status' => 'error', 'message' => 'Header penyerahan PO tidak dapat disimpan.']);
             exit;
         }
 
@@ -661,8 +731,10 @@ switch ($action) {
         if ($rId = sqlsrv_fetch_array($stmtHeader, SQLSRV_FETCH_ASSOC)) {
             $headerId = (int)$rId['id'];
         }
+        sqlsrv_free_stmt($stmtHeader);
 
         if ($headerId <= 0) {
+            sqlsrv_rollback($conn);
             echo json_encode(['status' => 'error', 'message' => 'Gagal mendapatkan ID header.']);
             exit;
         }
@@ -708,20 +780,60 @@ switch ($action) {
                     $detailId = (int)$rDetId['id'];
                 }
 
-                // Insert log
-                if ($detailId > 0) {
-                    $itemLogKeterangan = $logKeterangan . (!empty($dikirimKe) ? " [Dikirim ke: {$dikirimKe}]" : "");
-                    sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
-                        VALUES (?, ?, NULL, ?, ?, GETDATE(), ?)", [
-                        $detailId,
-                        ($hasTanggal ? 'Diserahkan' : 'Catat Tracking'),
-                        $initialStatus,
-                        $currentUser['formatted'],
-                        $itemLogKeterangan
-                    ]);
+                if ($detailId <= 0) {
+                    sqlsrv_free_stmt($stmtDetail);
+                    sqlsrv_rollback($conn);
+                    echo json_encode(['status' => 'error', 'message' => 'ID detail PO tidak dapat dibuat. Tidak ada PO baru yang disimpan.']);
+                    exit;
                 }
+
+                // Insert log
+                $itemLogKeterangan = $logKeterangan . (!empty($dikirimKe) ? " [Dikirim ke: {$dikirimKe}]" : "");
+                $logStatement = sqlsrv_query($conn, "INSERT INTO dbo.tracking_po_log (detail_id, action, old_status, new_status, performed_by, performed_at, keterangan)
+                    VALUES (?, ?, NULL, ?, ?, GETDATE(), ?)", [
+                    $detailId,
+                    ($hasTanggal ? 'Diserahkan' : 'Catat Tracking'),
+                    $initialStatus,
+                    $currentUser['formatted'],
+                    $itemLogKeterangan
+                ]);
+                if ($logStatement === false) {
+                    sqlsrv_free_stmt($stmtDetail);
+                    sqlsrv_rollback($conn);
+                    echo json_encode(['status' => 'error', 'message' => 'Log penyerahan PO tidak dapat disimpan.']);
+                    exit;
+                }
+                sqlsrv_free_stmt($logStatement);
+
+                try {
+                    trackingPoIssueCreate($conn, $detailId, [
+                        'ponmbr' => $ponmbr,
+                        'vendor' => $vendor,
+                        'podate' => $podate,
+                        'tanggal_kirim' => $dbTanggalKirim,
+                        'due_date' => $dbTanggalKirim ?: date('Y-m-d'),
+                        'status' => $initialStatus,
+                        'diserahkan_oleh' => $currentUser['formatted']
+                    ], $currentUser['user']);
+                } catch (Throwable $exception) {
+                    sqlsrv_free_stmt($stmtDetail);
+                    sqlsrv_rollback($conn);
+                    echo json_encode(['status' => 'error', 'message' => 'Issue aktivitas Tracking PO tidak dapat dibuat. Tidak ada PO baru yang disimpan.']);
+                    exit;
+                }
+                sqlsrv_free_stmt($stmtDetail);
                 $insertedCount++;
+            } else {
+                sqlsrv_rollback($conn);
+                echo json_encode(['status' => 'error', 'message' => 'Detail PO tidak dapat disimpan. Tidak ada PO baru yang disimpan.']);
+                exit;
             }
+        }
+
+        if (!sqlsrv_commit($conn)) {
+            sqlsrv_rollback($conn);
+            echo json_encode(['status' => 'error', 'message' => 'Transaksi penyerahan PO tidak dapat diselesaikan.']);
+            exit;
         }
 
         $suksesMsg = $hasTanggal 

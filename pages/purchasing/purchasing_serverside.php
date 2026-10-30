@@ -2,6 +2,7 @@
 session_start();
 include_once file_exists(__DIR__ . '/../../koneksi.php') ? __DIR__ . '/../../koneksi.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi.php');
 include_once file_exists(__DIR__ . '/../../includes/permissions.php') ? __DIR__ . '/../../includes/permissions.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/permissions.php');
+require_once $_SERVER['DOCUMENT_ROOT'] . '/gg_app/pages/Issues_purchasing/purchasing_activity_issue.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -603,6 +604,11 @@ if ($action === 'add') {
         exit;
     }
 
+    if (!purchasingActivityCsrfIsValid($_POST['purchasing_activity_csrf'] ?? null)) {
+        echo json_encode(['status' => 'error', 'message' => 'Sesi formulir tidak valid. Muat ulang halaman lalu coba kembali.']);
+        exit;
+    }
+
     $tanggal = trim($_POST['tanggal'] ?? date('Y-m-d'));
     $items = $_POST['items'] ?? [];
     $pengirim = trim($_POST['pengirim'] ?? $currentUser['formatted']);
@@ -618,6 +624,19 @@ if ($action === 'add') {
         sqlsrv_begin_transaction($conn);
         try {
             foreach ($items as $item) {
+                $activityRequestId = purchasingIssueRequestId($item['activity_request_id'] ?? null);
+                if ($activityRequestId === null) {
+                    throw new RuntimeException('Permintaan dokumen tidak valid. Muat ulang formulir lalu coba kembali.');
+                }
+
+                $duplicateStatement = sqlsrv_query($conn, 'SELECT id FROM dbo.purchasing_header WHERE activity_request_id = ?', [$activityRequestId]);
+                $duplicate = $duplicateStatement ? sqlsrv_fetch_array($duplicateStatement, SQLSRV_FETCH_ASSOC) : false;
+                if ($duplicateStatement) {
+                    sqlsrv_free_stmt($duplicateStatement);
+                }
+                if (is_array($duplicate)) {
+                    throw new RuntimeException('Data serah terima ini sudah pernah disimpan.');
+                }
                 $rawType = trim($item['type'] ?? 'PO');
                 $typeKet = trim($item['type_keterangan'] ?? '');
                 $isMultiPo = 0;
@@ -690,9 +709,9 @@ if ($action === 'add') {
 
                 // Insert Header
                 $sqlH = "INSERT INTO dbo.purchasing_header 
-                         (tanggal, type, type_keterangan, is_multi_po, no_po, vendor, no_grn, pengirim, penerima, status_ttd, created_by)
+                         (tanggal, type, type_keterangan, is_multi_po, no_po, vendor, no_grn, pengirim, penerima, status_ttd, created_by, activity_request_id)
                          OUTPUT INSERTED.id
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Menunggu TTD', ?)";
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Menunggu TTD', ?, ?)";
                 $paramsH = [
                     $tanggal,
                     $rawType,
@@ -703,7 +722,8 @@ if ($action === 'add') {
                     $noGrn,
                     $pengirim,
                     $penerima,
-                    $currentUser['user']
+                    $currentUser['user'],
+                    $activityRequestId
                 ];
                 $stmtH = sqlsrv_query($conn, $sqlH, $paramsH);
                 if (!$stmtH || !($rowH = sqlsrv_fetch_array($stmtH, SQLSRV_FETCH_ASSOC))) {
@@ -722,8 +742,8 @@ if ($action === 'add') {
 
                 // Insert Multi-PO items jika ada
                 if ($isMultiPo && !empty($poItems)) {
-                    foreach ($poItems as $pItem) {
-                        $sqlP = "INSERT INTO dbo.purchasing_po_items (header_id, item_no, no_po, description, vendor, no_grn) VALUES (?, ?, ?, ?, ?, ?)";
+                    foreach ($poItems as $poItemIndex => $pItem) {
+                        $sqlP = "INSERT INTO dbo.purchasing_po_items (header_id, item_no, no_po, description, vendor, no_grn) OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?)";
                         $stmtP = sqlsrv_query($conn, $sqlP, [
                             $headerId,
                             $pItem['no'],
@@ -732,8 +752,19 @@ if ($action === 'add') {
                             $pItem['vendor'],
                             $pItem['no_grn']
                         ]);
-                        if (!$stmtP) throw new Exception("Gagal menyimpan rincian PO: " . print_r(sqlsrv_errors(), true));
+                        $rowP = $stmtP ? sqlsrv_fetch_array($stmtP, SQLSRV_FETCH_ASSOC) : false;
+                        if (!$stmtP || !is_array($rowP) || empty($rowP['id'])) throw new Exception('Gagal menyimpan rincian PO.');
+                        $poItems[$poItemIndex]['id'] = (int) $rowP['id'];
+                        sqlsrv_free_stmt($stmtP);
                     }
+                }
+
+                if ($isMultiPo) {
+                    foreach ($poItems as $pItem) {
+                        purchasingActivityCreateIssue($conn, (int) $headerId, (int) $pItem['id'], $rawType, (string) $pItem['no_po'], (string) $pItem['desc'], (string) $pItem['vendor'], (string) $pItem['no_grn'], $descriptions, $tanggal, $currentUser['user']);
+                    }
+                } else {
+                    purchasingActivityCreateIssue($conn, (int) $headerId, null, $rawType, $noPo, implode('; ', $descriptions), $vendor, $noGrn, $descriptions, $tanggal, $currentUser['user']);
                 }
             }
 
@@ -742,7 +773,7 @@ if ($action === 'add') {
             exit;
         } catch (Exception $e) {
             sqlsrv_rollback($conn);
-            echo json_encode(['status' => 'error', 'message' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+            echo json_encode(['status' => 'error', 'message' => $e instanceof RuntimeException ? $e->getMessage() : 'Data serah terima dan Issue tidak dapat disimpan.']);
             exit;
         }
     } else {
