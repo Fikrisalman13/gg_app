@@ -166,6 +166,15 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.badge-doc-yes:hover {
+    background-color: #a7f3d0;
+    color: #064e3b;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+    transform: translateY(-1px);
 }
 .badge-doc-no {
     background-color: #fee2e2;
@@ -178,6 +187,18 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.badge-doc-no:hover {
+    background-color: #fecaca;
+    color: #7f1d1d;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+    transform: translateY(-1px);
+}
+#modalPreviewPDF {
+    z-index: 1060;
 }
 .badge-pub-draft {
     background-color: #f1f5f9;
@@ -1238,20 +1259,22 @@ $(document).ready(function () {
                     data: null,
                     className: 'text-center',
                     render: function (data, type, row) {
-                        if (row.has_packinglist) {
-                            return `<span class="badge-doc-yes btn-open-doc" data-id="${row.id}" data-type="packinglist" style="cursor:pointer;" title="Klik untuk lihat file"><i class="fas fa-check"></i> Sudah</span>`;
+                        const noRef = row.no_do || row.no_bale || '-';
+                        if (row.has_packinglist && row.packinglist_file) {
+                            return `<span class="badge-doc-yes btn-preview-doc" data-url="${row.packinglist_file}" data-title="Packing List - No DO: ${noRef}" title="Klik untuk lihat PDF Packing List"><i class="fas fa-check"></i> Sudah</span>`;
                         }
-                        return `<span class="badge-doc-no"><i class="fas fa-times"></i> Belum</span>`;
+                        return `<span class="badge-doc-no btn-upload-doc" data-id="${row.id}" data-type="packinglist" title="Klik untuk upload Packing List"><i class="fas fa-times"></i> Belum</span>`;
                     }
                 },
                 {
                     data: null,
                     className: 'text-center',
                     render: function (data, type, row) {
-                        if (row.has_suratjalan) {
-                            return `<span class="badge-doc-yes btn-open-doc" data-id="${row.id}" data-type="suratjalan" style="cursor:pointer;" title="Klik untuk lihat file"><i class="fas fa-check"></i> Sudah</span>`;
+                        const noRef = row.no_do || row.no_bale || '-';
+                        if (row.has_suratjalan && row.suratjalan_file) {
+                            return `<span class="badge-doc-yes btn-preview-doc" data-url="${row.suratjalan_file}" data-title="Surat Jalan - No DO: ${noRef}" title="Klik untuk lihat PDF Surat Jalan"><i class="fas fa-check"></i> Sudah</span>`;
                         }
-                        return `<span class="badge-doc-no"><i class="fas fa-times"></i> Belum</span>`;
+                        return `<span class="badge-doc-no btn-upload-doc" data-id="${row.id}" data-type="suratjalan" title="Klik untuk upload Surat Jalan"><i class="fas fa-times"></i> Belum</span>`;
                     }
                 },
                 {
@@ -1851,7 +1874,7 @@ $(document).ready(function () {
                 $('#badgePLStatus').html('<span class="badge badge-success px-2 py-1"><i class="fas fa-check mr-1"></i> Sudah Ada</span>');
                 $('#textPLFile').text(d.packinglist_file.split('/').pop());
                 $('#textPLMeta').text(`Diupload oleh: ${d.packinglist_by || '-'} pada ${d.packinglist_at || '-'}`);
-                $('#btnPreviewPL').attr('data-url', d.packinglist_file);
+                $('#btnPreviewPL').attr('data-url', d.packinglist_file).attr('data-title', `Packing List - ${noBaleDisplay}`);
                 $('#btnDownloadPL').attr('href', d.packinglist_file);
                 $('#infoPLUploaded').show();
             } else {
@@ -1864,7 +1887,7 @@ $(document).ready(function () {
                 $('#badgeSJStatus').html('<span class="badge badge-success px-2 py-1"><i class="fas fa-check mr-1"></i> Sudah Ada</span>');
                 $('#textSJFile').text(d.suratjalan_file.split('/').pop());
                 $('#textSJMeta').text(`Diupload oleh: ${d.suratjalan_by || '-'} pada ${d.suratjalan_at || '-'}`);
-                $('#btnPreviewSJ').attr('data-url', d.suratjalan_file);
+                $('#btnPreviewSJ').attr('data-url', d.suratjalan_file).attr('data-title', `Surat Jalan - ${noBaleDisplay}`);
                 $('#btnDownloadSJ').attr('href', d.suratjalan_file);
                 $('#infoSJUploaded').show();
             } else {
@@ -2003,18 +2026,34 @@ $(document).ready(function () {
     });
 
     // ─── PDF PREVIEW ────────────────────────────────────────────────────────
-    $(document).on('click', '.btn-preview-pdf', function () {
-        const fileUrl = $(this).attr('data-url');
-        if (!fileUrl) return;
+    $(document).on('click', '.btn-preview-pdf, .btn-preview-doc', function () {
+        const fileUrl = $(this).attr('data-url') || $(this).data('url');
+        const title = $(this).attr('data-title') || $(this).data('title') || 'Preview PDF';
+        if (!fileUrl) {
+            toastr.warning('Berkas PDF tidak ditemukan.');
+            return;
+        }
 
+        $('#pdfPreviewTitle').html(`<i class="fas fa-file-pdf text-danger mr-2"></i> ${title}`);
         $('#pdfFrame').attr('src', fileUrl);
         $('#btnOpenNewTab').attr('href', fileUrl);
         $('#modalPreviewPDF').modal('show');
     });
 
-    $(document).on('click', '.btn-open-doc', function () {
+    $(document).on('click', '.btn-upload-doc', function () {
         const id = $(this).data('id');
-        openDetailModal(id);
+        if (id) {
+            openDetailModal(id);
+        }
+    });
+
+    // Reset iframe saat modal preview PDF ditutup agar tidak memberatkan memori
+    $('#modalPreviewPDF').on('hidden.bs.modal', function () {
+        $('#pdfFrame').attr('src', '');
+        $('#pdfPreviewTitle').html('<i class="fas fa-file-pdf text-danger mr-2"></i> Preview PDF');
+        if ($('#modalDetail').hasClass('show')) {
+            $('body').addClass('modal-open');
+        }
     });
 
     // ─── DELETE DATA ────────────────────────────────────────────────────────

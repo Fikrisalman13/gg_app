@@ -487,7 +487,8 @@ $(function () {
                     
                     // Delete button
                     if (canDelete) {
-                        buttons += `<button class="btn btn-danger btn-sm btn-delete" data-name="${name}" title="Hapus"><i class="fas fa-trash"></i></button>`;
+                        const targetIp = row[2] || '';
+                        buttons += `<button class="btn btn-danger btn-sm btn-delete" data-name="${name}" data-ip="${targetIp}" title="Hapus"><i class="fas fa-trash"></i></button>`;
                     }
                     
                     return buttons;
@@ -593,18 +594,69 @@ $(function () {
     $('#userInternetTable').on('click', '.btn-delete', function(e) {
         e.preventDefault();
         const name = $(this).data('name');
+        const targetIp = $(this).data('ip') || '';
+
         Swal.fire({
             title: 'Konfirmasi Hapus',
-            text: `Apakah Anda yakin ingin menghapus user "${name}"?`,
+            html: `Apakah Anda yakin ingin menghapus user:<br><strong>${name}</strong>${targetIp ? '<br><small class="text-muted">Target IP: ' + targetIp + '</small>' : ''}<br><br><span class="text-danger small"><i class="fas fa-exclamation-triangle"></i> Data akan dihapus dari Simple Queue, Firewall, DHCP Lease, ARP, dan Database.</span>`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
             cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Ya, hapus!',
+            confirmButtonText: '<i class="fas fa-trash"></i> Ya, Hapus!',
             cancelButtonText: 'Batal'
         }).then((result) => {
             if (result.isConfirmed) {
-                showAlert('info', `Fitur hapus untuk ${name} dalam pengembangan`);
+                Swal.fire({
+                    title: 'Sedang menghapus user...',
+                    html: 'Mohon tunggu sampai proses selesai.',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                $.ajax({
+                    url: 'delete_user_internet.php',
+                    type: 'POST',
+                    data: {
+                        name: name,
+                        target_ip: targetIp
+                    },
+                    dataType: 'json',
+                    success: function(resp) {
+                        Swal.close();
+                        if (resp && resp.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Berhasil!',
+                                text: resp.message || 'User berhasil dihapus.',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                            dataTable.ajax.reload(null, false);
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal',
+                                text: (resp && resp.message) ? resp.message : 'Terjadi kesalahan saat menghapus user.'
+                            });
+                        }
+                    },
+                    error: function(xhr) {
+                        Swal.close();
+                        let msg = 'Terjadi kesalahan pada server saat menghapus data.';
+                        try {
+                            const res = JSON.parse(xhr.responseText);
+                            if (res && res.message) msg = res.message;
+                        } catch(e) {}
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
+                            text: msg
+                        });
+                    }
+                });
             }
         });
     });

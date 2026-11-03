@@ -73,6 +73,7 @@ function sendPurchasingIssueListResponse($conn): void
         echo json_encode($response, JSON_UNESCAPED_UNICODE);
         return;
     }
+    $includeSummary = $scope === 'history' && (string) ($_REQUEST['includeSummary'] ?? '') === '1';
     $filters[] = $scope === 'history'
         ? 'i.status = ?'
         : '(i.status <> ? OR i.status IS NULL)';
@@ -188,23 +189,55 @@ function sendPurchasingIssueListResponse($conn): void
         array_push($filteredParameters, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern);
     }
 
-    $filteredCountSql = 'SELECT COUNT_BIG(*) AS total ' . $baseFrom . ' ' . $filteredWhere;
-    $filteredCountStatement = sqlsrv_query($conn, $filteredCountSql, $filteredParameters);
-    if ($filteredCountStatement === false) {
-        http_response_code(500);
-        $response['error'] = 'Data issues tidak dapat dimuat.';
-        echo json_encode($response, JSON_UNESCAPED_UNICODE);
-        return;
+    if ($includeSummary) {
+        $summarySql = 'SELECT COUNT_BIG(*) AS total,
+                              COALESCE(SUM(CASE WHEN i.issue_type = ? THEN 1 ELSE 0 END), 0) AS task_total,
+                              COALESCE(SUM(CASE WHEN i.issue_type = ? THEN 1 ELSE 0 END), 0) AS support_activities_total
+                       ' . $baseFrom . ' ' . $filteredWhere;
+        $summaryParameters = ['Task', 'Support Activities'];
+        $summaryParameters = array_merge($summaryParameters, $filteredParameters);
+        $summaryStatement = sqlsrv_query($conn, $summarySql, $summaryParameters);
+        if ($summaryStatement === false) {
+            http_response_code(500);
+            $response['error'] = 'Data issues tidak dapat dimuat.';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        $summaryRow = sqlsrv_fetch_array($summaryStatement, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($summaryStatement);
+        if ($summaryRow === false) {
+            http_response_code(500);
+            $response['error'] = 'Data issues tidak dapat dimuat.';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $summaryTotal = (int) ($summaryRow['total'] ?? 0);
+        $response['recordsFiltered'] = $summaryTotal;
+        $response['summary'] = [
+            'total' => $summaryTotal,
+            'task' => (int) ($summaryRow['task_total'] ?? 0),
+            'support_activities' => (int) ($summaryRow['support_activities_total'] ?? 0)
+        ];
+    } else {
+        $filteredCountSql = 'SELECT COUNT_BIG(*) AS total ' . $baseFrom . ' ' . $filteredWhere;
+        $filteredCountStatement = sqlsrv_query($conn, $filteredCountSql, $filteredParameters);
+        if ($filteredCountStatement === false) {
+            http_response_code(500);
+            $response['error'] = 'Data issues tidak dapat dimuat.';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        $filteredCountRow = sqlsrv_fetch_array($filteredCountStatement, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($filteredCountStatement);
+        if ($filteredCountRow === false) {
+            http_response_code(500);
+            $response['error'] = 'Data issues tidak dapat dimuat.';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        $response['recordsFiltered'] = (int) ($filteredCountRow['total'] ?? 0);
     }
-    $filteredCountRow = sqlsrv_fetch_array($filteredCountStatement, SQLSRV_FETCH_ASSOC);
-    sqlsrv_free_stmt($filteredCountStatement);
-    if ($filteredCountRow === false) {
-        http_response_code(500);
-        $response['error'] = 'Data issues tidak dapat dimuat.';
-        echo json_encode($response, JSON_UNESCAPED_UNICODE);
-        return;
-    }
-    $response['recordsFiltered'] = (int) ($filteredCountRow['total'] ?? 0);
 
     $activeOrderColumns = [
         1 => 'i.created_by',

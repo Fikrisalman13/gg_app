@@ -163,13 +163,15 @@ $isSigned        = ($detail['status_ttd_raw'] ?? '') === 'Sudah Ditandatangani';
 
 // Warna badge type
 $typeBadgeMap = [
-    'COD'       => 'badge-success',
-    'RFP'       => 'badge-info',
-    'OFFSET'    => 'badge-warning',
-    'Kontrabon' => 'badge-secondary',
-    'PO'        => 'badge-primary',
+    'COD'             => 'badge-success',
+    'RFP'             => 'badge-info',
+    'OFFSET'          => 'badge-warning',
+    'Kontrabon'       => 'badge-secondary',
+    'PO'              => 'badge-primary',
+    'Purchase Return' => 'badge-danger',
 ];
 $typeBadge = $typeBadgeMap[$detail['type']] ?? 'badge-dark';
+$isReturnType = ($detail['type'] === 'Purchase Return' || stripos($detail['type'], 'Return') !== false);
 
 // Parsing Nama & Departemen Penerima Tanda Tangan
 $targetSigner = !empty($detail['signed_by']) ? $detail['signed_by'] : ($detail['penerima'] ?? '');
@@ -285,9 +287,9 @@ function renderPoBadge($poStr) {
                 <div class="info-item">
                     <div class="info-icon" style="background:#e8f4fd; color:#2980b9;"><i class="fas fa-layer-group"></i></div>
                     <div>
-                        <div class="info-label">Total Dokumen PO</div>
+                        <div class="info-label"><?= $isReturnType ? 'Total Dokumen Return' : 'Total Dokumen PO' ?></div>
                         <div class="info-value">
-                            <span class="badge badge-primary px-2 py-1" style="font-size:12px;"><?= count($detail['po_items']) ?> Baris PO</span>
+                            <span class="badge <?= $isReturnType ? 'badge-danger' : 'badge-primary' ?> px-2 py-1" style="font-size:12px;"><?= count($detail['po_items']) ?> Baris <?= $isReturnType ? 'Return' : 'PO' ?></span>
                         </div>
                     </div>
                 </div>
@@ -326,13 +328,23 @@ function renderPoBadge($poStr) {
     </div>
 
     <!-- ============================================================ -->
-    <!-- TAMPILAN 1: MULTI-PO TABEL (Untuk dibuat Cek)               -->
+    <!-- TAMPILAN 1: MULTI-PO / RETURN TABEL                          -->
     <!-- ============================================================ -->
     <?php if ($isMultiPo): ?>
+    <?php
+    $cardTitle = $isReturnType ? 'Rincian Dokumen Return' : 'Rincian Dokumen PO <span class="text-muted font-weight-normal">(Untuk dibuat Cek)</span>';
+    $cardIcon = $isReturnType ? 'fa-undo-alt text-danger' : 'fa-list-ol text-primary';
+    $itemBadge = $isReturnType ? (count($detail['po_items']) . ' Item Return') : (count($detail['po_items']) . ' Item PO');
+    $badgePillClass = $isReturnType ? 'badge-danger' : 'badge-primary';
+    $col4Title = $isReturnType ? 'Return No.' : 'No. PO';
+    $col5Title = $isReturnType ? 'No. CN/DN' : 'No. GRN';
+    $col4Title = 'No. PO';
+    $col5Title = $isReturnType ? 'Return No.' : 'No. GRN';
+    ?>
     <div class="detail-card">
         <div class="detail-card-header">
-            <h6><i class="fas fa-list-ol mr-2 text-primary"></i>Rincian Dokumen PO <span class="text-muted font-weight-normal">(Untuk dibuat Cek)</span></h6>
-            <span class="badge badge-pill badge-primary px-3"><?= count($detail['po_items']) ?> Item PO</span>
+            <h6><i class="fas <?= $cardIcon ?> mr-2"></i><?= $cardTitle ?></h6>
+            <span class="badge badge-pill <?= $badgePillClass ?> px-3"><?= $itemBadge ?></span>
         </div>
         <div class="table-responsive">
             <table class="table detail-table table-bordered table-hover mb-0">
@@ -341,8 +353,8 @@ function renderPoBadge($poStr) {
                         <th class="text-center" style="width:5%">No</th>
                         <th style="width:28%">Description / Nominal</th>
                         <th style="width:25%">Nama Supplier</th>
-                        <th class="text-center" style="width:22%">No. PO</th>
-                        <th class="text-center" style="width:20%">No. GRN</th>
+                        <th class="text-center" style="width:22%"><?= $col4Title ?></th>
+                        <th class="text-center" style="width:20%"><?= $col5Title ?></th>
                     </tr>
                 </thead>
                 <tbody>

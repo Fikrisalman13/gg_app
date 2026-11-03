@@ -333,6 +333,296 @@ if ($action === 'get_po_detail') {
 }
 
 // =========================================================================
+// ACTION: GET_RETURN_DETAIL (Koneksi ke ERP Proint via koneksi3.php - prreturnhd & prreturndt)
+// =========================================================================
+if ($action === 'get_return_detail') {
+    $returnNo = trim($_POST['return_no'] ?? ($_GET['return_no'] ?? ''));
+    if (empty($returnNo)) {
+        echo json_encode(['status' => 'error', 'message' => 'Nomor Return tidak boleh kosong!']);
+        exit;
+    }
+
+    $koneksi3Path = file_exists(__DIR__ . '/../../koneksi3.php') ? __DIR__ . '/../../koneksi3.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi3.php');
+    if (!file_exists($koneksi3Path)) {
+        echo json_encode(['status' => 'error', 'message' => 'File koneksi3.php tidak ditemukan!']);
+        exit;
+    }
+
+    try {
+        include_once $koneksi3Path;
+        if (!isset($conn3) || !$conn3) {
+            echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database Proint ERP gagal!']);
+            exit;
+        }
+
+        $stmtHd = $conn3->prepare("
+            SELECT 
+                h.returnhdid,
+                h.returnnmbr,
+                h.draftnmbr,
+                h.returndate,
+                h.vendorid,
+                h.returndesc,
+                h.cndnnmbr,
+                v.vendorname,
+                v.vendorcode
+            FROM prreturnhd h
+            LEFT JOIN smvendor v ON h.vendorid = v.vendorid
+            WHERE UPPER(TRIM(h.returnnmbr)) = UPPER(TRIM(:return_no))
+               OR UPPER(TRIM(h.draftnmbr)) = UPPER(TRIM(:return_no))
+               OR UPPER(h.returnnmbr) LIKE UPPER(:return_no_like)
+            ORDER BY 
+                CASE WHEN UPPER(TRIM(h.returnnmbr)) = UPPER(TRIM(:return_no)) THEN 0 ELSE 1 END
+            LIMIT 1
+        ");
+        $stmtHd->execute([
+            ':return_no' => $returnNo,
+            ':return_no_like' => '%' . $returnNo . '%'
+        ]);
+        $header = $stmtHd->fetch(PDO::FETCH_ASSOC);
+
+        if ($header) {
+            $returnhdid = $header['returnhdid'];
+
+            // Hitung TOTAL nilai amount dari prreturndt
+            $stmtSum = $conn3->prepare("
+                SELECT 
+                    SUM(COALESCE(NULLIF(totamount, 0), totamounthc, totprice, 0)) AS total_amount,
+                    COUNT(*) AS total_items,
+                    string_agg(prodname, ', ') AS prod_names
+                FROM prreturndt
+                WHERE returnhdid = :hdid
+            ");
+            $stmtSum->execute([':hdid' => $returnhdid]);
+            $sumRow = $stmtSum->fetch(PDO::FETCH_ASSOC);
+
+            $amount = (float)($sumRow['total_amount'] ?? 0);
+            $formattedAmount = 'Rp.' . number_format($amount, 0, ',', '.');
+            $vendorName = ucwords(strtolower(trim($header['vendorname'] ?? '')));
+            $cnDnNmbr = trim($header['cndnnmbr'] ?? '') ?: '-';
+
+            echo json_encode([
+                'status' => 'success',
+                'data' => [
+                    'returnhdid'          => $returnhdid,
+                    'returnnmbr'          => $header['returnnmbr'],
+                    'vendor'              => $vendorName,
+                    'vendor_code'         => $header['vendorcode'] ?? '',
+                    'amount'              => $amount,
+                    'formatted_amount'    => $formattedAmount,
+                    'cndnnmbr'            => $cnDnNmbr,
+                    'returndesc'          => trim($header['returndesc'] ?? ''),
+                    'prod_names'          => $sumRow['prod_names'] ?? ''
+                ]
+            ]);
+            exit;
+        } else {
+            echo json_encode([
+                'status' => 'error', 
+                'message' => 'Nomor Return "' . htmlspecialchars($returnNo) . '" tidak ditemukan di database Proint ERP.'
+            ]);
+            exit;
+        }
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Terjadi kendala saat membaca data Return: ' . $e->getMessage()
+        ]);
+        exit;
+    }
+}
+
+// =========================================================================
+// ACTION: GET_RETURN_BY_PO (Koneksi ke ERP Proint via koneksi3.php)
+// Melacak dokumen Return terkini berdasarkan No. PO
+// =========================================================================
+if ($action === 'get_return_by_po') {
+    $noPo = trim($_POST['no_po'] ?? ($_GET['no_po'] ?? ''));
+    if (empty($noPo)) {
+        echo json_encode(['status' => 'error', 'message' => 'Nomor PO tidak boleh kosong!']);
+        exit;
+    }
+
+    $koneksi3Path = file_exists(__DIR__ . '/../../koneksi3.php') ? __DIR__ . '/../../koneksi3.php' : ($_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi3.php');
+    if (!file_exists($koneksi3Path)) {
+        echo json_encode(['status' => 'error', 'message' => 'File koneksi3.php tidak ditemukan!']);
+        exit;
+    }
+
+    try {
+        include_once $koneksi3Path;
+        if (!isset($conn3) || !$conn3) {
+            echo json_encode(['status' => 'error', 'message' => 'Koneksi ke database Proint ERP gagal!']);
+            exit;
+        }
+
+        // 1. Ambil data PO & vendor
+        $stmtPo = $conn3->prepare("
+            SELECT p.pohdid, p.ponmbr, p.podate, p.povendorname
+            FROM prpohd p
+            WHERE UPPER(TRIM(p.ponmbr)) = UPPER(TRIM(:po))
+               OR UPPER(p.ponmbr) LIKE UPPER(:po_like)
+            ORDER BY CASE WHEN UPPER(TRIM(p.ponmbr)) = UPPER(TRIM(:po)) THEN 0 ELSE 1 END
+            LIMIT 1
+        ");
+        $stmtPo->execute([':po' => $noPo, ':po_like' => '%' . $noPo . '%']);
+        $poInfo = $stmtPo->fetch(PDO::FETCH_ASSOC);
+
+        $pohdid = $poInfo['pohdid'] ?? null;
+        $canonicalPo = $poInfo['ponmbr'] ?? $noPo;
+        $defaultVendor = ucwords(strtolower(trim($poInfo['povendorname'] ?? '')));
+
+        // 2. Ambil list GRN dari PO jika ada
+        $grnList = [];
+        if ($pohdid) {
+            $stmtGrn = $conn3->prepare("
+                SELECT DISTINCT gh.grnhdid, gh.grnnmbr
+                FROM prgrndt gd
+                JOIN prgrnhd gh ON gh.grnhdid = gd.grnhdid
+                WHERE gd.pohdid = :pohdid
+            ");
+            $stmtGrn->execute([':pohdid' => $pohdid]);
+            $grnList = $stmtGrn->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        // 3. Query 5 Jalur pencarian Return
+        $sql = "
+            WITH matched_returns AS (
+                -- Jalur A: PO tercatat di returndesc
+                SELECT rh.returnhdid, rh.returnnmbr
+                FROM prreturnhd rh
+                WHERE rh.returndesc ILIKE :po_pattern
+
+                UNION
+
+                -- Jalur B: PO tercatat di apcndnhd
+                SELECT cpr.returnhdid, cpr.returnnmbr
+                FROM apcndnhd ch
+                JOIN apcndnpurchret cpr ON cpr.cndnhdid = ch.cndnhdid
+                WHERE ch.cndndesc ILIKE :po_pattern
+        ";
+
+        $params = [
+            ':po_pattern' => '%' . $canonicalPo . '%'
+        ];
+
+        if (!empty($grnList)) {
+            $grnNmbrs = array_column($grnList, 'grnnmbr');
+            $grnHdids = array_column($grnList, 'grnhdid');
+
+            // Jalur C: GRN di prreturndt
+            $sql .= "
+                UNION
+                SELECT rh.returnhdid, rh.returnnmbr
+                FROM prreturndt rd
+                JOIN prreturnhd rh ON rh.returnhdid = rd.returnhdid
+                WHERE rd.grnhdid IN (" . implode(',', array_map('intval', $grnHdids)) . ")
+            ";
+
+            // Jalur D: GRN di apcndnhd
+            foreach ($grnNmbrs as $idx => $gn) {
+                $paramKey = ":grn_pat_$idx";
+                $sql .= "
+                    UNION
+                    SELECT cpr.returnhdid, cpr.returnnmbr
+                    FROM apcndnhd ch
+                    JOIN apcndnpurchret cpr ON cpr.cndnhdid = ch.cndnhdid
+                    WHERE ch.cndndesc ILIKE $paramKey
+                ";
+                $params[$paramKey] = '%' . $gn . '%';
+            }
+
+            // Jalur E: GRN di returndesc
+            foreach ($grnNmbrs as $idx => $gn) {
+                $paramKeyE = ":grn_desc_pat_$idx";
+                $sql .= "
+                    UNION
+                    SELECT rh.returnhdid, rh.returnnmbr
+                    FROM prreturnhd rh
+                    WHERE rh.returndesc ILIKE $paramKeyE
+                ";
+                $params[$paramKeyE] = '%' . $gn . '%';
+            }
+        }
+
+        // Fallback: Jika pengguna langsung mengetik nomor Return (misal RTLC/...)
+        $sql .= "
+                UNION
+                SELECT rh.returnhdid, rh.returnnmbr
+                FROM prreturnhd rh
+                WHERE UPPER(TRIM(rh.returnnmbr)) = UPPER(TRIM(:direct_rno))
+                   OR UPPER(rh.returnnmbr) LIKE UPPER(:direct_rno_like)
+        ";
+        $params[':direct_rno'] = $noPo;
+        $params[':direct_rno_like'] = '%' . $noPo . '%';
+
+        $sql .= ")
+            SELECT 
+                mr.returnhdid,
+                mr.returnnmbr,
+                rh.returndate,
+                rh.returndesc,
+                rh.cndnnmbr,
+                v.vendorname,
+                COALESCE(
+                    (SELECT SUM(totalamount) FROM apcndnpurchret WHERE returnhdid = mr.returnhdid),
+                    (SELECT SUM(COALESCE(NULLIF(totamount, 0), totamounthc, totprice, 0)) FROM prreturndt WHERE returnhdid = mr.returnhdid),
+                    0
+                ) as total_nominal
+            FROM matched_returns mr
+            JOIN prreturnhd rh ON rh.returnhdid = mr.returnhdid
+            LEFT JOIN smvendor v ON v.vendorid = rh.vendorid
+            ORDER BY rh.returndate DESC, rh.returnhdid DESC
+            LIMIT 1
+        ";
+
+        $stmtReturn = $conn3->prepare($sql);
+        $stmtReturn->execute($params);
+        $matched = $stmtReturn->fetch(PDO::FETCH_ASSOC);
+
+        if ($matched) {
+            $amount = (float)($matched['total_nominal'] ?? 0);
+            $formattedAmount = 'Rp.' . number_format($amount, 0, ',', '.');
+            $vendorName = ucwords(strtolower(trim($matched['vendorname'] ?? $defaultVendor)));
+            $returnNmbr = trim($matched['returnnmbr'] ?? '');
+            $cnDnNmbr = trim($matched['cndnnmbr'] ?? '') ?: '-';
+
+            echo json_encode([
+                'status' => 'success',
+                'data' => [
+                    'returnhdid'       => $matched['returnhdid'],
+                    'returnnmbr'       => $returnNmbr,
+                    'no_po'            => $canonicalPo,
+                    'vendor'           => $vendorName,
+                    'amount'           => $amount,
+                    'formatted_amount' => $formattedAmount,
+                    'cndnnmbr'         => $cnDnNmbr,
+                    'returndesc'       => trim($matched['returndesc'] ?? '')
+                ]
+            ]);
+            exit;
+        } else {
+            echo json_encode([
+                'status' => 'not_found',
+                'message' => 'Dokumen Return untuk PO "' . htmlspecialchars($canonicalPo) . '" belum ditemukan di Proint ERP.',
+                'data' => [
+                    'no_po'      => $canonicalPo,
+                    'vendor'     => $defaultVendor,
+                    'returnnmbr' => ''
+                ]
+            ]);
+            exit;
+        }
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Terjadi kendala saat membaca data Return: ' . $e->getMessage()
+        ]);
+        exit;
+    }
+}
+
+// =========================================================================
 // ACTION: GET_RFP_DETAIL (Koneksi ke ERP Proint via koneksi3.php)
 // Mengambil data vendor + No. PO (dari reqdesc) + GRN sekaligus dalam 1 request
 // =========================================================================
@@ -652,6 +942,9 @@ if ($action === 'add') {
                     if (empty($typeKet)) {
                         $typeKet = 'Untuk dibuat Cek';
                     }
+                } elseif ($rawType === 'Purchase Return' || stripos($rawType, 'Return') !== false) {
+                    $rawType = 'Purchase Return';
+                    $isMultiPo = 1;
                 }
 
                 if ($isMultiPo && !empty($item['po_items']) && is_array($item['po_items'])) {
@@ -901,6 +1194,9 @@ if ($action === 'edit') {
         if (empty($typeKet)) {
             $typeKet = 'Untuk dibuat Cek';
         }
+    } elseif ($rawType === 'Purchase Return' || stripos($rawType, 'Return') !== false) {
+        $rawType = 'Purchase Return';
+        $isMultiPo = true;
     }
 
     $subPoList = [];
@@ -1306,11 +1602,15 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
     $type = htmlspecialchars(trim($row['type'] ?? ''));
     $typeKet = trim($row['type_keterangan'] ?? '');
     $typeClass = 'badge-type-default';
-    if (stripos($type, 'COD') !== false) $typeClass = 'badge-type-cod';
+    if (stripos($type, 'Return') !== false) $typeClass = 'badge-type-purchase-return';
+    elseif (stripos($type, 'COD') !== false) $typeClass = 'badge-type-cod';
     elseif (stripos($type, 'PO') !== false) $typeClass = 'badge-type-po';
     elseif (stripos($type, 'RFP') !== false) $typeClass = 'badge-type-rfp';
     elseif (stripos($type, 'OFFSET') !== false) $typeClass = 'badge-type-offset';
     elseif (stripos($type, 'Kontrabon') !== false) $typeClass = 'badge-type-kontrabon';
+
+    $isReturnType = (stripos($type, 'Return') !== false);
+    $poCodeBadgeClass = $isReturnType ? 'badge-code badge-return' : 'badge-code badge-po';
 
     $typeHtml = '<span class="badge ' . $typeClass . '">' . $type . '</span>';
     if (!empty($typeKet)) {
@@ -1345,7 +1645,7 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
 
             $descHtml   .= "<div class='sub-row-item text-left {$borderClass}'><span class='item-num-badge'>{$num}</span><span class='sub-row-text font-weight-500'>{$descVal}</span></div>";
             $vendorHtml .= "<div class='sub-row-item text-left {$borderClass}'><span class='vendor-name font-weight-bold'>{$vendorVal}</span></div>";
-            $poHtml     .= "<div class='sub-row-item sub-row-item-center {$borderClass}'><span class='badge-code badge-po'>{$poVal}</span></div>";
+            $poHtml     .= "<div class='sub-row-item sub-row-item-center {$borderClass}'><span class='{$poCodeBadgeClass}'>{$poVal}</span></div>";
             $grnHtml    .= "<div class='sub-row-item sub-row-item-center {$borderClass}'>{$grnBadge}</div>";
         }
 
@@ -1367,7 +1667,7 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
 
         $noPoText = htmlspecialchars($row['no_po'] ?? '');
         $poHtml = (!empty($noPoText) && $noPoText !== '-')
-            ? "<div class='sub-row-item sub-row-item-center'><span class='badge-code badge-po'>{$noPoText}</span></div>"
+            ? "<div class='sub-row-item sub-row-item-center'><span class='{$poCodeBadgeClass}'>{$noPoText}</span></div>"
             : "<div class='sub-row-item sub-row-item-center text-muted small'>-</div>";
 
         $grnRaw = trim($row['no_grn'] ?? '-') ?: '-';

@@ -108,22 +108,67 @@ try {
 
 
     // ======================================================
-    // 3️⃣ SET ARP STATIC + COMMENT (jika belum)
+    // 3️⃣ SET ARP STATIC + COMMENT
     // ======================================================
     $arpData = $API->comm('/ip/arp/print', ['?.id' => $arp_id]);
-    if (!empty($arpData)) {
-        $currentArp = $arpData[0];
-        
-        // Jika belum static, buat static
-        if (($currentArp['status'] ?? '') !== 'static') {
-            $API->comm('/ip/arp/make-static', ['.id' => $arp_id]);
-        }
+    if (empty($arpData)) {
+        $arpData = $API->comm('/ip/arp/print', ['?address' => $ip]);
     }
 
-    $API->comm('/ip/arp/set', [
-        '.id' => $arp_id,
-        'comment' => $comment
-    ]);
+    if (!empty($arpData)) {
+        $currentArp = $arpData[0];
+        $isDynamic = false;
+        if (isset($currentArp['dynamic']) && ($currentArp['dynamic'] === 'true' || $currentArp['dynamic'] === true)) {
+            $isDynamic = true;
+        }
+
+        $mac = $currentArp['mac-address'] ?? ($currentArp['mac'] ?? null);
+        $iface = $currentArp['interface'] ?? 'bridge1';
+
+        // Jika MAC belum didapat dari ARP, coba cari dari DHCP lease
+        if (empty($mac)) {
+            $dhcpLookup = $API->comm('/ip/dhcp-server/lease/print', ['?address' => $ip]);
+            $mac = $dhcpLookup[0]['mac-address'] ?? null;
+        }
+
+        if ($isDynamic) {
+            // Pada MikroTik RouterOS, dynamic ARP tidak memiliki perintah make-static
+            // dan tidak bisa diubah (read-only). Untuk menjadikannya static:
+            // hapus entry dynamic lalu tambahkan entry static baru dengan comment.
+            $currentId = $currentArp['.id'] ?? ($currentArp['id'] ?? $arp_id);
+            if (!empty($currentId)) {
+                $API->comm('/ip/arp/remove', ['.id' => $currentId]);
+            }
+
+            $addParams = [
+                'address' => $ip,
+                'comment' => $comment
+            ];
+            if (!empty($mac)) $addParams['mac-address'] = $mac;
+            if (!empty($iface)) $addParams['interface'] = $iface;
+
+            $API->comm('/ip/arp/add', $addParams);
+        } else {
+            // Jika sudah static, cukup update comment
+            $currentId = $currentArp['.id'] ?? ($currentArp['id'] ?? $arp_id);
+            $API->comm('/ip/arp/set', [
+                '.id' => $currentId,
+                'comment' => $comment
+            ]);
+        }
+    } else {
+        // Jika belum ada di ARP list sama sekali
+        $dhcpLookup = $API->comm('/ip/dhcp-server/lease/print', ['?address' => $ip]);
+        $mac = $dhcpLookup[0]['mac-address'] ?? null;
+
+        $addParams = [
+            'address' => $ip,
+            'comment' => $comment,
+            'interface' => 'bridge1'
+        ];
+        if (!empty($mac)) $addParams['mac-address'] = $mac;
+        $API->comm('/ip/arp/add', $addParams);
+    }
 
 
     // ======================================================
@@ -153,9 +198,13 @@ try {
         $leaseData = $API->comm('/ip/dhcp-server/lease/print', ['?.id' => $lease_id]);
         if (!empty($leaseData)) {
             $currentLease = $leaseData[0];
+            $isDynamicLease = false;
+            if (isset($currentLease['dynamic']) && ($currentLease['dynamic'] === 'true' || $currentLease['dynamic'] === true)) {
+                $isDynamicLease = true;
+            }
             
             // Jika belum static, buat static
-            if (($currentLease['status'] ?? '') !== 'static') {
+            if ($isDynamicLease) {
                 $API->comm('/ip/dhcp-server/lease/make-static', ['.id' => $lease_id]);
             }
         }

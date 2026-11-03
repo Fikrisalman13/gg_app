@@ -59,15 +59,16 @@ function purchasingActivityCreateIssue(
 ): int
 {
     $subNames = [
-        'PO' => 'Dokumen PO',
-        'COD' => 'Dokumen COD',
-        'RFP' => 'Dokumen RFP',
-        'OFFSET' => 'Dokumen Offset',
-        'Kontrabon' => 'Dokumen Kontrabon'
+        'PO'              => 'Dokumen PO',
+        'COD'             => 'Dokumen COD',
+        'RFP'             => 'Dokumen RFP',
+        'OFFSET'          => 'Dokumen Offset',
+        'Kontrabon'       => 'Dokumen Kontrabon',
+        'Purchase Return' => 'Dokumen Purchase Return'
     ];
     $subName = $subNames[$type] ?? null;
     if ($subName === null || $noPo === '') {
-        throw new RuntimeException('Type atau nomor PO belum valid untuk aktivitas Issue.');
+        throw new RuntimeException('Type atau nomor dokumen belum valid untuk aktivitas Issue.');
     }
 
     $categoryStatement = sqlsrv_query($conn, "SELECT c.category_id, s.sub_id FROM dbo.purchasing_issue_categories c INNER JOIN dbo.purchasing_issue_sub_categories s ON s.category_id = c.category_id WHERE c.category_name = ? AND c.is_active = 1 AND s.sub_name = ? AND s.is_active = 1", ['Serah Terima Dokumen', $subName]);
@@ -79,7 +80,27 @@ function purchasingActivityCreateIssue(
         throw new RuntimeException('Kategori Serah Terima Dokumen atau subkategori Type tidak tersedia.');
     }
 
-    $lines = ['Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'), 'Nama Supplier: ' . ($vendor !== '' ? $vendor : '-'), 'No. GRN: ' . ($grn !== '' ? $grn : '-')];
+    $isReturn = ($type === 'Purchase Return' || stripos($type, 'Return') !== false);
+    $refLabel = $isReturn ? 'No. CN/DN: ' : 'No. GRN: ';
+    $lines = [
+        'Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'),
+        'Nama Supplier: ' . ($vendor !== '' ? $vendor : '-'),
+        $refLabel . ($grn !== '' ? $grn : '-')
+    ];
+    if ($isReturn) {
+        $lines = [
+            'Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'),
+            'Nama Supplier: ' . ($vendor !== '' ? $vendor : '-'),
+            'No. PO: ' . ($noPo !== '' ? $noPo : '-'),
+            'No. Return: ' . ($grn !== '' ? $grn : '-')
+        ];
+    } else {
+        $lines = [
+            'Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'),
+            'Nama Supplier: ' . ($vendor !== '' ? $vendor : '-'),
+            'No. GRN: ' . ($grn !== '' ? $grn : '-')
+        ];
+    }
     if ($attachments) {
         $lines[] = 'Uraian Berkas:';
         foreach ($attachments as $attachment) {
@@ -93,6 +114,8 @@ function purchasingActivityCreateIssue(
 
     $profile = purchasingIssueCurrentProfile($conn, $username);
     $issueName = 'Membuat Serah Terima Dokumen ' . $type . ' ' . $noPo;
+    $refDoc = ($isReturn && $grn !== '' && $grn !== '-') ? $grn : $noPo;
+    $issueName = 'Membuat Serah Terima Dokumen ' . $type . ' ' . $refDoc;
     $issueSql = 'INSERT INTO dbo.purchasing_issues (
             issue_name, issue_type, category_id, sub_id, sub_category_owner_id,
             status, priority, due_date, description, created_at, created_by,

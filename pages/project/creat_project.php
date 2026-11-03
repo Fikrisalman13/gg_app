@@ -17,7 +17,7 @@ function jsonResponse($payload)
 
 function ensureProjectUploadDir()
 {
-    $dir = __DIR__ . DIRECTORY_SEPARATOR . 'uploads';
+    $dir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'project';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -141,7 +141,7 @@ function handleEditorUpload($fileField, $allowedExtensions, $maxBytes, $prefix, 
         jsonResponse(array('success' => false, 'message' => 'Gagal memindahkan file upload.'));
     }
 
-    $fileUrl = '/gg_app/pages/project/uploads/' . rawurlencode($newFileName);
+    $fileUrl = '/gg_app/uploads/project/' . rawurlencode($newFileName);
     $mimeType = detectUploadedMimeType((string) $file['tmp_name'], (string) ($file['type'] ?? ''));
     registerPendingUpload($formToken, array(
         'file_name' => $originalName !== '' ? $originalName : $newFileName,

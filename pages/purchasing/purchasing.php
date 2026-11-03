@@ -371,8 +371,23 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
     color: #475569;
     border: 1px solid #cbd5e1;
 }
+.badge-return {
+    background-color: #fdf2f8;
+    color: #be185d;
+    border: 1px solid #fbcfe8;
+}
 
 /* Type Badges Beragam Warna Harmonis */
+.badge-type-purchase-return {
+    background-color: #fdf2f8;
+    color: #be185d;
+    border: 1px solid #fbcfe8;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+}
 .badge-type-cod {
     background-color: #ecfdf5;
     color: #047857;
@@ -591,6 +606,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                 <select id="filterType" class="form-control form-control-sm">
                                     <option value="">Semua Type</option>
                                     <option value="PO">PO</option>
+                                    <option value="Purchase Return">Purchase Return</option>
                                     <option value="COD">COD</option>
                                     <option value="RFP">RFP</option>
                                     <option value="OFFSET">OFFSET</option>
@@ -633,8 +649,8 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                                     <th style="width: 130px;">Type</th>
                                     <th style="min-width: 250px;">Description</th>
                                     <th style="width: 170px;">Nama Vendor</th>
-                                    <th style="width: 130px;">No PO</th>
-                                    <th style="width: 100px;">No GRN</th>
+                                    <th style="width: 130px;">No PO / Ref</th>
+                                    <th style="width: 100px;">No GRN / CN-DN</th>
                                     <th style="width: 105px;">Tanda Tangan</th>
                                     <th style="width: 110px;">Tanggal Diterima</th>
                                     <th style="width: 115px;">Aksi</th>
@@ -785,6 +801,7 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                             <label class="small font-weight-bold">Type</label>
                             <select class="form-control form-control-sm mb-1 font-weight-bold" id="editType" name="type" required>
                                 <option value="PO">PO</option>
+                                <option value="Purchase Return">Purchase Return</option>
                                 <option value="COD">COD</option>
                                 <option value="RFP">RFP</option>
                                 <option value="OFFSET">OFFSET</option>
@@ -1573,7 +1590,12 @@ $(document).ready(function() {
     // ---------------------------------------------------------
     // 3. AKSI: EDIT DATA
     // ---------------------------------------------------------
-    function createEditSubPoRow(subIndex, desc = '', vendor = '', noPo = '', noGrn = '-') {
+    function createEditSubPoRow(subIndex, desc = '', vendor = '', noPo = '', noGrn = '-', type = 'PO') {
+        var isReturn = (type === 'Purchase Return');
+        var poPlaceholder = isReturn ? 'e.g. POLC/2609/0630' : 'e.g. POLC/2606/0671';
+        var grnPlaceholder = isReturn ? 'e.g. RTLC/2610/0001' : '-';
+        var fetchTitle = isReturn ? 'Ambil Data Return dari Proint ERP' : 'Ambil Nominal & Supplier dari Proint ERP';
+
         return `
             <tr class="edit-subpo-row" data-subidx="${subIndex}">
                 <td class="align-middle font-weight-bold edit-subpo-num text-center">${subIndex + 1}</td>
@@ -1585,9 +1607,9 @@ $(document).ready(function() {
                 </td>
                 <td>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control form-control-sm input-editsubpo-nopo" name="po_items[${subIndex}][no_po]" value="${noPo}" placeholder="e.g. POLC/2606/0671" required autocomplete="off">
+                        <input type="text" class="form-control form-control-sm input-editsubpo-nopo" name="po_items[${subIndex}][no_po]" value="${noPo}" placeholder="${poPlaceholder}" required autocomplete="off">
                         <div class="input-group-append">
-                            <button type="button" class="btn btn-outline-secondary btn-fetch-editsubpo" title="Ambil Nominal & Supplier dari Proint ERP">
+                            <button type="button" class="btn btn-outline-secondary btn-fetch-editsubpo" title="${fetchTitle}">
                                 <i class="fas fa-search"></i>
                             </button>
                         </div>
@@ -1597,10 +1619,10 @@ $(document).ready(function() {
                     </small>
                 </td>
                 <td>
-                    <input type="text" class="form-control form-control-sm input-editsubpo-nogrn" name="po_items[${subIndex}][no_grn]" value="${noGrn}" placeholder="-" title="${noGrn}">
+                    <input type="text" class="form-control form-control-sm input-editsubpo-nogrn" name="po_items[${subIndex}][no_grn]" value="${noGrn}" placeholder="${grnPlaceholder}" title="${noGrn}">
                 </td>
                 <td class="align-middle text-center">
-                    <button type="button" class="btn btn-outline-danger btn-xs btn-remove-editsubpo" title="Hapus Sub-PO">
+                    <button type="button" class="btn btn-outline-danger btn-xs btn-remove-editsubpo" title="Hapus Sub-Baris">
                         <i class="fas fa-times"></i>
                     </button>
                 </td>
@@ -1612,12 +1634,42 @@ $(document).ready(function() {
         if (typeVal === 'PO' || typeVal === 'PO Untuk dibuat Cek') {
             $('#editMultiPoSection').show();
             $('#editStandardSection').hide();
+            $('#editMultiPoSection .card-header span.text-primary.small').html('<i class="fas fa-list-ol mr-1"></i> Rincian PO');
+            $('#btnEditAddSubPo').html('<i class="fas fa-plus mr-1"></i> Tambah Baris PO');
+            $('#tableEditSubPo thead th:nth-child(3)').html('Nama Supplier <span class="text-danger">*</span>');
+            $('#tableEditSubPo thead th:nth-child(4)').html('No. PO <span class="text-danger">*</span>');
+            $('#tableEditSubPo thead th:nth-child(5)').html('No. GRN');
+            $('#tbodyEditSubPo .input-editsubpo-nopo').attr('placeholder', 'e.g. POLC/2606/0671');
+            $('#tbodyEditSubPo .input-editsubpo-nogrn').attr('placeholder', '-');
+            $('#tbodyEditSubPo .btn-fetch-editsubpo').attr('title', 'Ambil Nominal & Supplier dari Proint ERP');
+
             $('#btnEditPoKetDropdownWrapper').removeClass('d-none');
             $('#btnEditRfpFetchWrapper').addClass('d-none');
             $('#editRfpLoadingText').addClass('d-none');
             $('#editTypeKeterangan').attr('list', 'listPoKeterangan').attr('placeholder', 'Pilih / ketik keterangan...');
             if (!$('#editTypeKeterangan').val()) {
                 $('#editTypeKeterangan').val('Untuk dibuat Cek');
+            }
+            $('#editMultiPoSection input').prop('disabled', false);
+            $('#editStandardSection input, #editStandardSection textarea').prop('disabled', true);
+        } else if (typeVal === 'Purchase Return') {
+            $('#editMultiPoSection').show();
+            $('#editStandardSection').hide();
+            $('#editMultiPoSection .card-header span.text-primary.small').html('<i class="fas fa-undo-alt mr-1"></i> Rincian Return');
+            $('#btnEditAddSubPo').html('<i class="fas fa-plus mr-1"></i> Tambah Baris Return');
+            $('#tableEditSubPo thead th:nth-child(3)').html('Nama Supplier <span class="text-danger">*</span>');
+            $('#tableEditSubPo thead th:nth-child(4)').html('No. PO <span class="text-danger">*</span>');
+            $('#tableEditSubPo thead th:nth-child(5)').html('Return No. <span class="text-danger">*</span>');
+            $('#tbodyEditSubPo .input-editsubpo-nopo').attr('placeholder', 'e.g. POLC/2609/0630');
+            $('#tbodyEditSubPo .input-editsubpo-nogrn').attr('placeholder', 'e.g. RTLC/2610/0001');
+            $('#tbodyEditSubPo .btn-fetch-editsubpo').attr('title', 'Ambil Data Return dari Proint ERP');
+
+            $('#btnEditPoKetDropdownWrapper').addClass('d-none');
+            $('#btnEditRfpFetchWrapper').addClass('d-none');
+            $('#editRfpLoadingText').addClass('d-none');
+            $('#editTypeKeterangan').removeAttr('list').attr('placeholder', 'Keterangan Return (opsional)');
+            if ($('#editTypeKeterangan').val() === 'Untuk dibuat Cek' || (Array.isArray(poKeteranganCache) && poKeteranganCache.indexOf($('#editTypeKeterangan').val()) !== -1)) {
+                $('#editTypeKeterangan').val('');
             }
             $('#editMultiPoSection input').prop('disabled', false);
             $('#editStandardSection input, #editStandardSection textarea').prop('disabled', true);
@@ -1660,7 +1712,8 @@ $(document).ready(function() {
     $('#btnEditAddSubPo').on('click', function() {
         var currentCount = $('#tbodyEditSubPo tr.edit-subpo-row').length;
         var firstVendor = $('#tbodyEditSubPo tr.edit-subpo-row:first').find('.input-editsubpo-vendor').val() || '';
-        $('#tbodyEditSubPo').append(createEditSubPoRow(currentCount, '', firstVendor, '', '-'));
+        var curType = $('#editType').val() || 'PO';
+        $('#tbodyEditSubPo').append(createEditSubPoRow(currentCount, '', firstVendor, '', '-', curType));
     });
 
     $(document).on('click', '.btn-remove-editsubpo', function() {
@@ -1707,20 +1760,22 @@ $(document).ready(function() {
         $('#editPengirim').val(rowData.pengirim || '<?= addslashes($currentUserPengirim) ?>');
         // Penerima tidak perlu diisi — otomatis dari TTD
         
-        var isMultiPo = rowData.is_multi_po || (rowData.type_raw === 'PO') || (rowData.type_keterangan && rowData.type_keterangan.indexOf('Untuk dibuat Cek') !== -1);
+        var isReturn = (rowData.type_raw === 'Purchase Return');
+        var isMultiPo = isReturn || rowData.is_multi_po || (rowData.type_raw === 'PO') || (rowData.type_keterangan && rowData.type_keterangan.indexOf('Untuk dibuat Cek') !== -1);
         
         if (isMultiPo) {
-            $('#editType').val('PO');
-            $('#editTypeKeterangan').val(rowData.type_keterangan || 'Untuk dibuat Cek');
-            toggleEditTypeSections('PO');
+            var currentEditType = isReturn ? 'Purchase Return' : 'PO';
+            $('#editType').val(currentEditType);
+            $('#editTypeKeterangan').val(rowData.type_keterangan || (isReturn ? '' : 'Untuk dibuat Cek'));
+            toggleEditTypeSections(currentEditType);
 
             $('#tbodyEditSubPo').empty();
             if (Array.isArray(rowData.po_items) && rowData.po_items.length > 0) {
                 rowData.po_items.forEach(function(sub, idx) {
-                    $('#tbodyEditSubPo').append(createEditSubPoRow(idx, sub.desc || '', sub.vendor || '', sub.no_po || '', sub.no_grn || '-'));
+                    $('#tbodyEditSubPo').append(createEditSubPoRow(idx, sub.desc || '', sub.vendor || '', sub.no_po || '', sub.no_grn || '-', currentEditType));
                 });
             } else {
-                $('#tbodyEditSubPo').append(createEditSubPoRow(0, '', '', '', '-'));
+                $('#tbodyEditSubPo').append(createEditSubPoRow(0, '', '', '', '-', currentEditType));
             }
 
             // Populate uraian berkas tambahan (Dokumen Lampiran) — desc yang bukan dari sub-PO
@@ -2230,7 +2285,12 @@ $(document).ready(function() {
     // ---------------------------------------------------------
     var rowIndex = 0;
 
-    function createSubPoRow(rowIndex, subIndex, desc = '', vendor = '', noPo = '', noGrn = '-') {
+    function createSubPoRow(rowIndex, subIndex, desc = '', vendor = '', noPo = '', noGrn = '-', type = 'PO') {
+        var isReturn = (type === 'Purchase Return');
+        var poPlaceholder = isReturn ? 'e.g. POLC/2609/0630' : 'e.g. POLC/2606/0671';
+        var grnPlaceholder = isReturn ? 'e.g. RTLC/2610/0001' : '-';
+        var fetchTitle = isReturn ? 'Ambil Data Return dari Proint ERP' : 'Ambil Nominal & Supplier dari Proint ERP';
+
         return `
             <tr class="subpo-row" data-subidx="${subIndex}">
                 <td class="align-middle font-weight-bold subpo-num text-center">${subIndex + 1}</td>
@@ -2242,9 +2302,9 @@ $(document).ready(function() {
                 </td>
                 <td>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control form-control-sm input-subpo-nopo" name="items[${rowIndex}][po_items][${subIndex}][no_po]" value="${noPo}" placeholder="e.g. POLC/2606/0671" required autocomplete="off">
+                        <input type="text" class="form-control form-control-sm input-subpo-nopo" name="items[${rowIndex}][po_items][${subIndex}][no_po]" value="${noPo}" placeholder="${poPlaceholder}" required autocomplete="off">
                         <div class="input-group-append">
-                            <button type="button" class="btn btn-outline-secondary btn-fetch-subpo" title="Ambil Nominal & Supplier dari Proint ERP">
+                            <button type="button" class="btn btn-outline-secondary btn-fetch-subpo" title="${fetchTitle}">
                                 <i class="fas fa-search"></i>
                             </button>
                         </div>
@@ -2254,10 +2314,10 @@ $(document).ready(function() {
                     </small>
                 </td>
                 <td>
-                    <input type="text" class="form-control form-control-sm input-subpo-nogrn" name="items[${rowIndex}][po_items][${subIndex}][no_grn]" value="${noGrn}" placeholder="-" title="${noGrn}">
+                    <input type="text" class="form-control form-control-sm input-subpo-nogrn" name="items[${rowIndex}][po_items][${subIndex}][no_grn]" value="${noGrn}" placeholder="${grnPlaceholder}" title="${noGrn}">
                 </td>
                 <td class="align-middle text-center">
-                    <button type="button" class="btn btn-outline-danger btn-xs btn-remove-subpo" title="Hapus Sub-PO">
+                    <button type="button" class="btn btn-outline-danger btn-xs btn-remove-subpo" title="Hapus Sub-Baris">
                         <i class="fas fa-times"></i>
                     </button>
                 </td>
@@ -2286,7 +2346,16 @@ $(document).ready(function() {
     }
 
     function createRowTemplate(index, defaultType = 'PO') {
-        var isMulti = (defaultType === 'PO' || defaultType === 'PO Untuk dibuat Cek');
+        var isReturn = (defaultType === 'Purchase Return');
+        var isMulti = (defaultType === 'PO' || defaultType === 'PO Untuk dibuat Cek' || isReturn);
+        var subTitle = isReturn ? 'Rincian Return' : 'Rincian PO';
+        var subTitleIcon = isReturn ? 'fa-undo-alt' : 'fa-list-ol';
+        var subBtnText = isReturn ? 'Tambah Baris Return' : 'Tambah Baris PO';
+        var thCol4 = 'No. PO <span class="text-danger">*</span>';
+        var thCol5 = isReturn ? 'Return No. <span class="text-danger">*</span>' : 'No. GRN';
+        var ketPlaceholder = isReturn ? 'Keterangan Return (opsional)' : (isMulti ? 'Pilih / ketik keterangan...' : (defaultType === 'RFP' ? 'No. RFP (e.g. 2607.2106)' : 'Keterangan / No. Type (opsional)'));
+        var ketVal = isReturn ? '' : (isMulti ? 'Untuk dibuat Cek' : '');
+
         return `
             <tr class="item-row" data-row="${index}">
                 <td class="align-middle font-weight-bold row-num text-center">
@@ -2296,14 +2365,15 @@ $(document).ready(function() {
                 <td class="align-top text-left" style="min-width: 170px;">
                     <select class="form-control form-control-sm select-type mb-1 font-weight-bold" name="items[${index}][type]" required>
                         <option value="PO" ${(defaultType === 'PO' || defaultType === 'PO Untuk dibuat Cek') ? 'selected' : ''}>PO</option>
+                        <option value="Purchase Return" ${isReturn ? 'selected' : ''}>Purchase Return</option>
                         <option value="COD" ${defaultType === 'COD' ? 'selected' : ''}>COD</option>
                         <option value="RFP" ${defaultType === 'RFP' ? 'selected' : ''}>RFP</option>
                         <option value="OFFSET" ${defaultType === 'OFFSET' ? 'selected' : ''}>OFFSET</option>
                         <option value="Kontrabon" ${defaultType === 'Kontrabon' ? 'selected' : ''}>Kontrabon</option>
                     </select>
                     <div class="input-group input-group-sm po-keterangan-group">
-                        <input type="text" class="form-control form-control-sm input-type-keterangan" name="items[${index}][type_keterangan]" list="listPoKeterangan" value="${isMulti ? 'Untuk dibuat Cek' : ''}" placeholder="${isMulti ? 'Pilih / ketik keterangan...' : (defaultType === 'RFP' ? 'No. RFP (e.g. 2607.2106)' : 'Keterangan / No. Type (opsional)')}" autocomplete="off">
-                        <div class="input-group-append po-ket-dropdown-wrapper ${isMulti ? '' : 'd-none'}">
+                        <input type="text" class="form-control form-control-sm input-type-keterangan" name="items[${index}][type_keterangan]" ${(isMulti && !isReturn) ? 'list="listPoKeterangan"' : ''} value="${ketVal}" placeholder="${ketPlaceholder}" autocomplete="off">
+                        <div class="input-group-append po-ket-dropdown-wrapper ${(isMulti && !isReturn) ? '' : 'd-none'}">
                             <button class="btn btn-outline-secondary dropdown-toggle px-1" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pilih keterangan PO"></button>
                             <div class="dropdown-menu dropdown-menu-right menu-po-keterangan shadow-sm" style="max-height: 200px; overflow-y: auto;">
                                 <!-- Terisi dinamis -->
@@ -2320,12 +2390,12 @@ $(document).ready(function() {
                     </small>
                 </td>
 
-                <!-- BAGIAN 1: MULTI-PO SUBTABLE (Default untuk PO) -->
+                <!-- BAGIAN 1: MULTI-PO / RETURN SUBTABLE (Default untuk PO / Return) -->
                 <td colspan="4" class="align-top p-2 cell-multipo ${isMulti ? '' : 'd-none'}">
                     <div class="card card-outline card-primary mb-0 shadow-none border">
                         <div class="card-header py-1 px-2 d-flex justify-content-between align-items-center bg-light">
-                            <span class="font-weight-bold text-primary small">
-                                <i class="fas fa-list-ol mr-1"></i> Rincian PO
+                            <span class="font-weight-bold text-primary small title-sub-table">
+                                <i class="fas ${subTitleIcon} mr-1"></i> ${subTitle}
                             </span>
                             <div>
                                 <button type="button" class="btn btn-xs btn-outline-secondary btn-copy-vendor mr-1" data-row="${index}" title="Salin Supplier Baris 1 ke Semua Baris">
@@ -2335,7 +2405,7 @@ $(document).ready(function() {
                                     <i class="fas fa-file-alt mr-1"></i> Tambah Uraian
                                 </button>
                                 <button type="button" class="btn btn-xs btn-primary font-weight-bold btn-add-subpo" data-row="${index}">
-                                    <i class="fas fa-plus mr-1"></i> Tambah Baris PO
+                                    <i class="fas fa-plus mr-1"></i> <span class="text-btn-add-sub">${subBtnText}</span>
                                 </button>
                             </div>
                         </div>
@@ -2346,19 +2416,19 @@ $(document).ready(function() {
                                         <th style="width: 4%">No</th>
                                         <th style="width: 24%">Description / Nominal <span class="text-danger">*</span></th>
                                         <th style="width: 24%">Nama Supplier <span class="text-danger">*</span></th>
-                                        <th style="width: 22%">No. PO <span class="text-danger">*</span></th>
-                                        <th style="width: 22%">No. GRN</th>
+                                        <th style="width: 22%" class="th-subpo-no">${thCol4}</th>
+                                        <th style="width: 22%" class="th-subpo-grn">${thCol5}</th>
                                         <th style="width: 4%"></th>
                                     </tr>
                                 </thead>
                                 <tbody class="subpo-tbody">
-                                    ${createSubPoRow(index, 0, '', '', '', '-')}
+                                    ${createSubPoRow(index, 0, '', '', '', '-', defaultType)}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- URAIAN BERKAS TAMBAHAN untuk type PO -->
+                    <!-- URAIAN BERKAS TAMBAHAN -->
                     <div class="mt-1 extra-desc-section border rounded px-2 pt-1 pb-2 bg-white">
                         <small class="font-weight-bold text-secondary d-block mb-1"><i class="fas fa-file-alt mr-1"></i> Uraian Berkas (Dokumen Lampiran)</small>
                         <div class="extra-desc-container" id="extra-desc-container-${index}">
@@ -2428,6 +2498,14 @@ $(document).ready(function() {
             $tr.find('.cell-multipo').removeClass('d-none');
             $tr.find('.cell-std-desc, .cell-std-vendor, .cell-std-po, .cell-std-grn').addClass('d-none');
             
+            $tr.find('.title-sub-table').html('<i class="fas fa-list-ol mr-1"></i> Rincian PO');
+            $tr.find('.text-btn-add-sub').text('Tambah Baris PO');
+            $tr.find('.th-subpo-no').html('No. PO <span class="text-danger">*</span>');
+            $tr.find('.th-subpo-grn').html('No. GRN');
+            $tr.find('.input-subpo-nopo').attr('placeholder', 'e.g. POLC/2606/0671');
+            $tr.find('.input-subpo-nogrn').attr('placeholder', '-');
+            $tr.find('.btn-fetch-subpo').attr('title', 'Ambil Nominal & Supplier dari Proint ERP');
+
             $tr.find('.cell-multipo input.input-extra-desc').prop('disabled', false);
             $tr.find('.cell-multipo .subpo-tbody input').prop('disabled', false);
             $tr.find('.cell-std-desc input, .cell-std-vendor input, .cell-std-po input, .cell-std-grn input').prop('disabled', true);
@@ -2438,6 +2516,29 @@ $(document).ready(function() {
             $inputKet.attr('list', 'listPoKeterangan').attr('placeholder', 'Pilih / ketik keterangan...');
             if (!$inputKet.val()) {
                 $inputKet.val('Untuk dibuat Cek');
+            }
+        } else if (val === 'Purchase Return') {
+            $tr.find('.cell-multipo').removeClass('d-none');
+            $tr.find('.cell-std-desc, .cell-std-vendor, .cell-std-po, .cell-std-grn').addClass('d-none');
+
+            $tr.find('.title-sub-table').html('<i class="fas fa-undo-alt mr-1"></i> Rincian Return');
+            $tr.find('.text-btn-add-sub').text('Tambah Baris Return');
+            $tr.find('.th-subpo-no').html('No. PO <span class="text-danger">*</span>');
+            $tr.find('.th-subpo-grn').html('Return No. <span class="text-danger">*</span>');
+            $tr.find('.input-subpo-nopo').attr('placeholder', 'e.g. POLC/2609/0630');
+            $tr.find('.input-subpo-nogrn').attr('placeholder', 'e.g. RTLC/2610/0001');
+            $tr.find('.btn-fetch-subpo').attr('title', 'Ambil Data Return dari Proint ERP');
+
+            $tr.find('.cell-multipo input.input-extra-desc').prop('disabled', false);
+            $tr.find('.cell-multipo .subpo-tbody input').prop('disabled', false);
+            $tr.find('.cell-std-desc input, .cell-std-vendor input, .cell-std-po input, .cell-std-grn input').prop('disabled', true);
+
+            $tr.find('.po-ket-dropdown-wrapper').addClass('d-none');
+            $tr.find('.rfp-fetch-wrapper').addClass('d-none');
+            $tr.find('.rfp-loading-text').addClass('d-none');
+            $inputKet.removeAttr('list').attr('placeholder', 'Keterangan Return (opsional)');
+            if ($inputKet.val() === 'Untuk dibuat Cek' || (Array.isArray(poKeteranganCache) && poKeteranganCache.indexOf($inputKet.val()) !== -1)) {
+                $inputKet.val('');
             }
         } else {
             $tr.find('.cell-multipo').addClass('d-none');
@@ -3137,21 +3238,128 @@ $(document).ready(function() {
         });
     }
 
+    // =========================================================
+    // FITUR AUTO-FILL PURCHASE RETURN - BARIS SUB-RETURN
+    // Mengambil Return No + Nominal + Nama Supplier berdasarkan No. PO
+    // =========================================================
+    function fetchReturnDetailsForSubReturn(poVal, $subRow, $inputNoPo, isEdit) {
+        if (!poVal) return;
+        if ($inputNoPo.data('fetching') === true) return;
+
+        $inputNoPo.data('fetching', true);
+        var $btn = $subRow.find(isEdit ? '.btn-fetch-editsubpo' : '.btn-fetch-subpo');
+        var $loading = $subRow.find(isEdit ? '.editsubpo-loading-text' : '.subpo-loading-text');
+        var originalBtnHtml = $btn.html();
+
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        $loading.removeClass('d-none');
+        $inputNoPo.addClass('border-primary').css('background-color', '#f0f7ff');
+
+        $.ajax({
+            url: 'purchasing_serverside.php',
+            type: 'POST',
+            data: { action: 'get_return_by_po', no_po: poVal },
+            dataType: 'json',
+            success: function(res) {
+                $inputNoPo.data('fetching', false);
+                $btn.prop('disabled', false).html(originalBtnHtml);
+                $loading.addClass('d-none');
+                $inputNoPo.removeClass('border-primary').css('background-color', '');
+
+                var descClass = isEdit ? '.input-editsubpo-desc' : '.input-subpo-desc';
+                var vendorClass = isEdit ? '.input-editsubpo-vendor' : '.input-subpo-vendor';
+                var grnClass = isEdit ? '.input-editsubpo-nogrn' : '.input-subpo-nogrn';
+
+                if (res.status === 'success' && res.data) {
+                    var data = res.data;
+                    if (data.no_po) {
+                        $inputNoPo.val(data.no_po);
+                    }
+
+                    // Kolom 2: Nominal / Description
+                    $subRow.find(descClass).val(data.formatted_amount).addClass('bg-light font-weight-bold');
+                    setTimeout(function() {
+                        $subRow.find(descClass).removeClass('bg-light font-weight-bold');
+                    }, 1800);
+
+                    // Kolom 3: Nama Supplier
+                    $subRow.find(vendorClass).val(data.vendor).addClass('bg-light font-weight-bold');
+                    setTimeout(function() {
+                        $subRow.find(vendorClass).removeClass('bg-light font-weight-bold');
+                    }, 1800);
+
+                    // Kolom 5: Return No
+                    var returnNmbr = data.returnnmbr || '';
+                    $subRow.find(grnClass).val(returnNmbr).attr('title', returnNmbr).addClass('bg-light font-weight-bold');
+                    setTimeout(function() {
+                        $subRow.find(grnClass).removeClass('bg-light font-weight-bold');
+                    }, 1800);
+
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        timerProgressBar: true
+                    });
+                    var toastText = 'Return No: ' + returnNmbr + ' | ' + data.vendor + ' | ' + data.formatted_amount;
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Data Return Berhasil Dimuat!',
+                        text: toastText
+                    });
+                } else {
+                    if (res.data && res.data.vendor) {
+                        $subRow.find(vendorClass).val(res.data.vendor);
+                    }
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3500
+                    });
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Info Proint ERP',
+                        text: res.message || 'Dokumen Return untuk PO ini belum ditemukan di Proint ERP.'
+                    });
+                }
+            },
+            error: function() {
+                $inputNoPo.data('fetching', false);
+                $btn.prop('disabled', false).html(originalBtnHtml);
+                $loading.addClass('d-none');
+                $inputNoPo.removeClass('border-primary').css('background-color', '');
+            }
+        });
+    }
+
     // Event handlers untuk sub-PO rows di Modal TAMBAH
     $(document).on('change blur', '.input-subpo-nopo', function() {
         var poVal = $.trim($(this).val());
         if (!poVal) return;
-        fetchPoDetailsForSubPo(poVal, $(this).closest('tr.subpo-row'), $(this), false);
+        var $subRow = $(this).closest('tr.subpo-row');
+        var type = $subRow.closest('tr.item-row').find('.select-type').val();
+        if (type === 'Purchase Return') {
+            fetchReturnDetailsForSubReturn(poVal, $subRow, $(this), false);
+        } else {
+            fetchPoDetailsForSubPo(poVal, $subRow, $(this), false);
+        }
     });
     $(document).on('click', '.btn-fetch-subpo', function() {
         var $subRow = $(this).closest('tr.subpo-row');
         var $inputNoPo = $subRow.find('.input-subpo-nopo');
         var poVal = $.trim($inputNoPo.val());
+        var type = $subRow.closest('tr.item-row').find('.select-type').val();
         if (!poVal) {
             Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Ketikkan No PO terlebih dahulu!' });
             return;
         }
-        fetchPoDetailsForSubPo(poVal, $subRow, $inputNoPo, false);
+        if (type === 'Purchase Return') {
+            fetchReturnDetailsForSubReturn(poVal, $subRow, $inputNoPo, false);
+        } else {
+            fetchPoDetailsForSubPo(poVal, $subRow, $inputNoPo, false);
+        }
     });
     $(document).on('keydown', '.input-subpo-nopo', function(e) {
         if (e.key === 'Enter') { e.preventDefault(); $(this).trigger('change'); }
@@ -3161,17 +3369,28 @@ $(document).ready(function() {
     $(document).on('change blur', '.input-editsubpo-nopo', function() {
         var poVal = $.trim($(this).val());
         if (!poVal) return;
-        fetchPoDetailsForSubPo(poVal, $(this).closest('tr.edit-subpo-row'), $(this), true);
+        var $subRow = $(this).closest('tr.edit-subpo-row');
+        var type = $('#editType').val();
+        if (type === 'Purchase Return') {
+            fetchReturnDetailsForSubReturn(poVal, $subRow, $(this), true);
+        } else {
+            fetchPoDetailsForSubPo(poVal, $subRow, $(this), true);
+        }
     });
     $(document).on('click', '.btn-fetch-editsubpo', function() {
         var $subRow = $(this).closest('tr.edit-subpo-row');
         var $inputNoPo = $subRow.find('.input-editsubpo-nopo');
         var poVal = $.trim($inputNoPo.val());
+        var type = $('#editType').val();
         if (!poVal) {
             Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Ketikkan No PO terlebih dahulu!' });
             return;
         }
-        fetchPoDetailsForSubPo(poVal, $subRow, $inputNoPo, true);
+        if (type === 'Purchase Return') {
+            fetchReturnDetailsForSubReturn(poVal, $subRow, $inputNoPo, true);
+        } else {
+            fetchPoDetailsForSubPo(poVal, $subRow, $inputNoPo, true);
+        }
     });
     $(document).on('keydown', '.input-editsubpo-nopo', function(e) {
         if (e.key === 'Enter') { e.preventDefault(); $(this).trigger('change'); }
@@ -3182,7 +3401,8 @@ $(document).ready(function() {
         var $tbody = $(`#subpo-table-${rIdx} .subpo-tbody`);
         var count = $tbody.find('tr.subpo-row').length;
         var firstVendor = $tbody.find('tr.subpo-row:first').find('.input-subpo-vendor').val() || '';
-        $tbody.append(createSubPoRow(rIdx, count, '', firstVendor, '', '-'));
+        var currentType = $(this).closest('tr.item-row').find('.select-type').val() || 'PO';
+        $tbody.append(createSubPoRow(rIdx, count, '', firstVendor, '', '-', currentType));
     });
 
     $(document).on('click', '.btn-remove-subpo', function() {

@@ -39,6 +39,35 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php';
                     </div>
                 </div>
                 <div class="card-body">
+                    <div class="row mb-3" id="purchasing-history-summary" aria-live="polite" aria-label="Ringkasan riwayat issue Purchasing">
+                        <div class="col-md-4 mb-2 mb-md-0">
+                            <div class="info-box mb-0 border">
+                                <span class="info-box-icon bg-success"><i class="fas fa-check-circle" aria-hidden="true"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Total Selesai</span>
+                                    <span class="info-box-number" id="purchasing-history-summary-total">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-2 mb-md-0">
+                            <div class="info-box mb-0 border">
+                                <span class="info-box-icon bg-primary"><i class="fas fa-tasks" aria-hidden="true"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Task</span>
+                                    <span class="info-box-number" id="purchasing-history-summary-task">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="info-box mb-0 border">
+                                <span class="info-box-icon bg-info"><i class="fas fa-hands-helping" aria-hidden="true"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Support Activities</span>
+                                    <span class="info-box-number" id="purchasing-history-summary-support">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-row mb-3">
                         <div class="form-group col-md-3">
                             <label for="purchasing-history-filter-type">Jenis</label>
@@ -324,6 +353,24 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php';
 
     resetPurchasingHistoryDateTimeFilters();
 
+    /**
+     * Menampilkan nilai ringkasan riwayat dari respons DataTables.
+     *
+     * @param {Object|null} summary Agregasi Issue berstatus Done dari server.
+     * @returns {void}
+     */
+    function renderPurchasingHistorySummary(summary) {
+        var values = summary && typeof summary === 'object' ? summary : {};
+        var toCount = function (value) {
+            var number = Number(value);
+            return Number.isFinite(number) && number >= 0 ? number.toLocaleString('id-ID') : '-';
+        };
+
+        $('#purchasing-history-summary-total').text(toCount(values.total));
+        $('#purchasing-history-summary-task').text(toCount(values.task));
+        $('#purchasing-history-summary-support').text(toCount(values.support_activities));
+    }
+
     var table = $('#purchasing-history-table').DataTable({
         processing: true,
         serverSide: true,
@@ -342,12 +389,14 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php';
                 request.filterType = $('#purchasing-history-filter-type').val();
                 request.filterTanggalStart = $('#purchasing-history-filter-date-start').val();
                 request.filterTanggalEnd = $('#purchasing-history-filter-date-end').val();
+                request.includeSummary = '1';
             },
             error: function (xhr) {
                 var message = xhr.responseJSON && xhr.responseJSON.error
                     ? xhr.responseJSON.error
                     : 'Riwayat issue tidak dapat dimuat.';
                 $('#purchasing-history-error').text(message).prop('hidden', false);
+                renderPurchasingHistorySummary(null);
             }
         },
         order: [[7, 'desc']],
@@ -417,6 +466,7 @@ include $_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php';
     table.on('xhr.dt', function (_event, _settings, response, xhr) {
         if (xhr && xhr.status === 200 && !(response && response.error)) {
             $('#purchasing-history-error').prop('hidden', true).text('');
+            renderPurchasingHistorySummary(response.summary);
         }
     });
 

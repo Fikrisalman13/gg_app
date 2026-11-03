@@ -257,7 +257,7 @@ function deriveAssigneeFromIssueIds($conn, $issueIds, $maxLen = null)
 
 function ensureProjectUploadDir()
 {
-    $dir = __DIR__ . DIRECTORY_SEPARATOR . 'uploads';
+    $dir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'project';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -311,7 +311,7 @@ function handleProjectEditorImageUpload()
 
     jsonResponse(array(
         'success' => true,
-        'url' => '/gg_app/pages/project/uploads/' . rawurlencode($newFileName),
+        'url' => '/gg_app/uploads/project/' . rawurlencode($newFileName),
         'name' => $originalName !== '' ? $originalName : $newFileName
     ));
 }
