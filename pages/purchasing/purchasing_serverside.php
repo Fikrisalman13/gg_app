@@ -297,7 +297,7 @@ if ($action === 'get_po_detail') {
             $formattedAmount = 'Rp.' . number_format($amount, 0, ',', '.');
             // Re-build descLine with the correct formattedAmount (computed after sum)
             $descLine = $prodNameCombined . ' ' . $formattedAmount;
-            $vendorName = ucwords(strtolower(trim($header['povendorname'] ?? '')));
+            $vendorName = strtoupper(trim($header['povendorname'] ?? ''));
 
             echo json_encode([
                 'status' => 'success',
@@ -398,7 +398,7 @@ if ($action === 'get_return_detail') {
 
             $amount = (float)($sumRow['total_amount'] ?? 0);
             $formattedAmount = 'Rp.' . number_format($amount, 0, ',', '.');
-            $vendorName = ucwords(strtolower(trim($header['vendorname'] ?? '')));
+            $vendorName = strtoupper(trim($header['vendorname'] ?? ''));
             $cnDnNmbr = trim($header['cndnnmbr'] ?? '') ?: '-';
 
             echo json_encode([
@@ -456,159 +456,139 @@ if ($action === 'get_return_by_po') {
             exit;
         }
 
-        // 1. Ambil data PO & vendor
-        $stmtPo = $conn3->prepare("
-            SELECT p.pohdid, p.ponmbr, p.podate, p.povendorname
-            FROM prpohd p
-            WHERE UPPER(TRIM(p.ponmbr)) = UPPER(TRIM(:po))
-               OR UPPER(p.ponmbr) LIKE UPPER(:po_like)
-            ORDER BY CASE WHEN UPPER(TRIM(p.ponmbr)) = UPPER(TRIM(:po)) THEN 0 ELSE 1 END
-            LIMIT 1
-        ");
-        $stmtPo->execute([':po' => $noPo, ':po_like' => '%' . $noPo . '%']);
-        $poInfo = $stmtPo->fetch(PDO::FETCH_ASSOC);
-
-        $pohdid = $poInfo['pohdid'] ?? null;
-        $canonicalPo = $poInfo['ponmbr'] ?? $noPo;
-        $defaultVendor = ucwords(strtolower(trim($poInfo['povendorname'] ?? '')));
-
-        // 2. Ambil list GRN dari PO jika ada
-        $grnList = [];
-        if ($pohdid) {
-            $stmtGrn = $conn3->prepare("
-                SELECT DISTINCT gh.grnhdid, gh.grnnmbr
-                FROM prgrndt gd
-                JOIN prgrnhd gh ON gh.grnhdid = gd.grnhdid
-                WHERE gd.pohdid = :pohdid
-            ");
-            $stmtGrn->execute([':pohdid' => $pohdid]);
-            $grnList = $stmtGrn->fetchAll(PDO::FETCH_ASSOC);
-        }
-
-        // 3. Query 5 Jalur pencarian Return
         $sql = "
-            WITH matched_returns AS (
-                -- Jalur A: PO tercatat di returndesc
-                SELECT rh.returnhdid, rh.returnnmbr
-                FROM prreturnhd rh
-                WHERE rh.returndesc ILIKE :po_pattern
+            WITH return_summary AS (
+                SELECT
+                    rh.returnnmbr,
 
-                UNION
+                    COALESCE(
+                        MAX(gd.ponmbr),
+                        SUBSTRING(MAX(ch.cndndesc) FROM '(PO[A-Z0-9\/]+)'),
+                        SUBSTRING(rh.returndesc FROM '(PO[A-Z0-9\/]+)'),
+                        '-'
+                    ) AS ponmbr,
 
-                -- Jalur B: PO tercatat di apcndnhd
-                SELECT cpr.returnhdid, cpr.returnnmbr
-                FROM apcndnhd ch
-                JOIN apcndnpurchret cpr ON cpr.cndnhdid = ch.cndnhdid
-                WHERE ch.cndndesc ILIKE :po_pattern
-        ";
+                    COALESCE(
+                        MAX(rd.grnnmbr),
+                        MAX(gh.grnnmbr),
+                        SUBSTRING(MAX(ch.cndndesc) FROM '(GRN[A-Z0-9\/]+)'),
+                        SUBSTRING(rh.returndesc FROM '(GRN[A-Z0-9\/]+)'),
+                        '-'
+                    ) AS grnnmbr,
 
-        $params = [
-            ':po_pattern' => '%' . $canonicalPo . '%'
-        ];
+                    COALESCE(
+                        STRING_AGG(
+                            DISTINCT COALESCE(rd.prodcode, cpr.prodcode, gd.grnprodcode),
+                            ', '
+                        ),
+                        '-'
+                    ) AS productcode,
 
-        if (!empty($grnList)) {
-            $grnNmbrs = array_column($grnList, 'grnnmbr');
-            $grnHdids = array_column($grnList, 'grnhdid');
+                    COALESCE(v.vendorname, MAX(gh.vendorname), '-') AS vendorname,
 
-            // Jalur C: GRN di prreturndt
-            $sql .= "
-                UNION
-                SELECT rh.returnhdid, rh.returnnmbr
-                FROM prreturndt rd
-                JOIN prreturnhd rh ON rh.returnhdid = rd.returnhdid
-                WHERE rd.grnhdid IN (" . implode(',', array_map('intval', $grnHdids)) . ")
-            ";
+                    COALESCE(w.wrhsname, MAX(w_gh.wrhsname), '-') AS wrhsname,
 
-            // Jalur D: GRN di apcndnhd
-            foreach ($grnNmbrs as $idx => $gn) {
-                $paramKey = ":grn_pat_$idx";
-                $sql .= "
-                    UNION
-                    SELECT cpr.returnhdid, cpr.returnnmbr
-                    FROM apcndnhd ch
-                    JOIN apcndnpurchret cpr ON cpr.cndnhdid = ch.cndnhdid
-                    WHERE ch.cndndesc ILIKE $paramKey
-                ";
-                $params[$paramKey] = '%' . $gn . '%';
-            }
+                    COALESCE(rh.returndesc, MAX(ch.cndndesc), '-') AS returndesc
 
-            // Jalur E: GRN di returndesc
-            foreach ($grnNmbrs as $idx => $gn) {
-                $paramKeyE = ":grn_desc_pat_$idx";
-                $sql .= "
-                    UNION
-                    SELECT rh.returnhdid, rh.returnnmbr
-                    FROM prreturnhd rh
-                    WHERE rh.returndesc ILIKE $paramKeyE
-                ";
-                $params[$paramKeyE] = '%' . $gn . '%';
-            }
-        }
+                FROM
+                    prreturnhd AS rh
 
-        // Fallback: Jika pengguna langsung mengetik nomor Return (misal RTLC/...)
-        $sql .= "
-                UNION
-                SELECT rh.returnhdid, rh.returnnmbr
-                FROM prreturnhd rh
-                WHERE UPPER(TRIM(rh.returnnmbr)) = UPPER(TRIM(:direct_rno))
-                   OR UPPER(rh.returnnmbr) LIKE UPPER(:direct_rno_like)
-        ";
-        $params[':direct_rno'] = $noPo;
-        $params[':direct_rno_like'] = '%' . $noPo . '%';
+                LEFT JOIN
+                    prreturndt AS rd
+                    ON rd.returnhdid = rh.returnhdid
 
-        $sql .= ")
-            SELECT 
-                mr.returnhdid,
-                mr.returnnmbr,
-                rh.returndate,
-                rh.returndesc,
-                rh.cndnnmbr,
-                v.vendorname,
-                COALESCE(
-                    (SELECT SUM(totalamount) FROM apcndnpurchret WHERE returnhdid = mr.returnhdid),
-                    (SELECT SUM(COALESCE(NULLIF(totamount, 0), totamounthc, totprice, 0)) FROM prreturndt WHERE returnhdid = mr.returnhdid),
-                    0
-                ) as total_nominal
-            FROM matched_returns mr
-            JOIN prreturnhd rh ON rh.returnhdid = mr.returnhdid
-            LEFT JOIN smvendor v ON v.vendorid = rh.vendorid
-            ORDER BY rh.returndate DESC, rh.returnhdid DESC
+                LEFT JOIN
+                    prgrndt AS gd
+                    ON (
+                        (
+                            rd.grndtid IS NOT NULL
+                            AND gd.grndtid = rd.grndtid
+                        )
+                        OR
+                        (
+                            rd.grndtid IS NULL
+                            AND rd.grnhdid IS NOT NULL
+                            AND gd.grnhdid = rd.grnhdid
+                        )
+                    )
+
+                LEFT JOIN
+                    prgrnhd AS gh
+                    ON gh.grnhdid = COALESCE(rd.grnhdid, gd.grnhdid)
+
+                LEFT JOIN
+                    apcndnpurchret AS cpr
+                    ON cpr.returnhdid = rh.returnhdid
+
+                LEFT JOIN
+                    apcndnhd AS ch
+                    ON ch.cndnhdid = cpr.cndnhdid
+
+                LEFT JOIN
+                    whwrhs AS w
+                    ON w.wrhsid = rh.wrhsid
+
+                LEFT JOIN
+                    whwrhs AS w_gh
+                    ON w_gh.wrhsid = gh.wrhsid
+
+                LEFT JOIN
+                    smvendor AS v
+                    ON v.vendorid = rh.vendorid
+
+                GROUP BY
+                    rh.returnhdid,
+                    rh.returnnmbr,
+                    rh.returndesc,
+                    v.vendorname,
+                    w.wrhsname
+            )
+            SELECT * FROM return_summary
+            WHERE UPPER(TRIM(ponmbr)) = UPPER(TRIM(:search))
+               OR UPPER(ponmbr) LIKE UPPER(:search_like)
+               OR UPPER(TRIM(returnnmbr)) = UPPER(TRIM(:search))
+               OR UPPER(returnnmbr) LIKE UPPER(:search_like)
+            ORDER BY returnnmbr DESC
             LIMIT 1
         ";
 
-        $stmtReturn = $conn3->prepare($sql);
-        $stmtReturn->execute($params);
-        $matched = $stmtReturn->fetch(PDO::FETCH_ASSOC);
+        $stmt = $conn3->prepare($sql);
+        $stmt->execute([
+            ':search'      => $noPo,
+            ':search_like' => '%' . $noPo . '%'
+        ]);
+        $matched = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($matched) {
-            $amount = (float)($matched['total_nominal'] ?? 0);
-            $formattedAmount = 'Rp.' . number_format($amount, 0, ',', '.');
-            $vendorName = ucwords(strtolower(trim($matched['vendorname'] ?? $defaultVendor)));
             $returnNmbr = trim($matched['returnnmbr'] ?? '');
-            $cnDnNmbr = trim($matched['cndnnmbr'] ?? '') ?: '-';
+            $ponmbr = trim($matched['ponmbr'] ?? '') ?: $noPo;
+            $vendorName = strtoupper(trim($matched['vendorname'] ?? ''));
+            if ($vendorName === '-') $vendorName = '';
+            $returnDesc = trim($matched['returndesc'] ?? '');
+            if ($returnDesc === '-') $returnDesc = '';
 
             echo json_encode([
                 'status' => 'success',
                 'data' => [
-                    'returnhdid'       => $matched['returnhdid'],
-                    'returnnmbr'       => $returnNmbr,
-                    'no_po'            => $canonicalPo,
-                    'vendor'           => $vendorName,
-                    'amount'           => $amount,
-                    'formatted_amount' => $formattedAmount,
-                    'cndnnmbr'         => $cnDnNmbr,
-                    'returndesc'       => trim($matched['returndesc'] ?? '')
+                    'returnnmbr'  => $returnNmbr,
+                    'no_po'       => ($ponmbr !== '-' ? $ponmbr : $noPo),
+                    'grnnmbr'     => trim($matched['grnnmbr'] ?? ''),
+                    'productcode' => trim($matched['productcode'] ?? ''),
+                    'vendor'      => $vendorName,
+                    'wrhsname'    => trim($matched['wrhsname'] ?? ''),
+                    'returndesc'  => $returnDesc
                 ]
             ]);
             exit;
         } else {
             echo json_encode([
                 'status' => 'not_found',
-                'message' => 'Dokumen Return untuk PO "' . htmlspecialchars($canonicalPo) . '" belum ditemukan di Proint ERP.',
+                'message' => 'Dokumen Return untuk "' . htmlspecialchars($noPo) . '" tidak ditemukan di Proint ERP.',
                 'data' => [
-                    'no_po'      => $canonicalPo,
-                    'vendor'     => $defaultVendor,
-                    'returnnmbr' => ''
+                    'no_po'      => $noPo,
+                    'vendor'     => '',
+                    'returnnmbr' => '',
+                    'returndesc' => ''
                 ]
             ]);
             exit;
@@ -715,7 +695,7 @@ if ($action === 'get_rfp_detail') {
             $vendor = trim($row['reqpaidto'] ?? '');
             if ($vendor === '-') $vendor = '';
         }
-        $vendorFormatted = !empty($vendor) ? ucwords(strtolower($vendor)) : '';
+        $vendorFormatted = !empty($vendor) ? strtoupper($vendor) : '';
 
         // -------------------------------------------------------
         // Step 3: Ekstrak No. PO dari reqdesc menggunakan regex
@@ -954,7 +934,7 @@ if ($action === 'add') {
                     $grnsList = [];
                     foreach ($item['po_items'] as $sub) {
                         $subDesc = trim($sub['desc'] ?? '');
-                        $subVendor = trim($sub['vendor'] ?? '');
+                        $subVendor = strtoupper(trim($sub['vendor'] ?? ''));
                         $subPo = trim($sub['no_po'] ?? '');
                         $subGrn = trim($sub['no_grn'] ?? '-') ?: '-';
 
@@ -979,7 +959,7 @@ if ($action === 'add') {
                         }
                     }
                     $poItems = $subPoList;
-                    $vendor = implode(', ', $vendorsList);
+                    $vendor = strtoupper(implode(', ', $vendorsList));
                     $noPo = implode(', ', $posList);
                     $noGrn = !empty($grnsList) ? implode(', ', $grnsList) : '-';
 
@@ -995,7 +975,7 @@ if ($action === 'add') {
                     if (!is_array($descriptions)) {
                         $descriptions = array_filter(array_map('trim', explode("\n", strval($descriptions))));
                     }
-                    $vendor = trim($item['vendor'] ?? '');
+                    $vendor = strtoupper(trim($item['vendor'] ?? ''));
                     $noPo = trim($item['no_po'] ?? '');
                     $noGrn = trim($item['no_grn'] ?? '-') ?: '-';
                 }
@@ -1211,7 +1191,7 @@ if ($action === 'edit') {
         $grnsList = [];
         foreach ($_POST['po_items'] as $sub) {
             $subDesc = trim($sub['desc'] ?? '');
-            $subVendor = trim($sub['vendor'] ?? '');
+            $subVendor = strtoupper(trim($sub['vendor'] ?? ''));
             $subPo = trim($sub['no_po'] ?? '');
             $subGrn = trim($sub['no_grn'] ?? '-') ?: '-';
 
@@ -1235,7 +1215,7 @@ if ($action === 'edit') {
                 }
             }
         }
-        $vendor = implode(', ', $vendorsList);
+        $vendor = strtoupper(implode(', ', $vendorsList));
         $noPo = implode(', ', $posList);
         $noGrn = !empty($grnsList) ? implode(', ', $grnsList) : '-';
 
@@ -1247,7 +1227,7 @@ if ($action === 'edit') {
             if (!empty($ed)) $descriptions[] = $ed;
         }
     } else {
-        $vendor = trim($_POST['vendor'] ?? '');
+        $vendor = strtoupper(trim($_POST['vendor'] ?? ''));
         $noPo = trim($_POST['no_po'] ?? '');
         $noGrn = trim($_POST['no_grn'] ?? '-') ?: '-';
         $descRaw = trim($_POST['description'] ?? '');
@@ -1628,7 +1608,7 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
             $borderClass = ($idx > 0) ? 'border-top' : '';
             $num = $pi['no'] ?? ($idx + 1);
             $descVal = htmlspecialchars($pi['desc'] ?? '');
-            $vendorVal = htmlspecialchars($pi['vendor'] ?? '');
+            $vendorVal = strtoupper(htmlspecialchars($pi['vendor'] ?? ''));
             $poVal = htmlspecialchars($pi['no_po'] ?? '');
             $grnRaw = trim($pi['no_grn'] ?? '-') ?: '-';
             if ($grnRaw !== '-') {
@@ -1662,7 +1642,7 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
         }
         $descHtml .= '</div>';
 
-        $vendorText = htmlspecialchars($row['vendor'] ?? '');
+        $vendorText = strtoupper(htmlspecialchars($row['vendor'] ?? ''));
         $vendorHtml = "<div class='sub-row-item text-left'><span class='vendor-name font-weight-bold'>{$vendorText}</span></div>";
 
         $noPoText = htmlspecialchars($row['no_po'] ?? '');
@@ -1752,7 +1732,7 @@ function renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $current
         'description'          => $descHtml,
         'descriptions_raw'     => $descList,
         'vendor'               => $vendorHtml,
-        'vendor_raw'           => $row['vendor'] ?? '',
+        'vendor_raw'           => strtoupper($row['vendor'] ?? ''),
         'no_po'                => $poHtml,
         'no_po_raw'            => $row['no_po'] ?? '',
         'no_grn'               => $grnHtml,

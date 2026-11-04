@@ -27,7 +27,7 @@ if (!empty($conn)) {
                         $poItems[] = [
                             'no'     => $pr['item_no'],
                             'desc'   => $pr['description'],
-                            'vendor' => $pr['vendor'],
+                            'vendor' => strtoupper($pr['vendor'] ?? ''),
                             'no_po'  => $pr['no_po'],
                             'no_grn' => $pr['no_grn']
                         ];
@@ -43,7 +43,7 @@ if (!empty($conn)) {
                 'is_multi_po'     => ($dRow['is_multi_po'] == 1),
                 'po_items'        => $poItems,
                 'descriptions'    => $descList,
-                'vendor'          => $dRow['vendor'],
+                'vendor'          => strtoupper($dRow['vendor'] ?? ''),
                 'no_po'           => $dRow['no_po'],
                 'no_grn'          => $dRow['no_grn'],
                 'pengirim'        => $dRow['pengirim'],
@@ -297,7 +297,7 @@ function renderPoBadge($poStr) {
                     <div class="info-icon" style="background:#fdebe8; color:#e74c3c;"><i class="fas fa-building"></i></div>
                     <div>
                         <div class="info-label">Supplier Utama</div>
-                        <div class="info-value"><?= htmlspecialchars($detail['vendor'] ?: ($detail['po_items'][0]['vendor'] ?? '-')) ?></div>
+                        <div class="info-value"><?= strtoupper(htmlspecialchars($detail['vendor'] ?: ($detail['po_items'][0]['vendor'] ?? '-'))) ?></div>
                     </div>
                 </div>
                 <?php else: ?>
@@ -305,7 +305,7 @@ function renderPoBadge($poStr) {
                     <div class="info-icon" style="background:#fdebe8; color:#e74c3c;"><i class="fas fa-building"></i></div>
                     <div>
                         <div class="info-label">Nama Vendor</div>
-                        <div class="info-value"><?= htmlspecialchars($detail['vendor'] ?? '-') ?></div>
+                        <div class="info-value"><?= strtoupper(htmlspecialchars($detail['vendor'] ?? '-')) ?></div>
                     </div>
                 </div>
                 <div class="info-item">
@@ -351,7 +351,7 @@ function renderPoBadge($poStr) {
                 <thead>
                     <tr>
                         <th class="text-center" style="width:5%">No</th>
-                        <th style="width:28%">Description / Nominal</th>
+                        <th style="width:28%"><?= $isReturnType ? 'Description (Uraian Return)' : 'Description / Nominal' ?></th>
                         <th style="width:25%">Nama Supplier</th>
                         <th class="text-center" style="width:22%"><?= $col4Title ?></th>
                         <th class="text-center" style="width:20%"><?= $col5Title ?></th>
@@ -362,7 +362,7 @@ function renderPoBadge($poStr) {
                     <tr>
                         <td class="text-center font-weight-bold text-muted"><?= $idx + 1 ?></td>
                         <td class="font-weight-bold text-dark"><?= htmlspecialchars($item['desc']) ?></td>
-                        <td><?= htmlspecialchars($item['vendor']) ?></td>
+                        <td><?= strtoupper(htmlspecialchars($item['vendor'])) ?></td>
                         <td class="text-center"><?= renderPoBadge($item['no_po'] ?? '') ?></td>
                         <td class="text-center"><?= renderGrnBadges($item['no_grn'] ?? '-') ?></td>
                     </tr>

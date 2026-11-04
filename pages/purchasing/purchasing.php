@@ -332,6 +332,13 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 .vendor-name {
     color: #0f172a;
     font-size: 12px;
+    text-transform: uppercase;
+}
+.input-subpo-vendor,
+.input-editsubpo-vendor,
+.input-std-vendor,
+#editVendor {
+    text-transform: uppercase;
 }
 
 /* Number badge bulat elegan */
@@ -1592,6 +1599,7 @@ $(document).ready(function() {
     // ---------------------------------------------------------
     function createEditSubPoRow(subIndex, desc = '', vendor = '', noPo = '', noGrn = '-', type = 'PO') {
         var isReturn = (type === 'Purchase Return');
+        var descPlaceholder = isReturn ? 'e.g. Uraian/alasan return...' : 'e.g. Rp.25.000';
         var poPlaceholder = isReturn ? 'e.g. POLC/2609/0630' : 'e.g. POLC/2606/0671';
         var grnPlaceholder = isReturn ? 'e.g. RTLC/2610/0001' : '-';
         var fetchTitle = isReturn ? 'Ambil Data Return dari Proint ERP' : 'Ambil Nominal & Supplier dari Proint ERP';
@@ -1600,7 +1608,7 @@ $(document).ready(function() {
             <tr class="edit-subpo-row" data-subidx="${subIndex}">
                 <td class="align-middle font-weight-bold edit-subpo-num text-center">${subIndex + 1}</td>
                 <td>
-                    <input type="text" class="form-control form-control-sm input-editsubpo-desc" name="po_items[${subIndex}][desc]" value="${desc}" placeholder="e.g. Rp.25.000" required>
+                    <input type="text" class="form-control form-control-sm input-editsubpo-desc" name="po_items[${subIndex}][desc]" value="${desc}" placeholder="${descPlaceholder}" required>
                 </td>
                 <td>
                     <input type="text" class="form-control form-control-sm input-editsubpo-vendor" name="po_items[${subIndex}][vendor]" value="${vendor}" placeholder="Nama Supplier" required>
@@ -1636,9 +1644,11 @@ $(document).ready(function() {
             $('#editStandardSection').hide();
             $('#editMultiPoSection .card-header span.text-primary.small').html('<i class="fas fa-list-ol mr-1"></i> Rincian PO');
             $('#btnEditAddSubPo').html('<i class="fas fa-plus mr-1"></i> Tambah Baris PO');
+            $('#tableEditSubPo thead th:nth-child(2)').html('Description / Nominal <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(3)').html('Nama Supplier <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(4)').html('No. PO <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(5)').html('No. GRN');
+            $('#tbodyEditSubPo .input-editsubpo-desc').attr('placeholder', 'e.g. Rp.25.000');
             $('#tbodyEditSubPo .input-editsubpo-nopo').attr('placeholder', 'e.g. POLC/2606/0671');
             $('#tbodyEditSubPo .input-editsubpo-nogrn').attr('placeholder', '-');
             $('#tbodyEditSubPo .btn-fetch-editsubpo').attr('title', 'Ambil Nominal & Supplier dari Proint ERP');
@@ -1657,9 +1667,11 @@ $(document).ready(function() {
             $('#editStandardSection').hide();
             $('#editMultiPoSection .card-header span.text-primary.small').html('<i class="fas fa-undo-alt mr-1"></i> Rincian Return');
             $('#btnEditAddSubPo').html('<i class="fas fa-plus mr-1"></i> Tambah Baris Return');
+            $('#tableEditSubPo thead th:nth-child(2)').html('Description (Uraian Return) <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(3)').html('Nama Supplier <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(4)').html('No. PO <span class="text-danger">*</span>');
             $('#tableEditSubPo thead th:nth-child(5)').html('Return No. <span class="text-danger">*</span>');
+            $('#tbodyEditSubPo .input-editsubpo-desc').attr('placeholder', 'e.g. Uraian/alasan return...');
             $('#tbodyEditSubPo .input-editsubpo-nopo').attr('placeholder', 'e.g. POLC/2609/0630');
             $('#tbodyEditSubPo .input-editsubpo-nogrn').attr('placeholder', 'e.g. RTLC/2610/0001');
             $('#tbodyEditSubPo .btn-fetch-editsubpo').attr('title', 'Ambil Data Return dari Proint ERP');
@@ -1732,7 +1744,7 @@ $(document).ready(function() {
     });
 
     $('#btnEditCopyVendor').on('click', function() {
-        var firstVendor = $('#tbodyEditSubPo tr.edit-subpo-row:first').find('.input-editsubpo-vendor').val() || '';
+        var firstVendor = ($('#tbodyEditSubPo tr.edit-subpo-row:first').find('.input-editsubpo-vendor').val() || '').toUpperCase();
         if (!firstVendor) {
             Swal.fire({ icon: 'info', title: 'Informasi', text: 'Silakan isi nama supplier pada baris 1 terlebih dahulu!' });
             return;
@@ -2287,6 +2299,7 @@ $(document).ready(function() {
 
     function createSubPoRow(rowIndex, subIndex, desc = '', vendor = '', noPo = '', noGrn = '-', type = 'PO') {
         var isReturn = (type === 'Purchase Return');
+        var descPlaceholder = isReturn ? 'e.g. Uraian/alasan return...' : 'e.g. Rp.25.000';
         var poPlaceholder = isReturn ? 'e.g. POLC/2609/0630' : 'e.g. POLC/2606/0671';
         var grnPlaceholder = isReturn ? 'e.g. RTLC/2610/0001' : '-';
         var fetchTitle = isReturn ? 'Ambil Data Return dari Proint ERP' : 'Ambil Nominal & Supplier dari Proint ERP';
@@ -2295,7 +2308,7 @@ $(document).ready(function() {
             <tr class="subpo-row" data-subidx="${subIndex}">
                 <td class="align-middle font-weight-bold subpo-num text-center">${subIndex + 1}</td>
                 <td>
-                    <input type="text" class="form-control form-control-sm input-subpo-desc" name="items[${rowIndex}][po_items][${subIndex}][desc]" value="${desc}" placeholder="e.g. Rp.25.000" required>
+                    <input type="text" class="form-control form-control-sm input-subpo-desc" name="items[${rowIndex}][po_items][${subIndex}][desc]" value="${desc}" placeholder="${descPlaceholder}" required>
                 </td>
                 <td>
                     <input type="text" class="form-control form-control-sm input-subpo-vendor" name="items[${rowIndex}][po_items][${subIndex}][vendor]" value="${vendor}" placeholder="Nama Supplier" required>
@@ -2351,6 +2364,7 @@ $(document).ready(function() {
         var subTitle = isReturn ? 'Rincian Return' : 'Rincian PO';
         var subTitleIcon = isReturn ? 'fa-undo-alt' : 'fa-list-ol';
         var subBtnText = isReturn ? 'Tambah Baris Return' : 'Tambah Baris PO';
+        var thCol2 = isReturn ? 'Description (Uraian Return) <span class="text-danger">*</span>' : 'Description / Nominal <span class="text-danger">*</span>';
         var thCol4 = 'No. PO <span class="text-danger">*</span>';
         var thCol5 = isReturn ? 'Return No. <span class="text-danger">*</span>' : 'No. GRN';
         var ketPlaceholder = isReturn ? 'Keterangan Return (opsional)' : (isMulti ? 'Pilih / ketik keterangan...' : (defaultType === 'RFP' ? 'No. RFP (e.g. 2607.2106)' : 'Keterangan / No. Type (opsional)'));
@@ -2414,7 +2428,7 @@ $(document).ready(function() {
                                 <thead class="thead-light small">
                                     <tr>
                                         <th style="width: 4%">No</th>
-                                        <th style="width: 24%">Description / Nominal <span class="text-danger">*</span></th>
+                                        <th style="width: 24%" class="th-subpo-desc">${thCol2}</th>
                                         <th style="width: 24%">Nama Supplier <span class="text-danger">*</span></th>
                                         <th style="width: 22%" class="th-subpo-no">${thCol4}</th>
                                         <th style="width: 22%" class="th-subpo-grn">${thCol5}</th>
@@ -2500,8 +2514,10 @@ $(document).ready(function() {
             
             $tr.find('.title-sub-table').html('<i class="fas fa-list-ol mr-1"></i> Rincian PO');
             $tr.find('.text-btn-add-sub').text('Tambah Baris PO');
+            $tr.find('.th-subpo-desc').html('Description / Nominal <span class="text-danger">*</span>');
             $tr.find('.th-subpo-no').html('No. PO <span class="text-danger">*</span>');
             $tr.find('.th-subpo-grn').html('No. GRN');
+            $tr.find('.input-subpo-desc').attr('placeholder', 'e.g. Rp.25.000');
             $tr.find('.input-subpo-nopo').attr('placeholder', 'e.g. POLC/2606/0671');
             $tr.find('.input-subpo-nogrn').attr('placeholder', '-');
             $tr.find('.btn-fetch-subpo').attr('title', 'Ambil Nominal & Supplier dari Proint ERP');
@@ -2523,8 +2539,10 @@ $(document).ready(function() {
 
             $tr.find('.title-sub-table').html('<i class="fas fa-undo-alt mr-1"></i> Rincian Return');
             $tr.find('.text-btn-add-sub').text('Tambah Baris Return');
+            $tr.find('.th-subpo-desc').html('Description (Uraian Return) <span class="text-danger">*</span>');
             $tr.find('.th-subpo-no').html('No. PO <span class="text-danger">*</span>');
             $tr.find('.th-subpo-grn').html('Return No. <span class="text-danger">*</span>');
+            $tr.find('.input-subpo-desc').attr('placeholder', 'e.g. Uraian/alasan return...');
             $tr.find('.input-subpo-nopo').attr('placeholder', 'e.g. POLC/2609/0630');
             $tr.find('.input-subpo-nogrn').attr('placeholder', 'e.g. RTLC/2610/0001');
             $tr.find('.btn-fetch-subpo').attr('title', 'Ambil Data Return dari Proint ERP');
@@ -2656,7 +2674,7 @@ $(document).ready(function() {
                     // Isi Nama Vendor
                     var $vendorInput = $row.find('.input-std-vendor');
                     if ($vendorInput.length > 0 && data.vendor) {
-                        $vendorInput.val(data.vendor);
+                        $vendorInput.val(data.vendor.toUpperCase());
                     }
 
                     // Isi No. PO dari hasil ekstraksi reqdesc (jika ada)
@@ -2786,7 +2804,7 @@ $(document).ready(function() {
 
                     // Isi Nama Vendor
                     if (data.vendor) {
-                        $('#editVendor').val(data.vendor);
+                        $('#editVendor').val(data.vendor.toUpperCase());
                     }
 
                     // Isi No. PO dari hasil ekstraksi reqdesc (jika ada)
@@ -2930,7 +2948,7 @@ $(document).ready(function() {
                     // 2. Kolom Nama Vendor terisi otomatis
                     var $vendorInput = $row.find('.input-std-vendor');
                     if ($vendorInput.length > 0) {
-                        $vendorInput.val(data.vendor);
+                        $vendorInput.val((data.vendor || '').toUpperCase());
                     }
 
                     // 3. Kolom No GRN terisi otomatis
@@ -3062,7 +3080,7 @@ $(document).ready(function() {
                     // Untuk OFFSET/Kontrabon: Description dibiarkan apa adanya (tidak diubah)
 
                     // 2. Vendor
-                    $('#editVendor').val(data.vendor);
+                    $('#editVendor').val((data.vendor || '').toUpperCase());
 
                     // 3. No GRN
                     if (data.no_grn) {
@@ -3189,7 +3207,7 @@ $(document).ready(function() {
                     }, 1800);
 
                     // Nama Supplier
-                    $subRow.find(vendorClass).val(data.vendor);
+                    $subRow.find(vendorClass).val((data.vendor || '').toUpperCase());
 
                     // No GRN (otomatis dari Proint ERP, bisa berisi multiple GRN dipisahkan koma)
                     var grnClass = isEdit ? '.input-editsubpo-nogrn' : '.input-subpo-nogrn';
@@ -3272,18 +3290,19 @@ $(document).ready(function() {
 
                 if (res.status === 'success' && res.data) {
                     var data = res.data;
-                    if (data.no_po) {
+                    if (data.no_po && data.no_po !== '-') {
                         $inputNoPo.val(data.no_po);
                     }
 
-                    // Kolom 2: Nominal / Description
-                    $subRow.find(descClass).val(data.formatted_amount).addClass('bg-light font-weight-bold');
+                    // Kolom 2: Description diisi dengan returndesc saja
+                    var retDesc = (data.returndesc && data.returndesc !== '-') ? data.returndesc : '';
+                    $subRow.find(descClass).val(retDesc).addClass('bg-light font-weight-bold');
                     setTimeout(function() {
                         $subRow.find(descClass).removeClass('bg-light font-weight-bold');
                     }, 1800);
 
                     // Kolom 3: Nama Supplier
-                    $subRow.find(vendorClass).val(data.vendor).addClass('bg-light font-weight-bold');
+                    $subRow.find(vendorClass).val((data.vendor || '').toUpperCase()).addClass('bg-light font-weight-bold');
                     setTimeout(function() {
                         $subRow.find(vendorClass).removeClass('bg-light font-weight-bold');
                     }, 1800);
@@ -3302,7 +3321,7 @@ $(document).ready(function() {
                         timer: 3000,
                         timerProgressBar: true
                     });
-                    var toastText = 'Return No: ' + returnNmbr + ' | ' + data.vendor + ' | ' + data.formatted_amount;
+                    var toastText = 'Return No: ' + returnNmbr + ' | ' + (data.vendor || '-') + (retDesc ? ' | ' + retDesc : '');
                     Toast.fire({
                         icon: 'success',
                         title: 'Data Return Berhasil Dimuat!',
@@ -3310,7 +3329,7 @@ $(document).ready(function() {
                     });
                 } else {
                     if (res.data && res.data.vendor) {
-                        $subRow.find(vendorClass).val(res.data.vendor);
+                        $subRow.find(vendorClass).val((res.data.vendor || '').toUpperCase());
                     }
                     const Toast = Swal.mixin({
                         toast: true,
@@ -3428,7 +3447,7 @@ $(document).ready(function() {
     $(document).on('click', '.btn-copy-vendor', function() {
         var rIdx = $(this).attr('data-row');
         var $tbody = $(`#subpo-table-${rIdx} .subpo-tbody`);
-        var firstVendor = $tbody.find('tr.subpo-row:first').find('.input-subpo-vendor').val() || '';
+        var firstVendor = ($tbody.find('tr.subpo-row:first').find('.input-subpo-vendor').val() || '').toUpperCase();
         if (!firstVendor) {
             Swal.fire({ icon: 'info', title: 'Informasi', text: 'Silakan isi nama supplier pada baris 1 terlebih dahulu!' });
             return;
@@ -3436,6 +3455,11 @@ $(document).ready(function() {
         $tbody.find('tr.subpo-row').each(function() {
             $(this).find('.input-subpo-vendor').val(firstVendor);
         });
+    });
+
+    // Otomatis huruf kapital untuk semua input Nama Supplier / Vendor
+    $(document).on('input blur', '.input-subpo-vendor, .input-editsubpo-vendor, .input-std-vendor, #editVendor', function() {
+        this.value = this.value.toUpperCase();
     });
 
     function reindexRows() {
