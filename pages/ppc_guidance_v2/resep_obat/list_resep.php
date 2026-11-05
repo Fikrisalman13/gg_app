@@ -38,6 +38,25 @@ if ($permissions['CanView'] != 1) {
     header('Location: ../dashboard.php');
     exit;
 }
+
+$canSeePrice = (int) ($_SESSION['GroupId'] ?? 0) === 1;
+if (!$canSeePrice) {
+    $pricePermissionStatement = sqlsrv_query(
+        $conn,
+        "SELECT TOP 1 g.id
+         FROM dbo.resep_obat_group_members m
+         INNER JOIN dbo.resep_obat_groups g ON m.group_id = g.id
+         WHERE m.username = ? AND g.role_type = 'KABAG'",
+        [$_SESSION['UserName']]
+    );
+
+    $canSeePrice = $pricePermissionStatement
+        && (bool) sqlsrv_fetch_array($pricePermissionStatement, SQLSRV_FETCH_ASSOC);
+
+    if ($pricePermissionStatement) {
+        sqlsrv_free_stmt($pricePermissionStatement);
+    }
+}
 $themeColor = $_SESSION['Theme'] ?? 'primary';
 
 include '../../../includes/header.php';
@@ -123,32 +142,16 @@ include '../../../includes/sidebar.php';
 
                     <div class="status-summary mb-3" id="statusSummary" aria-live="polite">
                         <button type="button" class="status-summary-item status-shading ppc-summary-group-open" data-category="shading" data-label="Shading" aria-label="Lihat rincian grouping Shading">
-                            <span>Shading</span>
-                            <div class="status-summary-value text-right">
-                                <strong id="summaryShading">0</strong>
-                                <small id="summaryShadingGrouped" class="status-summary-sub">0 kelompok</small>
-                            </div>
+                            <span>Shading</span><strong id="summaryShading">0</strong>
                         </button>
                         <button type="button" class="status-summary-item status-experiment ppc-summary-group-open" data-category="experiment" data-label="Experiment" aria-label="Lihat rincian grouping Experiment">
-                            <span>Experiment</span>
-                            <div class="status-summary-value text-right">
-                                <strong id="summaryExperiment">0</strong>
-                                <small id="summaryExperimentGrouped" class="status-summary-sub">0 kelompok</small>
-                            </div>
+                            <span>Experiment</span><strong id="summaryExperiment">0</strong>
                         </button>
                         <button type="button" class="status-summary-item status-kestabilan ppc-summary-group-open" data-category="kesetabilan" data-label="Kesetabilan" aria-label="Lihat rincian grouping Kesetabilan">
-                            <span>Kesetabilan</span>
-                            <div class="status-summary-value text-right">
-                                <strong id="summaryKesetabilan">0</strong>
-                                <small id="summaryKesetabilanGrouped" class="status-summary-sub">0 kelompok</small>
-                            </div>
+                            <span>Kesetabilan</span><strong id="summaryKesetabilan">0</strong>
                         </button>
                         <button type="button" class="status-summary-item status-master-resep ppc-summary-group-open" data-category="master_resep" data-label="Master Resep" aria-label="Lihat rincian grouping Master Resep">
-                            <span>Master Resep</span>
-                            <div class="status-summary-value text-right">
-                                <strong id="summaryMasterResep">0</strong>
-                                <small id="summaryMasterResepGrouped" class="status-summary-sub">0 kelompok</small>
-                            </div>
+                            <span>Master Resep</span><strong id="summaryMasterResep">0</strong>
                         </button>
                         <button type="button" class="status-summary-item status-total ppc-summary-group-open" data-category="total" data-label="Total Hasil" aria-label="Lihat rincian seluruh grouping">
                             <span>Total Hasil</span><strong id="summaryTotal">0</strong>
@@ -168,7 +171,9 @@ include '../../../includes/sidebar.php';
                                     <th>Cus Color</th>
                                     <th>Weight</th>
                                     <th>Plan Qty</th>
-                                    <th class="text-right">Total Cost / Meter</th>
+                                    <?php if ($canSeePrice): ?>
+                                        <th class="text-right">Total Cost / Meter</th>
+                                    <?php endif; ?>
                                     <th>Status Resep</th>
                                     <th>Aksi</th>
                                 </tr>
@@ -369,29 +374,6 @@ include '../../../includes/sidebar.php';
     .status-summary-item strong {
         font-size: 1.35rem;
         margin-left: .5rem;
-    }
-
-    .status-summary-value {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        justify-content: center;
-        line-height: 1.15;
-        margin-left: .5rem;
-    }
-
-    .status-summary-value strong {
-        font-size: 1.35rem;
-        line-height: 1.1;
-        margin-left: 0;
-    }
-
-    .status-summary-sub {
-        font-size: .72rem;
-        font-weight: 500;
-        opacity: .9;
-        white-space: nowrap;
-        margin-top: 2px;
     }
 
     .ppc-summary-group-card {
@@ -678,19 +660,21 @@ include '../../../includes/sidebar.php';
                 { data: 'cus_color', name: 'cus_color' },
                 { data: 'weight', name: 'weight' },
                 { data: 'plan_qty', name: 'plan_qty' },
-                {
-                    data: 'total_cost_per_meter',
-                    name: 'total_cost_per_meter',
-                    className: 'text-right font-weight-bold',
-                    render: function (data, type, row) {
-                        var val = parseFloat(data) || 0;
-                        if (type === 'sort' || type === 'type') {
-                            return val;
+                <?php if ($canSeePrice): ?>
+                    {
+                        data: 'total_cost_per_meter',
+                        name: 'total_cost_per_meter',
+                        className: 'text-right font-weight-bold',
+                        render: function (data, type, row) {
+                            var val = parseFloat(data) || 0;
+                            if (type === 'sort' || type === 'type') {
+                                return val;
+                            }
+                            if (val <= 0) return '-';
+                            return 'Rp ' + val.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
-                        if (val <= 0) return '-';
-                        return 'Rp ' + val.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    }
-                },
+                    },
+                <?php endif; ?>
                 {
                     data: 'status_resep_lipat',
                     name: 'status_resep_lipat',
@@ -902,13 +886,9 @@ include '../../../includes/sidebar.php';
         table.on('xhr.dt', function (e, settings, json) {
             if (!json || !json.statusSummary) return;
             $('#summaryShading').text(json.statusSummary.shading || 0);
-            $('#summaryShadingGrouped').text((json.statusSummary.shading_grouped || 0) + ' kelompok');
             $('#summaryExperiment').text(json.statusSummary.experiment || 0);
-            $('#summaryExperimentGrouped').text((json.statusSummary.experiment_grouped || 0) + ' kelompok');
             $('#summaryKesetabilan').text(json.statusSummary.kesetabilan || 0);
-            $('#summaryKesetabilanGrouped').text((json.statusSummary.kesetabilan_grouped || 0) + ' kelompok');
             $('#summaryMasterResep').text(json.statusSummary.master_resep || 0);
-            $('#summaryMasterResepGrouped').text((json.statusSummary.master_resep_grouped || 0) + ' kelompok');
             $('#summaryTotal').text(json.recordsFiltered || 0);
         });
 

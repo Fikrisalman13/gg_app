@@ -18,6 +18,37 @@ if (!isset($_SESSION['UserName'])) {
     exit;
 }
 
+/**
+ * Memeriksa apakah pengguna sesi saat ini berhak melihat nilai biaya resep.
+ *
+ * @param resource $conn Koneksi SQL Server aplikasi.
+ * @return bool True untuk admin atau anggota grup KABAG.
+ */
+function canSeeRecipePrice($conn): bool
+{
+    if ((int) ($_SESSION['GroupId'] ?? 0) === 1) {
+        return true;
+    }
+
+    $statement = sqlsrv_query(
+        $conn,
+        "SELECT TOP 1 g.id
+         FROM dbo.resep_obat_group_members m
+         INNER JOIN dbo.resep_obat_groups g ON m.group_id = g.id
+         WHERE m.username = ? AND g.role_type = 'KABAG'",
+        [$_SESSION['UserName']]
+    );
+
+    $canSeePrice = $statement
+        && (bool) sqlsrv_fetch_array($statement, SQLSRV_FETCH_ASSOC);
+
+    if ($statement) {
+        sqlsrv_free_stmt($statement);
+    }
+
+    return $canSeePrice;
+}
+
 /** Format SQL Server date values for JSON display. */
 if (!function_exists('formatRecipeDate')) {
     function formatRecipeDate($value): string
@@ -41,6 +72,7 @@ if (!function_exists('requireRecipeStatement')) {
 }
 
 try {
+    $canSeePrice = canSeeRecipePrice($conn);
     $start = max(0, (int) ($_POST['start'] ?? 0));
     $length = max(1, min(100, (int) ($_POST['length'] ?? 10)));
     $draw = (int) ($_POST['draw'] ?? 1);
@@ -57,9 +89,13 @@ try {
         5 => 'representative.cus_color',
         6 => 'representative.weight',
         7 => 'representative.plan_qty',
-        8 => 'representative.total_cost_per_meter',
-        9 => 'representative.status_resep_lipat',
     ];
+    if ($canSeePrice) {
+        $orderableColumns[8] = 'representative.total_cost_per_meter';
+        $orderableColumns[9] = 'representative.status_resep_lipat';
+    } else {
+        $orderableColumns[8] = 'representative.status_resep_lipat';
+    }
     $orderIndex = (int) ($_POST['order'][0]['column'] ?? 3);
     $orderColumn = $orderableColumns[$orderIndex] ?? 'representative.kode_warna';
     $orderDirection = strtolower((string) ($_POST['order'][0]['dir'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
@@ -129,20 +165,13 @@ try {
 
     $filteredStatement = requireRecipeStatement(sqlsrv_query(
         $conn,
-        "SELECT 
-            COUNT(*) AS total,
-            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) = 'shading' THEN 1 ELSE 0 END) AS shading_grouped,
-            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) = 'experiment' THEN 1 ELSE 0 END) AS experiment_grouped,
-            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) IN ('kestabilan', 'kesetabilan') THEN 1 ELSE 0 END) AS kesetabilan_grouped,
-            SUM(CASE WHEN LOWER(LTRIM(RTRIM(group_status))) IN ('master resep', 'master') THEN 1 ELSE 0 END) AS master_resep_grouped
-        FROM (
+        "SELECT COUNT(*) AS total FROM (
             SELECT $groupCode AS group_code, $groupCustomerColor AS group_customer_color, $groupStatus AS group_status
             FROM dbo.resep_obat_v2 r $whereClause GROUP BY $groupCode, $groupCustomerColor, $groupStatus
         ) groups",
         $params,
     ), 'Gagal menghitung group resep terfilter.');
-    $filteredRow = sqlsrv_fetch_array($filteredStatement, SQLSRV_FETCH_ASSOC) ?: [];
-    $totalFiltered = (int) ($filteredRow['total'] ?? 0);
+    $totalFiltered = (int) sqlsrv_fetch_array($filteredStatement, SQLSRV_FETCH_ASSOC)['total'];
 
     $summaryStatement = requireRecipeStatement(sqlsrv_query($conn, "SELECT
         SUM(CASE WHEN LOWER(LTRIM(RTRIM(COALESCE(r.status_resep_lipat, '')))) = 'shading' THEN 1 ELSE 0 END) AS shading,
@@ -156,19 +185,19 @@ try {
         'experiment' => (int) ($summaryRow['experiment'] ?? 0),
         'kesetabilan' => (int) ($summaryRow['kesetabilan'] ?? 0),
         'master_resep' => (int) ($summaryRow['master_resep'] ?? 0),
-        'shading_grouped' => (int) ($filteredRow['shading_grouped'] ?? 0),
-        'experiment_grouped' => (int) ($filteredRow['experiment_grouped'] ?? 0),
-        'kesetabilan_grouped' => (int) ($filteredRow['kesetabilan_grouped'] ?? 0),
-        'master_resep_grouped' => (int) ($filteredRow['master_resep_grouped'] ?? 0),
     ];
 
-    $groupStatement = requireRecipeStatement(sqlsrv_query($conn, "WITH filtered AS (
-        SELECT r.*,
-            (
+    $totalCostSelect = $canSeePrice
+        ? "(
                 SELECT COALESCE(SUM(d.total), 0)
                 FROM dbo.resep_obat_detail_v2 d
                 WHERE d.id_resep = r.id
-            ) / NULLIF(CASE WHEN r.plan_qty > 0 THEN r.plan_qty ELSE 1 END, 0) AS total_cost_per_meter,
+            ) / NULLIF(CASE WHEN r.plan_qty > 0 THEN r.plan_qty ELSE 1 END, 0) AS total_cost_per_meter,"
+        : '';
+
+    $groupStatement = requireRecipeStatement(sqlsrv_query($conn, "WITH filtered AS (
+        SELECT r.*,
+            $totalCostSelect
             $groupCode AS group_code, $groupCustomerColor AS group_customer_color,
             $groupStatus AS group_status,
             ROW_NUMBER() OVER (
@@ -195,8 +224,7 @@ try {
     $data = [];
     foreach ($representatives as $representative) {
         $productionNumber = trim((string) ($representative['no_cp'] ?? ''));
-        $totalCost = (float)($representative['total_cost_per_meter'] ?? 0);
-        $data[] = [
+        $rowData = [
             'id' => (int) $representative['id'],
             'no_cp' => $productionNumber ?: '-',
             'label_jual' => $labelsByProductionNumber[$productionNumber] ?? '-',
@@ -205,13 +233,16 @@ try {
             'color_name' => $representative['color_name'] ?? '-',
             'weight' => $representative['weight'] ?? 0,
             'plan_qty' => $representative['plan_qty'] ?? 0,
-            'total_cost_per_meter' => $totalCost,
             'color_desc' => $representative['color_desc'] ?? '-',
             'status_resep_lipat' => $representative['group_status'],
             'created_at' => formatRecipeDate($representative['created_at'] ?? null),
             'created_by' => $representative['created_by'] ?? '-',
             'has_experiment_source' => !empty($representative['source_experiment_id']),
         ];
+        if ($canSeePrice) {
+            $rowData['total_cost_per_meter'] = (float) ($representative['total_cost_per_meter'] ?? 0);
+        }
+        $data[] = $rowData;
     }
     echo json_encode([
         'draw' => $draw,

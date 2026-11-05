@@ -553,6 +553,63 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
         width: 92% !important;
     }
 }
+
+/* Summary Cards Interaktif */
+.summary-card {
+    cursor: pointer;
+    transition: all 0.22s ease-in-out;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: #ffffff;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+}
+.summary-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08) !important;
+}
+.summary-card.active {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+}
+.summary-card[data-status=""].active {
+    border-color: #3b82f6;
+    background: linear-gradient(to right, #eff6ff, #ffffff);
+}
+.summary-card[data-status="Menunggu TTD"].active {
+    border-color: #f59e0b;
+    background: linear-gradient(to right, #fffbeb, #ffffff);
+}
+.summary-card[data-status="Sudah Ditandatangani"].active {
+    border-color: #10b981;
+    background: linear-gradient(to right, #ecfdf5, #ffffff);
+}
+.summary-card .info-box-icon {
+    border-radius: 8px;
+    width: 62px;
+    height: 62px;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.summary-card .info-box-number {
+    font-size: 1.6rem;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+.summary-card .info-box-text {
+    font-size: 11.5px;
+    letter-spacing: 0.5px;
+}
+.summary-card .active-indicator {
+    display: none;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+.summary-card.active .active-indicator {
+    display: inline-block;
+}
 </style>
 
 <div class="wrapper">
@@ -577,6 +634,51 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
 
     <section class="content">
         <div class="container-fluid">
+            <!-- SUMMARY METRICS CARDS -->
+            <div class="row mb-3" id="rowSummaryCards">
+                <!-- Card 1: Total Semua Dokumen -->
+                <div class="col-md-4 col-sm-6 col-12 mb-2 mb-md-0">
+                    <div class="info-box shadow-sm summary-card active" data-status="" title="Klik untuk menampilkan semua dokumen">
+                        <span class="info-box-icon bg-info elevation-1"><i class="fas fa-file-invoice"></i></span>
+                        <div class="info-box-content">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="info-box-text text-muted text-uppercase font-weight-bold">Total Dokumen</span>
+                                <span class="badge badge-primary active-indicator px-2 py-1"><i class="fas fa-check mr-1"></i>Aktif</span>
+                            </div>
+                            <span class="info-box-number text-dark font-weight-bold" id="cardSummaryTotal">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Menunggu TTD -->
+                <div class="col-md-4 col-sm-6 col-12 mb-2 mb-md-0">
+                    <div class="info-box shadow-sm summary-card" data-status="Menunggu TTD" title="Klik untuk memfilter: Menunggu TTD">
+                        <span class="info-box-icon bg-warning elevation-1 text-white"><i class="fas fa-clock"></i></span>
+                        <div class="info-box-content">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="info-box-text text-muted text-uppercase font-weight-bold">Menunggu TTD</span>
+                                <span class="badge badge-warning active-indicator text-white px-2 py-1"><i class="fas fa-check mr-1"></i>Aktif</span>
+                            </div>
+                            <span class="info-box-number text-warning font-weight-bold" id="cardSummaryMenunggu">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Sudah Ditandatangani -->
+                <div class="col-md-4 col-sm-12 col-12">
+                    <div class="info-box shadow-sm summary-card" data-status="Sudah Ditandatangani" title="Klik untuk memfilter: Sudah Ditandatangani">
+                        <span class="info-box-icon bg-success elevation-1"><i class="fas fa-check-circle"></i></span>
+                        <div class="info-box-content">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="info-box-text text-muted text-uppercase font-weight-bold">Sudah Ditandatangani</span>
+                                <span class="badge badge-success active-indicator px-2 py-1"><i class="fas fa-check mr-1"></i>Aktif</span>
+                            </div>
+                            <span class="info-box-number text-success font-weight-bold" id="cardSummarySudah">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card card-primary card-outline shadow-sm">
                 <div class="card-header bg-<?= htmlspecialchars($themeColor) ?> text-white clearfix">
                     <h3 class="card-title font-weight-bold pt-1 mb-0">
@@ -1296,6 +1398,43 @@ $(document).ready(function() {
 
     window.purchasingDataTable = table;
 
+    // --- SUMMARY CARDS METRICS & FILTER INTERACTION ---
+    table.on('xhr.dt', function(e, settings, json, xhr) {
+        if (json && json.summary) {
+            updateSummaryCards(json.summary);
+        }
+    });
+
+    function updateSummaryCards(summary) {
+        if (!summary) return;
+        var total = Number(summary.total || 0);
+        var menunggu = Number(summary.menunggu_ttd || 0);
+        var sudah = Number(summary.sudah_ttd || 0);
+
+        $('#cardSummaryTotal').text(total.toLocaleString('id-ID'));
+        $('#cardSummaryMenunggu').text(menunggu.toLocaleString('id-ID'));
+        $('#cardSummarySudah').text(sudah.toLocaleString('id-ID'));
+    }
+
+    function syncActiveSummaryCard() {
+        var curStatus = $('#filterStatus').val() || '';
+        $('.summary-card').removeClass('active');
+        if (curStatus === 'Menunggu TTD') {
+            $('.summary-card[data-status="Menunggu TTD"]').addClass('active');
+        } else if (curStatus === 'Sudah Ditandatangani') {
+            $('.summary-card[data-status="Sudah Ditandatangani"]').addClass('active');
+        } else if (!curStatus) {
+            $('.summary-card[data-status=""]').addClass('active');
+        }
+    }
+
+    $(document).on('click', '.summary-card', function() {
+        var targetStatus = $(this).attr('data-status');
+        $('#filterStatus').val(targetStatus);
+        syncActiveSummaryCard();
+        table.ajax.reload();
+    });
+
     // Handler checkbox per-baris
     $(document).on('change', '.row-select-checkbox', function() {
         var id = parseInt($(this).val());
@@ -1361,6 +1500,7 @@ $(document).ready(function() {
 
     // Event handler filter
     $('#filterTanggal, #filterType, #filterStatus').on('change', function() {
+        syncActiveSummaryCard();
         table.ajax.reload();
     });
 
@@ -1368,6 +1508,7 @@ $(document).ready(function() {
         $('#filterTanggal').val('');
         $('#filterType').val('');
         $('#filterStatus').val('');
+        syncActiveSummaryCard();
         window.clearAllSelections();
         table.search('').draw();
     });

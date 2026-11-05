@@ -1820,6 +1820,11 @@ switch ($orderColName) {
 $formattedData = [];
 $totalRecords = 0;
 $totalFiltered = 0;
+$summaryStats = [
+    'total'        => 0,
+    'menunggu_ttd' => 0,
+    'sudah_ttd'    => 0
+];
 
 if ($tableReady) {
     // --- QUERY REAL DARI SQL SERVER ---
@@ -1845,6 +1850,21 @@ if ($tableReady) {
     if (!empty($filterType)) {
         $whereClauses[] = "h.type = ?";
         $queryParams[] = $filterType;
+    }
+
+    // Hitung ringkasan summary cards (berdasarkan filter tanggal, type, dan search aktif, tanpa filterStatus)
+    $summaryWhereSql = implode(' AND ', $whereClauses);
+    $sqlSummary = "SELECT 
+                        COUNT(*) as total,
+                        SUM(CASE WHEN h.status_ttd = 'Menunggu TTD' THEN 1 ELSE 0 END) as menunggu_ttd,
+                        SUM(CASE WHEN h.status_ttd = 'Sudah Ditandatangani' THEN 1 ELSE 0 END) as sudah_ttd
+                   FROM dbo.purchasing_header h
+                   WHERE {$summaryWhereSql}";
+    $qSummary = sqlsrv_query($conn, $sqlSummary, $queryParams);
+    if ($qSummary && ($sRow = sqlsrv_fetch_array($qSummary, SQLSRV_FETCH_ASSOC))) {
+        $summaryStats['total'] = intval($sRow['total'] ?? 0);
+        $summaryStats['menunggu_ttd'] = intval($sRow['menunggu_ttd'] ?? 0);
+        $summaryStats['sudah_ttd'] = intval($sRow['sudah_ttd'] ?? 0);
     }
 
     if (!empty($filterStatus)) {
@@ -1958,11 +1978,29 @@ if ($tableReady) {
         $poItems = $row['po_items'] ?? [];
         $formattedData[] = renderPurchasingRowItem($row, $descList, $poItems, $isMultiPo, $currentUser);
     }
+
+    $sumTotal = 0;
+    $sumMenunggu = 0;
+    $sumSudah = 0;
+    foreach ($allData as $item) {
+        if (!empty($filterTanggal) && ($item['tanggal'] ?? '') !== $filterTanggal) continue;
+        if (!empty($filterType) && ($item['type'] ?? '') !== $filterType) continue;
+        $sumTotal++;
+        $st = $item['status_ttd_raw'] ?? 'Menunggu TTD';
+        if ($st === 'Menunggu TTD') $sumMenunggu++;
+        elseif ($st === 'Sudah Ditandatangani') $sumSudah++;
+    }
+    $summaryStats = [
+        'total'        => $sumTotal,
+        'menunggu_ttd' => $sumMenunggu,
+        'sudah_ttd'    => $sumSudah
+    ];
 }
 
 echo json_encode([
     'draw'            => $draw,
     'recordsTotal'    => $totalRecords,
     'recordsFiltered' => $totalFiltered,
-    'data'            => $formattedData
+    'data'            => $formattedData,
+    'summary'         => $summaryStats
 ], JSON_UNESCAPED_UNICODE);

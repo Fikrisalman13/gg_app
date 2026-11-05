@@ -81,12 +81,6 @@ function purchasingActivityCreateIssue(
     }
 
     $isReturn = ($type === 'Purchase Return' || stripos($type, 'Return') !== false);
-    $refLabel = $isReturn ? 'No. CN/DN: ' : 'No. GRN: ';
-    $lines = [
-        'Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'),
-        'Nama Supplier: ' . ($vendor !== '' ? $vendor : '-'),
-        $refLabel . ($grn !== '' ? $grn : '-')
-    ];
     if ($isReturn) {
         $lines = [
             'Nominal / Description: ' . ($nominal !== '' ? $nominal : '-'),
@@ -113,7 +107,6 @@ function purchasingActivityCreateIssue(
     }
 
     $profile = purchasingIssueCurrentProfile($conn, $username);
-    $issueName = 'Membuat Serah Terima Dokumen ' . $type . ' ' . $noPo;
     $refDoc = ($isReturn && $grn !== '' && $grn !== '-') ? $grn : $noPo;
     $issueName = 'Membuat Serah Terima Dokumen ' . $type . ' ' . $refDoc;
     $issueSql = 'INSERT INTO dbo.purchasing_issues (

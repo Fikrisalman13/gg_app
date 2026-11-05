@@ -11,6 +11,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 // Increase execution time and memory limit for large exports
 set_time_limit(300); // 5 minutes
@@ -23,11 +24,39 @@ if (!isset($_SESSION['UserName'])) {
     die("Access Denied");
 }
 
+$canSeePrice = (int) ($_SESSION['GroupId'] ?? 0) === 1;
+if (!$canSeePrice) {
+    $pricePermissionStatement = sqlsrv_query(
+        $conn,
+        "SELECT TOP 1 g.id
+         FROM dbo.resep_obat_group_members m
+         INNER JOIN dbo.resep_obat_groups g ON m.group_id = g.id
+         WHERE m.username = ? AND g.role_type = 'KABAG'",
+        [$_SESSION['UserName']]
+    );
+
+    $canSeePrice = $pricePermissionStatement
+        && (bool) sqlsrv_fetch_array($pricePermissionStatement, SQLSRV_FETCH_ASSOC);
+
+    if ($pricePermissionStatement) {
+        sqlsrv_free_stmt($pricePermissionStatement);
+    }
+}
+
 // Params
 $startDate = $_GET['startDate'] ?? '';
 $endDate   = $_GET['endDate'] ?? '';
 
 // Fetch Resep Headers
+$totalCostSelect = $canSeePrice
+    ? ",
+            (
+                SELECT COALESCE(SUM(d.total), 0)
+                FROM dbo.resep_obat_detail_v2 d
+                WHERE d.id_resep = r.id
+            ) / NULLIF(CASE WHEN r.plan_qty > 0 THEN r.plan_qty ELSE 1 END, 0) AS total_cost_per_meter"
+    : '';
+
 $sql = "SELECT 
             r.id,
             r.no_cp, 
@@ -35,12 +64,7 @@ $sql = "SELECT
             r.mesin,
             r.kode_warna,
             r.color_name,
-            r.color_desc,
-            (
-                SELECT COALESCE(SUM(d.total), 0)
-                FROM dbo.resep_obat_detail_v2 d
-                WHERE d.id_resep = r.id
-            ) / NULLIF(CASE WHEN r.plan_qty > 0 THEN r.plan_qty ELSE 1 END, 0) AS total_cost_per_meter,
+            r.color_desc$totalCostSelect,
             r.resep_prod_code,
             r.resep_prod_name,
             r.resep_no,
@@ -154,37 +178,80 @@ $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Data Resep');
 
 // Define Headers
-$headers = [
-    'No', 'No CP', 'Kode Grey', 'Mesin', 'Kode Warna', 'Color Name', 'Total Cost / Meter',
-    'Resep Prod Code', 'Resep Prod Name', 'Resep No', 'Resep Seq', 'Resep Date',
-    'Resep Type', 'No CP Resep', 'No SO', 'Rtg Code', 'Rtg Name', 'Status Desc',
-    'Cus Color', 'Label Jual', 'Lot No', 'Weight', 'Plan Qty', 'Vlot', 'Status Resep',
-    'Created At', 'Created By', 'Updated At', 'Updated By'
-];
+$proIntHeaders = $showProIntMetadata
+    ? [
+        'resep_prod_code' => 'Resep Prod Code',
+        'resep_prod_name' => 'Resep Prod Name',
+        'resep_no' => 'Resep No',
+        'resep_seq' => 'Resep Seq',
+        'resep_date' => 'Resep Date',
+        'resep_type' => 'Resep Type',
+        'no_cp_resep' => 'No CP Resep',
+        'no_so' => 'No SO',
+        'rtg_code' => 'Rtg Code',
+        'rtg_name' => 'Rtg Name',
+        'status_desc' => 'Status Desc',
+    ]
+    : [];
+
+$headers = array_merge(
+    [
+        'no' => 'No',
+        'no_cp' => 'No CP',
+        'kode_grey' => 'Kode Grey',
+        'mesin' => 'Mesin',
+        'kode_warna' => 'Kode Warna',
+        'color_name' => 'Color Name',
+    ],
+    $canSeePrice ? ['total_cost_per_meter' => 'Total Cost / Meter'] : [],
+    $proIntHeaders,
+    [
+        'cus_color' => 'Cus Color',
+        'label_jual' => 'Label Jual',
+        'lot_no' => 'Lot No',
+        'weight' => 'Weight',
+        'plan_qty' => 'Plan Qty',
+        'vlot' => 'Vlot',
+        'status_resep_lipat' => 'Status Resep',
+        'created_at' => 'Created At',
+        'created_by' => 'Created By',
+        'updated_at' => 'Updated At',
+        'updated_by' => 'Updated By',
+    ]
+);
 if ($includeDetails) {
-    $headers = array_merge($headers, [
-        'Item Kode', 'Item Name', 'Category', 'Qty/Recipe', 'UOM', 'CF', 'UOM CF', 'Price', 'Total'
-    ]);
+    $headers = array_merge(
+        $headers,
+        [
+            'detail_item_code' => 'Item Kode',
+            'detail_name' => 'Item Name',
+            'detail_category' => 'Category',
+            'detail_receipe' => 'Qty/Recipe',
+            'detail_uom' => 'UOM',
+            'detail_cf' => 'CF',
+            'detail_uom_cf' => 'UOM CF',
+        ],
+        $canSeePrice
+            ? ['detail_price' => 'Price', 'detail_total' => 'Total']
+            : []
+    );
+}
+
+$columnByKey = [];
+foreach (array_keys($headers) as $index => $key) {
+    $columnByKey[$key] = Coordinate::stringFromColumnIndex($index + 1);
 }
 
 // Write Headers
 $col = 'A';
-foreach ($headers as $h) {
-    $sheet->setCellValue($col . '1', $h);
+foreach ($headers as $headerLabel) {
+    $sheet->setCellValue($col . '1', $headerLabel);
     $sheet->getColumnDimension($col)->setAutoSize(true);
     $col++;
 }
 
 // Style Header
-// Calculate last column letter (handles AA, AB, etc.)
-$colCount = count($headers);
-if ($colCount <= 26) {
-    $lastCol = chr(ord('A') + $colCount - 1);
-} else {
-    $firstLetter = chr(ord('A') + floor(($colCount - 1) / 26) - 1);
-    $secondLetter = chr(ord('A') + (($colCount - 1) % 26));
-    $lastCol = $firstLetter . $secondLetter;
-}
+$lastCol = Coordinate::stringFromColumnIndex(count($headers));
 
 $headerStyle = [
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -207,8 +274,12 @@ foreach ($resepData as $resep) {
     
     $details = [null];
     if ($includeDetails) {
+        $detailFields = $canSeePrice
+            ? 'detail.*,'
+            : 'detail.id, detail.id_resep, detail.table_index, detail.kode, detail.name, detail.category,
+                detail.receipe, detail.uom, detail.cf, detail.uom_cf,';
         $detailSql = "
-            SELECT detail.*,
+            SELECT $detailFields
                 COALESCE(NULLIF(LTRIM(RTRIM(legacy_master.codeprod_proint)), ''), detail.kode) AS display_kode
             FROM dbo.resep_obat_detail_v2 detail
             OUTER APPLY (
@@ -246,69 +317,91 @@ foreach ($resepData as $resep) {
     }
     
     // Write rows for each detail item
-    // Write rows for each detail item
     $firstRow = $rowNum;
-    
-    // Header Values Template
-    $headerTemplate = [
-        'A' => $no,
-        'B' => $resep['no_cp'] ? $resep['no_cp'] : '-',
-        'C' => $resep['kode_grey'] ? $resep['kode_grey'] : '-',
-        'D' => $resep['mesin'] ? $resep['mesin'] : '-',
-        'E' => $resep['kode_warna'] ? $resep['kode_warna'] : '-',
-        'F' => $resep['color_name'] ? $resep['color_name'] : '-',
-        'G' => (isset($resep['total_cost_per_meter']) && (float)$resep['total_cost_per_meter'] > 0) ? 'Rp ' . number_format((float)$resep['total_cost_per_meter'], 2, ',', '.') : '-',
-        'H' => $resep['resep_prod_code'] ? $resep['resep_prod_code'] : '-',
-        'I' => $resep['resep_prod_name'] ? $resep['resep_prod_name'] : '-',
-        'J' => $resep['resep_no'] ? $resep['resep_no'] : '-',
-        'K' => $resep['resep_seq'] ? $resep['resep_seq'] : '-',
-        'L' => $resep_date ? $resep_date : '-',
-        'M' => $resep['resep_type'] ? $resep['resep_type'] : '-',
-        'N' => $resep['no_cp_resep'] ? $resep['no_cp_resep'] : '-',
-        'O' => $resep['no_so'] ? $resep['no_so'] : '-',
-        'P' => $resep['rtg_code'] ? $resep['rtg_code'] : '-',
-        'Q' => $resep['rtg_name'] ? $resep['rtg_name'] : '-',
-        'R' => $resep['status_desc'] ? $resep['status_desc'] : '-',
-        'S' => $resep['cus_color'] ? $resep['cus_color'] : '-',
-        'T' => $labelsByProductionNumber[trim((string) ($resep['no_cp'] ?? ''))] ?? '-',
-        'U' => $resep['lot_no'] ? $resep['lot_no'] : '-',
-        'V' => number_format($resep['weight'], 4, '.', ''),
-        'W' => number_format($resep['plan_qty'], 2, '.', ''),
-        'X' => $resep['vlot'] ? $resep['vlot'] : '-',
-        'Y' => $resep['status_resep_lipat'] ? $resep['status_resep_lipat'] : '-',
-        'Z' => $created_at ? $created_at : '-',
-        'AA' => $resep['created_by'] ? $resep['created_by'] : '-',
-        'AB' => ($resep['updated_at'] instanceof DateTime ? $resep['updated_at']->format('d-m-Y H:i') : '-'),
-        'AC' => $resep['updated_by'] ? $resep['updated_by'] : '-'
-    ];
+
+    $headerTemplate = array_merge(
+        [
+            'no' => $no,
+            'no_cp' => $resep['no_cp'] ? $resep['no_cp'] : '-',
+            'kode_grey' => $resep['kode_grey'] ? $resep['kode_grey'] : '-',
+            'mesin' => $resep['mesin'] ? $resep['mesin'] : '-',
+            'kode_warna' => $resep['kode_warna'] ? $resep['kode_warna'] : '-',
+            'color_name' => $resep['color_name'] ? $resep['color_name'] : '-',
+        ],
+        $canSeePrice
+            ? [
+                'total_cost_per_meter' => isset($resep['total_cost_per_meter'])
+                    && (float) $resep['total_cost_per_meter'] > 0
+                    ? 'Rp ' . number_format((float) $resep['total_cost_per_meter'], 2, ',', '.')
+                    : '-',
+            ]
+            : [],
+        $showProIntMetadata
+            ? [
+                'resep_prod_code' => $resep['resep_prod_code'] ? $resep['resep_prod_code'] : '-',
+                'resep_prod_name' => $resep['resep_prod_name'] ? $resep['resep_prod_name'] : '-',
+                'resep_no' => $resep['resep_no'] ? $resep['resep_no'] : '-',
+                'resep_seq' => $resep['resep_seq'] ? $resep['resep_seq'] : '-',
+                'resep_date' => $resep_date ?: '-',
+                'resep_type' => $resep['resep_type'] ? $resep['resep_type'] : '-',
+                'no_cp_resep' => $resep['no_cp_resep'] ? $resep['no_cp_resep'] : '-',
+                'no_so' => $resep['no_so'] ? $resep['no_so'] : '-',
+                'rtg_code' => $resep['rtg_code'] ? $resep['rtg_code'] : '-',
+                'rtg_name' => $resep['rtg_name'] ? $resep['rtg_name'] : '-',
+                'status_desc' => $resep['status_desc'] ? $resep['status_desc'] : '-',
+            ]
+            : [],
+        [
+            'cus_color' => $resep['cus_color'] ? $resep['cus_color'] : '-',
+            'label_jual' => $labelsByProductionNumber[trim((string) ($resep['no_cp'] ?? ''))] ?? '-',
+            'lot_no' => $resep['lot_no'] ? $resep['lot_no'] : '-',
+            'weight' => number_format($resep['weight'], 4, '.', ''),
+            'plan_qty' => number_format($resep['plan_qty'], 2, '.', ''),
+            'vlot' => $resep['vlot'] ? $resep['vlot'] : '-',
+            'status_resep_lipat' => $resep['status_resep_lipat'] ? $resep['status_resep_lipat'] : '-',
+            'created_at' => $created_at ?: '-',
+            'created_by' => $resep['created_by'] ? $resep['created_by'] : '-',
+            'updated_at' => $resep['updated_at'] instanceof DateTime
+                ? $resep['updated_at']->format('d-m-Y H:i')
+                : '-',
+            'updated_by' => $resep['updated_by'] ? $resep['updated_by'] : '-',
+        ]
+    );
 
     foreach ($details as $detail) {
-        foreach ($headerTemplate as $col => $val) {
-            $sheet->setCellValue($col . $rowNum, $val);
+        foreach ($headerTemplate as $key => $value) {
+            $sheet->setCellValue($columnByKey[$key] . $rowNum, $value);
         }
 
         if ($detail) {
-            $sheet->setCellValue('AD' . $rowNum, $detail['display_kode'] ?? $detail['kode'] ?? '-');
-            $sheet->getStyle('AD' . $rowNum)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            $sheet->setCellValue('AE' . $rowNum, $detail['name'] ?? '-');
-            $sheet->setCellValue('AF' . $rowNum, $detail['category'] ?? '-');
-            $sheet->setCellValue('AG' . $rowNum, number_format($detail['receipe'] ?? 0, 4, '.', ''));
-            $sheet->setCellValue('AH' . $rowNum, $detail['uom'] ?? '-');
-            $sheet->setCellValue('AI' . $rowNum, number_format($detail['cf'] ?? 0, 4, '.', ''));
-            $sheet->setCellValue('AJ' . $rowNum, $detail['uom_cf'] ?? '-');
+            $sheet->setCellValue($columnByKey['detail_item_code'] . $rowNum, $detail['display_kode'] ?? $detail['kode'] ?? '-');
+            $sheet->getStyle($columnByKey['detail_item_code'] . $rowNum)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->setCellValue($columnByKey['detail_name'] . $rowNum, $detail['name'] ?? '-');
+            $sheet->setCellValue($columnByKey['detail_category'] . $rowNum, $detail['category'] ?? '-');
+            $sheet->setCellValue($columnByKey['detail_receipe'] . $rowNum, number_format($detail['receipe'] ?? 0, 4, '.', ''));
+            $sheet->setCellValue($columnByKey['detail_uom'] . $rowNum, $detail['uom'] ?? '-');
+            $sheet->setCellValue($columnByKey['detail_cf'] . $rowNum, number_format($detail['cf'] ?? 0, 4, '.', ''));
+            $sheet->setCellValue($columnByKey['detail_uom_cf'] . $rowNum, $detail['uom_cf'] ?? '-');
 
-            $priceText = 'Rp ' . number_format($detail['std_price'] ?? 0, 2, ',', '.');
-            if (!empty($detail['price_satuan'])) {
-                $priceText .= ' / ' . $detail['price_satuan'];
+            if ($canSeePrice) {
+                $priceText = 'Rp ' . number_format($detail['std_price'] ?? 0, 2, ',', '.');
+                if (!empty($detail['price_satuan'])) {
+                    $priceText .= ' / ' . $detail['price_satuan'];
+                }
+                $sheet->setCellValue($columnByKey['detail_price'] . $rowNum, $priceText);
+                $sheet->setCellValue($columnByKey['detail_total'] . $rowNum, 'Rp ' . number_format($detail['total'] ?? 0, 2, ',', '.'));
             }
-            $sheet->setCellValue('AK' . $rowNum, $priceText);
-            $sheet->setCellValue('AL' . $rowNum, 'Rp ' . number_format($detail['total'] ?? 0, 2, ',', '.'));
         }
         
         $rowNum++;
     }
     
     if (!$includeDetails) {
+        $no++;
+        continue;
+    }
+
+    if (!$canSeePrice) {
         $no++;
         continue;
     }
@@ -333,15 +426,20 @@ foreach ($resepData as $resep) {
     $totalCost = $grandTotal / $planQty;
     
     // --- Cost Summary Rows ---
-    
+    $detailStartColumn = $columnByKey['detail_item_code'];
+    $detailUomColumn = $columnByKey['detail_uom'];
+    $detailCfColumn = $columnByKey['detail_cf'];
+    $detailPriceColumn = $columnByKey['detail_price'];
+    $detailTotalColumn = $columnByKey['detail_total'];
+
     // 1. Title Row
-    foreach ($headerTemplate as $col => $val) {
-        $sheet->setCellValue($col . $rowNum, $val);
+    foreach ($headerTemplate as $key => $value) {
+        $sheet->setCellValue($columnByKey[$key] . $rowNum, $value);
     }
-    
-    $sheet->setCellValue('AD' . $rowNum, 'COST SUMMARY PER METER');
-    $sheet->mergeCells('AD' . $rowNum . ':AL' . $rowNum);
-    $sheet->getStyle('AD' . $rowNum . ':AL' . $rowNum)->applyFromArray([
+
+    $sheet->setCellValue($detailStartColumn . $rowNum, 'COST SUMMARY PER METER');
+    $sheet->mergeCells($detailStartColumn . $rowNum . ':' . $detailTotalColumn . $rowNum);
+    $sheet->getStyle($detailStartColumn . $rowNum . ':' . $detailTotalColumn . $rowNum)->applyFromArray([
         'font' => ['bold' => true],
         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9E1F2']],
         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
@@ -354,36 +452,36 @@ foreach ($resepData as $resep) {
         $cCost = $total / $planQty;
         $totalCF = $catCFTotals[$cat] ?? 0;
         
-        foreach ($headerTemplate as $col => $val) {
-            $sheet->setCellValue($col . $rowNum, $val);
+        foreach ($headerTemplate as $key => $value) {
+            $sheet->setCellValue($columnByKey[$key] . $rowNum, $value);
         }
-        
-        $sheet->setCellValue('AD' . $rowNum, strtoupper($cat) . ' - DYE STUFF');
-        $sheet->mergeCells('AD' . $rowNum . ':AH' . $rowNum);
-        
-        $sheet->setCellValue('AI' . $rowNum, number_format($totalCF, 2, '.', ',') . ' CF');
-        $sheet->mergeCells('AI' . $rowNum . ':AK' . $rowNum);
-        
-        $sheet->setCellValue('AL' . $rowNum, 'Rp ' . number_format($cCost, 0, ',', '.'));
-        
+
+        $sheet->setCellValue($detailStartColumn . $rowNum, strtoupper($cat) . ' - DYE STUFF');
+        $sheet->mergeCells($detailStartColumn . $rowNum . ':' . $detailUomColumn . $rowNum);
+
+        $sheet->setCellValue($detailCfColumn . $rowNum, number_format($totalCF, 2, '.', ',') . ' CF');
+        $sheet->mergeCells($detailCfColumn . $rowNum . ':' . $detailPriceColumn . $rowNum);
+
+        $sheet->setCellValue($detailTotalColumn . $rowNum, 'Rp ' . number_format($cCost, 0, ',', '.'));
+
         $rowNum++;
     }
-    
+
     // 3. Total Row
-    foreach ($headerTemplate as $col => $val) {
-        $sheet->setCellValue($col . $rowNum, $val);
+    foreach ($headerTemplate as $key => $value) {
+        $sheet->setCellValue($columnByKey[$key] . $rowNum, $value);
     }
-    
-    $sheet->setCellValue('AD' . $rowNum, 'TOTAL COST/METER');
-    $sheet->mergeCells('AD' . $rowNum . ':AK' . $rowNum);
-    $sheet->setCellValue('AL' . $rowNum, 'Rp ' . number_format($totalCost, 0, ',', '.'));
-    
-    $sheet->getStyle('AD' . $rowNum . ':AK' . $rowNum)->applyFromArray([
+
+    $sheet->setCellValue($detailStartColumn . $rowNum, 'TOTAL COST/METER');
+    $sheet->mergeCells($detailStartColumn . $rowNum . ':' . $detailPriceColumn . $rowNum);
+    $sheet->setCellValue($detailTotalColumn . $rowNum, 'Rp ' . number_format($totalCost, 0, ',', '.'));
+
+    $sheet->getStyle($detailStartColumn . $rowNum . ':' . $detailPriceColumn . $rowNum)->applyFromArray([
         'font' => ['bold' => true],
         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF2CC']],
         'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER]
     ]);
-    $sheet->getStyle('AL' . $rowNum)->applyFromArray([
+    $sheet->getStyle($detailTotalColumn . $rowNum)->applyFromArray([
         'font' => ['bold' => true],
         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF2CC']],
         'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT, 'vertical' => Alignment::VERTICAL_CENTER]
@@ -391,13 +489,13 @@ foreach ($resepData as $resep) {
     
     $rowNum++;
 
-    // Merge Header Columns A-AB
+    // Merge header columns for rows with multiple detail or cost-summary records.
     $lastRow = $rowNum - 1;
     if ($lastRow > $firstRow) {
-        $headerColumns = array_keys($headerTemplate);
-        foreach ($headerColumns as $colLetter) {
-            $sheet->mergeCells($colLetter . $firstRow . ':' . $colLetter . $lastRow);
-            $sheet->getStyle($colLetter . $firstRow)->getAlignment()
+        foreach (array_keys($headerTemplate) as $key) {
+            $column = $columnByKey[$key];
+            $sheet->mergeCells($column . $firstRow . ':' . $column . $lastRow);
+            $sheet->getStyle($column . $firstRow)->getAlignment()
                 ->setVertical(Alignment::VERTICAL_CENTER)
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER);
         }
@@ -413,11 +511,6 @@ if ($rowNum > 2) {
     ]);
     
 
-}
-
-if (!$showProIntMetadata) {
-    // H:R contains all ProInt metadata, including Resep Seq and split Routing columns.
-    $sheet->removeColumn('H', 11);
 }
 
 // Output
