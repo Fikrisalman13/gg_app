@@ -221,6 +221,51 @@ $page_raw     = $_GET['page'] ?? '1';
     background: #17a2b8;
     color: white;
 }
+.table td, .table th {
+    white-space: nowrap;
+}
+@media (max-width: 767.98px) {
+    .card-header-mobile-stack {
+        display: flex;
+        flex-direction: column;
+    }
+    .card-header-mobile-stack .card-title {
+        margin-bottom: 0.65rem !important;
+    }
+    .card-header-mobile-stack .card-tools {
+        float: none !important;
+        margin-left: 0 !important;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+    .card-header-mobile-stack .card-tools .btn {
+        flex: 1 1 calc(50% - 6px);
+        margin: 0 !important;
+        text-align: center;
+        font-size: 0.78rem;
+        padding: 0.35rem 0.4rem;
+        white-space: nowrap;
+    }
+    .info-box {
+        min-height: 58px;
+        margin-bottom: 0.5rem;
+    }
+    .info-box .info-box-icon {
+        width: 44px;
+        font-size: 1.15rem;
+    }
+    .info-box .info-box-content {
+        padding: 4px 8px;
+    }
+    .info-box .info-box-number {
+        font-size: 0.92rem;
+    }
+    .info-box .info-box-text {
+        font-size: 0.72rem;
+    }
+}
 </style>
 
 <!-- ======================================================
@@ -256,22 +301,22 @@ $page_raw     = $_GET['page'] ?? '1';
             <div class="card">
 
                 <!-- CARD HEADER -->
-                <div class="card-header bg-<?= e($themeColor) ?> text-white">
+                <div class="card-header bg-<?= e($themeColor) ?> text-white card-header-mobile-stack">
                     <h3 class="card-title m-0">Data User Internet</h3>
                     <div class="card-tools">
                         <button id="btnExportPDF" class="btn btn-danger btn-sm">
-                            <i class="fas fa-file-pdf"></i> Export PDF
+                            <i class="fas fa-file-pdf mr-1"></i> Export PDF
                         </button>
-                        <a href="add_user/add_user.php" id="btnAddUser" class="btn btn-primary btn-sm ml-2">
-                            <i class="fas fa-user-plus"></i> Add User
+                        <a href="add_user/add_user.php" id="btnAddUser" class="btn btn-primary btn-sm ml-sm-2">
+                            <i class="fas fa-user-plus mr-1"></i> Add User
                         </a>
                         
-                        <button id="btnSyncDB" class="btn btn-success btn-sm ml-2" title="Sync Database">
-                            <i class="fas fa-database"></i> Sync Database
+                        <button id="btnSyncDB" class="btn btn-success btn-sm ml-sm-2" title="Sync Database">
+                            <i class="fas fa-database mr-1"></i> Sync Database
                         </button>
 
-                        <button id="btnRefresh" class="btn btn-light btn-sm ml-2">
-                            <i class="fas fa-sync-alt"></i> Refresh
+                        <button id="btnRefresh" class="btn btn-light btn-sm ml-sm-2">
+                            <i class="fas fa-sync-alt mr-1"></i> Refresh
                         </button>
                     </div>
                 </div>
@@ -281,8 +326,8 @@ $page_raw     = $_GET['page'] ?? '1';
 
                     <!-- SUMMARY -->
                     <div class="row mb-3">
-                        <div class="col-md-4">
-                            <div class="info-box">
+                        <div class="col-6 col-md-4 mb-2">
+                            <div class="info-box h-100 mb-0 shadow-sm">
                                 <span class="info-box-icon bg-primary">
                                     <i class="fas fa-upload"></i>
                                 </span>
@@ -293,8 +338,8 @@ $page_raw     = $_GET['page'] ?? '1';
                             </div>
                         </div>
 
-                        <div class="col-md-4">
-                            <div class="info-box">
+                        <div class="col-6 col-md-4 mb-2">
+                            <div class="info-box h-100 mb-0 shadow-sm">
                                 <span class="info-box-icon bg-success">
                                     <i class="fas fa-download"></i>
                                 </span>
@@ -305,8 +350,8 @@ $page_raw     = $_GET['page'] ?? '1';
                             </div>
                         </div>
 
-                        <div class="col-md-4">
-                            <div class="info-box">
+                        <div class="col-12 col-md-4 mb-2">
+                            <div class="info-box h-100 mb-0 shadow-sm">
                                 <span class="info-box-icon bg-warning">
                                     <i class="fas fa-exchange-alt"></i>
                                 </span>
@@ -322,18 +367,18 @@ $page_raw     = $_GET['page'] ?? '1';
 
                     <!-- FILTER -->
                     <div class="filter-section">
-                        <label class="small">Cari (Nama / Target IP)</label>
+                        <label class="small font-weight-bold">Cari (Nama / Target IP)</label>
                         <input type="text"
                                name="search_user"
                                class="form-control form-control-sm"
                                placeholder="Cari nama atau target IP...">
 
-                        <div class="mt-2">
+                        <div class="mt-2 d-flex flex-wrap align-items-center" style="gap: 8px;">
                             <a href="user_internet.php" class="btn btn-secondary btn-sm">
-                                <i class="fas fa-eraser"></i> Reset Filter
+                                <i class="fas fa-eraser mr-1"></i> Reset Filter
                             </a>
-                            <span class="auto-refresh-info ml-2">
-                                <i class="fas fa-info-circle"></i>
+                            <span class="auto-refresh-info">
+                                <i class="fas fa-info-circle mr-1"></i>
                                 Data akan otomatis dimuat ulang
                             </span>
                         </div>

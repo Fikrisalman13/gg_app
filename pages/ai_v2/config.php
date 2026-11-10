@@ -8,7 +8,7 @@
 define('AI_DB_SERVER', '192.168.7.184');
 define('AI_DB_NAME', 'GG');
 define('AI_DB_USER', 'sa');
-define('AI_DB_PASS', 'rahasiaIT2020');
+define('AI_DB_PASS', '@sempreperte2003');
 
 // =========================
 // Ollama

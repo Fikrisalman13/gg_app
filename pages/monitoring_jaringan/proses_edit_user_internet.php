@@ -117,7 +117,7 @@ require_once '../../routeros_api.class.php';
 // 2.1. PERMISSION CHECK
 // ======================================================
 $groupId = $_SESSION['GroupId'];
-$menuId = 45; // Menu ID untuk User Internet
+$menuId = 140; // Menu ID untuk User Internet
 
 $sql = "SELECT CanEdit FROM dbo.SMGroupTrustee WHERE GroupId = ? AND MenuId = ?";
 $params = [$groupId, $menuId];

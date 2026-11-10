@@ -279,6 +279,16 @@ try {
 .select2-container--bootstrap4 .select2-selection--single .select2-selection__rendered {
     line-height: 38px;
 }
+@media (max-width: 576px) {
+    .btn-mobile-block {
+        display: block;
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    .btn-mobile-block + .btn-mobile-block {
+        margin-left: 0 !important;
+    }
+}
 </style>
 
 <!-- ======================================================
@@ -328,7 +338,88 @@ try {
                             <i class="fas fa-exclamation-triangle"></i> <?= e($errorMessage) ?>
                         </div>
                     <?php elseif ($queueData): ?>
-                        <form method="POST" action="proses_edit_user_internet.php" id="editUserForm">
+                        <?php
+                        // Deteksi nama user dan mode awal (dropdown vs manual)
+                        $currentNameNoDevice = $queueData['name'];
+                        if (preg_match('/^(.*)\s*\(([^)]+)\)$/', $queueData['name'], $m)) {
+                            $currentNameNoDevice = trim($m[1]);
+                        }
+                        $isEmpMatched = false;
+                        foreach ($employeeList as $emp) {
+                            $empOpt = trim(($emp['dept'] ? $emp['dept'] : ($emp['bagian'] ?: 'Tidak Ada')) . ' - ' . $emp['nama_lengkap']);
+                            if ($currentNameNoDevice === $empOpt) {
+                                $isEmpMatched = true;
+                                break;
+                            }
+                        }
+                        $nameMode = $isEmpMatched ? 'dropdown' : 'manual';
+
+                        // Daftar device type
+                        $deviceList = ['Laptop', 'Hp', 'PC', 'Printer', 'Mesin', 'Tab'];
+                        $selectedDevice = isset($queueData['device_type']) ? $queueData['device_type'] : '';
+                        if (!$selectedDevice && preg_match('/\(([^)]+)\)$/', $queueData['name'] ?? '', $mdev)) {
+                            $selectedDevice = trim($mdev[1]);
+                        }
+                        if ($selectedDevice !== '' && !in_array($selectedDevice, $deviceList)) {
+                            $deviceList[] = $selectedDevice;
+                        }
+
+                        // Daftar bandwidth lengkap (hingga 100M)
+                        $speedList = [
+                            'unlimited' => 'Unlimited',
+                            '64k' => '64 Kbps',
+                            '128k' => '128 Kbps',
+                            '256k' => '256 Kbps',
+                            '384k' => '384 Kbps',
+                            '512k' => '512 Kbps',
+                            '768k' => '768 Kbps',
+                            '1M' => '1 Mbps',
+                            '1.5M' => '1.5 Mbps',
+                            '2M' => '2 Mbps',
+                            '3M' => '3 Mbps',
+                            '4M' => '4 Mbps',
+                            '5M' => '5 Mbps',
+                            '6M' => '6 Mbps',
+                            '8M' => '8 Mbps',
+                            '10M' => '10 Mbps',
+                            '12M' => '12 Mbps',
+                            '15M' => '15 Mbps',
+                            '20M' => '20 Mbps',
+                            '25M' => '25 Mbps',
+                            '30M' => '30 Mbps',
+                            '40M' => '40 Mbps',
+                            '50M' => '50 Mbps',
+                            '60M' => '60 Mbps',
+                            '80M' => '80 Mbps',
+                            '100M' => '100 Mbps'
+                        ];
+
+                        $curUpload = $queueData['upload_max'] ?? '';
+                        $uploadOptions = $speedList;
+                        if ($curUpload !== '' && !isset($uploadOptions[$curUpload])) {
+                            $uploadOptions[$curUpload] = $curUpload . ' (Custom)';
+                        }
+
+                        $curDownload = $queueData['download_max'] ?? '';
+                        $downloadOptions = $speedList;
+                        if ($curDownload !== '' && !isset($downloadOptions[$curDownload])) {
+                            $downloadOptions[$curDownload] = $curDownload . ' (Custom)';
+                        }
+
+                        // Daftar firewall mode
+                        $firewallList = [
+                            'Allow-Internet', 'Block-Internet', 'LAN', 'Mailserver',
+                            'allow-access-router', 'allow-ftp-ssh-telnet', 'allow-smb-rdp',
+                            'dns-allow', 'dst-allow-spesifik', 'safe-access',
+                            'src-allow-spesifik', 'sumber-flooding', 'trusted-server'
+                        ];
+                        $selectedFirewall = isset($queueData['firewall_mode']) ? $queueData['firewall_mode'] : '';
+                        if ($selectedFirewall !== '' && $selectedFirewall !== '-' && !in_array($selectedFirewall, $firewallList)) {
+                            $firewallList[] = $selectedFirewall;
+                        }
+                        ?>
+
+                        <form method="POST" action="proses_edit_user_internet.php" id="editUserForm" novalidate>
                             <input type="hidden" name="original_name" value="<?= e($queueData['name']) ?>">
                             
                             <!-- INFORMASI USER -->
@@ -339,15 +430,10 @@ try {
                                     <div class="col-md-4">
                                         <div class="form-group">
                                             <label>Nama User <span class="text-danger">*</span></label>
-                                            <div id="inputNamaDropdown">
+                                            <div id="inputNamaDropdown" style="<?= ($nameMode === 'dropdown') ? '' : 'display:none;' ?>">
                                                 <select name="name_dropdown" class="form-control select2" id="selectNamaUser">
                                                     <option value="">Pilih Nama User</option>
-                                                    <?php
-                                                    $currentNameNoDevice = $queueData['name'];
-                                                    if (preg_match('/^(.*)\s*\(([^)]+)\)$/', $queueData['name'], $m)) {
-                                                        $currentNameNoDevice = trim($m[1]);
-                                                    }
-                                                    foreach ($employeeList as $emp):
+                                                    <?php foreach ($employeeList as $emp):
                                                         $optionLabel = trim(($emp['dept'] ? $emp['dept'] : ($emp['bagian'] ?: 'Tidak Ada')) . ' - ' . $emp['nama_lengkap']);
                                                         $selected = ($currentNameNoDevice == $optionLabel) ? 'selected' : '';
                                                     ?>
@@ -355,16 +441,16 @@ try {
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <div id="inputNamaManual" style="display:none;">
-                                                <input type="text" name="name_manual" class="form-control" placeholder="Masukkan nama user manual" value="<?= ($currentNameNoDevice && !in_array($currentNameNoDevice, array_map(function($emp){return trim(($emp['dept'] ? $emp['dept'] : ($emp['bagian'] ?: 'Tidak Ada')) . ' - ' . $emp['nama_lengkap']);}, $employeeList))) ? e($currentNameNoDevice) : '' ?>">
+                                            <div id="inputNamaManual" style="<?= ($nameMode === 'manual') ? '' : 'display:none;' ?>">
+                                                <input type="text" name="name_manual" id="inputNamaManualField" class="form-control" placeholder="Masukkan nama user manual" value="<?= e($currentNameNoDevice) ?>">
                                             </div>
                                             <div class="mt-2">
                                                 <div class="form-check form-check-inline">
-                                                    <input class="form-check-input" type="radio" name="name_mode" id="modeDropdown" value="dropdown" checked>
+                                                    <input class="form-check-input" type="radio" name="name_mode" id="modeDropdown" value="dropdown" <?= ($nameMode === 'dropdown') ? 'checked' : '' ?>>
                                                     <label class="form-check-label" for="modeDropdown">Pilih dari daftar</label>
                                                 </div>
                                                 <div class="form-check form-check-inline">
-                                                    <input class="form-check-input" type="radio" name="name_mode" id="modeManual" value="manual">
+                                                    <input class="form-check-input" type="radio" name="name_mode" id="modeManual" value="manual" <?= ($nameMode === 'manual') ? 'checked' : '' ?>>
                                                     <label class="form-check-label" for="modeManual">Input manual</label>
                                                 </div>
                                             </div>
@@ -373,28 +459,20 @@ try {
                                     <div class="col-md-4">
                                         <div class="form-group">
                                             <label>Device <span class="text-danger">*</span></label>
-                                            <select name="device_type" class="form-control" id="selectDevice" required>
+                                            <select name="device_type" class="form-control" id="selectDevice">
                                                 <option value="">Pilih Device</option>
-                                                <?php
-                                                $deviceList = ['Laptop', 'Hp', 'PC', 'Printer', 'Mesin', 'Tab'];
-                                                // Ambil device dari queueData['name'] jika device_type belum ada
-                                                $selectedDevice = isset($queueData['device_type']) ? $queueData['device_type'] : '';
-                                                if (!$selectedDevice && preg_match('/\(([^)]+)\)$/', $queueData['name'] ?? '', $mdev)) {
-                                                    $selectedDevice = trim($mdev[1]);
-                                                }
-                                                foreach ($deviceList as $dev) {
+                                                <?php foreach ($deviceList as $dev):
                                                     $sel = ($selectedDevice == $dev) ? 'selected' : '';
                                                     echo '<option value="' . htmlspecialchars($dev) . '" ' . $sel . '>' . htmlspecialchars($dev) . '</option>';
-                                                }
-                                                ?>
+                                                endforeach; ?>
                                             </select>
                                         </div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="form-group">
                                             <label>Target IP <span class="text-danger">*</span></label>
-                                            <input type="text" name="target" class="form-control" 
-                                                   value="<?= e($queueData['target_ip'] ?? '') ?>" required>
+                                            <input type="text" name="target" id="inputTargetIp" class="form-control" 
+                                                   value="<?= e($queueData['target_ip'] ?? '') ?>">
                                         </div>
                                     </div>
                                 </div>
@@ -408,53 +486,23 @@ try {
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label>Upload Max <span class="text-danger">*</span></label>
-                                            <select name="upload_max" class="form-control" required>
+                                            <select name="upload_max" id="selectUploadMax" class="form-control">
                                                 <option value="">Pilih Kecepatan</option>
-                                                <option value="unlimited" <?= (e($queueData['upload_max'] ?? '') == 'unlimited') ? 'selected' : '' ?>>Unlimited</option>
-                                                <option value="64k" <?= (e($queueData['upload_max'] ?? '') == '64k') ? 'selected' : '' ?>>64 Kbps</option>
-                                                <option value="128k" <?= (e($queueData['upload_max'] ?? '') == '128k') ? 'selected' : '' ?>>128 Kbps</option>
-                                                <option value="256k" <?= (e($queueData['upload_max'] ?? '') == '256k') ? 'selected' : '' ?>>256 Kbps</option>
-                                                <option value="384k" <?= (e($queueData['upload_max'] ?? '') == '384k') ? 'selected' : '' ?>>384 Kbps</option>
-                                                <option value="512k" <?= (e($queueData['upload_max'] ?? '') == '512k') ? 'selected' : '' ?>>512 Kbps</option>
-                                                <option value="768k" <?= (e($queueData['upload_max'] ?? '') == '768k') ? 'selected' : '' ?>>768 Kbps</option>
-                                                <option value="1M" <?= (e($queueData['upload_max'] ?? '') == '1M') ? 'selected' : '' ?>>1 Mbps</option>
-                                                <option value="1.5M" <?= (e($queueData['upload_max'] ?? '') == '1.5M') ? 'selected' : '' ?>>1.5 Mbps</option>
-                                                <option value="2M" <?= (e($queueData['upload_max'] ?? '') == '2M') ? 'selected' : '' ?>>2 Mbps</option>
-                                                <option value="3M" <?= (e($queueData['upload_max'] ?? '') == '3M') ? 'selected' : '' ?>>3 Mbps</option>
-                                                <option value="4M" <?= (e($queueData['upload_max'] ?? '') == '4M') ? 'selected' : '' ?>>4 Mbps</option>
-                                                <option value="5M" <?= (e($queueData['upload_max'] ?? '') == '5M') ? 'selected' : '' ?>>5 Mbps</option>
-                                                <option value="6M" <?= (e($queueData['upload_max'] ?? '') == '6M') ? 'selected' : '' ?>>6 Mbps</option>
-                                                <option value="8M" <?= (e($queueData['upload_max'] ?? '') == '8M') ? 'selected' : '' ?>>8 Mbps</option>
-                                                <option value="10M" <?= (e($queueData['upload_max'] ?? '') == '10M') ? 'selected' : '' ?>>10 Mbps</option>
-                                                
+                                                <?php foreach ($uploadOptions as $val => $lbl): ?>
+                                                    <option value="<?= htmlspecialchars($val) ?>" <?= ($curUpload == $val) ? 'selected' : '' ?>><?= htmlspecialchars($lbl) ?></option>
+                                                <?php endforeach; ?>
                                             </select>
-                                            
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label>Download Max <span class="text-danger">*</span></label>
-                                            <select name="download_max" class="form-control" required>
+                                            <select name="download_max" id="selectDownloadMax" class="form-control">
                                                 <option value="">Pilih Kecepatan</option>
-                                                <option value="unlimited" <?= (e($queueData['download_max'] ?? '') == 'unlimited') ? 'selected' : '' ?>>Unlimited</option>
-                                                <option value="64k" <?= (e($queueData['download_max'] ?? '') == '64k') ? 'selected' : '' ?>>64 Kbps</option>
-                                                <option value="128k" <?= (e($queueData['download_max'] ?? '') == '128k') ? 'selected' : '' ?>>128 Kbps</option>
-                                                <option value="256k" <?= (e($queueData['download_max'] ?? '') == '256k') ? 'selected' : '' ?>>256 Kbps</option>
-                                                <option value="384k" <?= (e($queueData['download_max'] ?? '') == '384k') ? 'selected' : '' ?>>384 Kbps</option>
-                                                <option value="512k" <?= (e($queueData['download_max'] ?? '') == '512k') ? 'selected' : '' ?>>512 Kbps</option>
-                                                <option value="768k" <?= (e($queueData['download_max'] ?? '') == '768k') ? 'selected' : '' ?>>768 Kbps</option>
-                                                <option value="1M" <?= (e($queueData['download_max'] ?? '') == '1M') ? 'selected' : '' ?>>1 Mbps</option>
-                                                <option value="1.5M" <?= (e($queueData['download_max'] ?? '') == '1.5M') ? 'selected' : '' ?>>1.5 Mbps</option>
-                                                <option value="2M" <?= (e($queueData['download_max'] ?? '') == '2M') ? 'selected' : '' ?>>2 Mbps</option>
-                                                <option value="3M" <?= (e($queueData['download_max'] ?? '') == '3M') ? 'selected' : '' ?>>3 Mbps</option>
-                                                <option value="4M" <?= (e($queueData['download_max'] ?? '') == '4M') ? 'selected' : '' ?>>4 Mbps</option>
-                                                <option value="5M" <?= (e($queueData['download_max'] ?? '') == '5M') ? 'selected' : '' ?>>5 Mbps</option>
-                                                <option value="6M" <?= (e($queueData['download_max'] ?? '') == '6M') ? 'selected' : '' ?>>6 Mbps</option>
-                                                <option value="8M" <?= (e($queueData['download_max'] ?? '') == '8M') ? 'selected' : '' ?>>8 Mbps</option>
-                                                <option value="10M" <?= (e($queueData['download_max'] ?? '') == '10M') ? 'selected' : '' ?>>10 Mbps</option>
-                                             
+                                                <?php foreach ($downloadOptions as $val => $lbl): ?>
+                                                    <option value="<?= htmlspecialchars($val) ?>" <?= ($curDownload == $val) ? 'selected' : '' ?>><?= htmlspecialchars($lbl) ?></option>
+                                                <?php endforeach; ?>
                                             </select>
-                                            
                                         </div>
                                     </div>
                                 </div>
@@ -467,17 +515,7 @@ try {
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label>Firewall Mode <span class="text-danger">*</span></label>
-                                            <?php
-                                                $firewallList = [
-                                                    'Allow-Internet', 'Block-Internet', 'LAN', 'Mailserver',
-                                                    'allow-access-router', 'allow-ftp-ssh-telnet', 'allow-smb-rdp',
-                                                    'dns-allow', 'dst-allow-spesifik', 'safe-access',
-                                                    'src-allow-spesifik', 'sumber-flooding', 'trusted-server'
-                                                ];
-                                                // Ambil firewall_mode dari queueData (hasil address-list Mikrotik)
-                                                $selectedFirewall = isset($queueData['firewall_mode']) ? $queueData['firewall_mode'] : '';
-                                            ?>
-                                            <select name="firewall_mode" class="form-control" required>
+                                            <select name="firewall_mode" id="selectFirewallMode" class="form-control">
                                                 <option value="">Pilih Firewall Mode</option>
                                                 <?php foreach ($firewallList as $fw): ?>
                                                     <option value="<?= htmlspecialchars($fw) ?>" <?= ($selectedFirewall == $fw) ? 'selected' : '' ?>><?= htmlspecialchars($fw) ?></option>
@@ -491,11 +529,11 @@ try {
                             <!-- BUTTONS -->
                             <div class="row">
                                 <div class="col-12">
-                                    <button type="submit" class="btn btn-<?= $themeColor ?>">
-                                        <i class="fas fa-save"></i> Simpan Perubahan
+                                    <button type="submit" class="btn btn-<?= $themeColor ?> btn-mobile-block" id="btnSubmitEdit">
+                                        <i class="fas fa-save mr-1"></i> Simpan Perubahan
                                     </button>
-                                    <a href="user_internet.php" class="btn btn-secondary ml-2">
-                                        <i class="fas fa-times"></i> Batal
+                                    <a href="user_internet.php" class="btn btn-secondary ml-sm-2 btn-mobile-block">
+                                        <i class="fas fa-times mr-1"></i> Batal
                                     </a>
                                 </div>
                             </div>
@@ -513,14 +551,9 @@ try {
 <?php include '../../includes/footer.php'; ?>
 
 <!-- ======================================================
-     12. JAVASCRIPT LIBRARIES
+     12. JAVASCRIPT & SWEETALERT2
 ====================================================== -->
-<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/jquery/jquery.min.js"></script>
-<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2/sweetalert2.all.min.js"></script>
-<link href="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2/css/select2.min.css" rel="stylesheet" />
-<link href="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css" rel="stylesheet" />
-<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2/js/select2.full.min.js"></script>
 
 <!-- ======================================================
      13. JAVASCRIPT CUSTOM
@@ -534,7 +567,8 @@ $(document).ready(function() {
         placeholder: 'Pilih Nama User',
         allowClear: true
     });
-    // Toggle input mode Nama User
+
+    // Toggle input mode Nama User (Pilih dari daftar vs Input manual)
     function toggleNamaInput() {
         if ($('input[name="name_mode"]:checked').val() === 'dropdown') {
             $('#inputNamaDropdown').show();
@@ -545,44 +579,127 @@ $(document).ready(function() {
         }
     }
     $('input[name="name_mode"]').on('change', toggleNamaInput);
-    toggleNamaInput();
-    // Pastikan salah satu input required sesuai mode
-    $('#editUserForm').on('submit', function() {
-        if ($('input[name="name_mode"]:checked').val() === 'dropdown') {
-            $('#selectNamaUser').attr('required', true);
-            $('input[name="name_manual"]').removeAttr('required');
-        } else {
-            $('#selectNamaUser').removeAttr('required');
-            $('input[name="name_manual"]').attr('required', true);
-        }
-    });
+
     const showAlert = (type, msg) =>
         Swal.fire({ icon: type, title: msg, timer: 2500, showConfirmButton: false });
 
-    // Form validation
+    // Validasi form & submit AJAX via fetch
     $('#editUserForm').on('submit', function(e) {
         e.preventDefault();
-        
+
+        // 1. Validasi Nama User
+        const nameMode = $('input[name="name_mode"]:checked').val();
+        let nameVal = '';
+        if (nameMode === 'dropdown') {
+            nameVal = $('#selectNamaUser').val() || '';
+            if (!nameVal.trim()) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Data Belum Lengkap',
+                    text: 'Silakan pilih Nama User dari daftar!'
+                });
+                return false;
+            }
+        } else {
+            nameVal = $('input[name="name_manual"]').val() || '';
+            if (!nameVal.trim()) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Data Belum Lengkap',
+                    text: 'Silakan masukkan Nama User secara manual!'
+                });
+                $('input[name="name_manual"]').focus();
+                return false;
+            }
+        }
+
+        // 2. Validasi Device
+        const deviceType = $('#selectDevice').val() || '';
+        if (!deviceType.trim()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Data Belum Lengkap',
+                text: 'Silakan pilih Device!'
+            });
+            $('#selectDevice').focus();
+            return false;
+        }
+
+        // 3. Validasi Target IP
+        const targetIp = $('#inputTargetIp').val() || '';
+        if (!targetIp.trim()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Data Belum Lengkap',
+                text: 'Silakan isi Target IP!'
+            });
+            $('#inputTargetIp').focus();
+            return false;
+        }
+
+        // 4. Validasi Upload Max
+        const uploadMax = $('#selectUploadMax').val() || '';
+        if (!uploadMax.trim()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Data Belum Lengkap',
+                text: 'Silakan pilih batas Upload Max!'
+            });
+            $('#selectUploadMax').focus();
+            return false;
+        }
+
+        // 5. Validasi Download Max
+        const downloadMax = $('#selectDownloadMax').val() || '';
+        if (!downloadMax.trim()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Data Belum Lengkap',
+                text: 'Silakan pilih batas Download Max!'
+            });
+            $('#selectDownloadMax').focus();
+            return false;
+        }
+
+        // 6. Validasi Firewall Mode
+        const firewallMode = $('#selectFirewallMode').val() || '';
+        if (!firewallMode.trim()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Data Belum Lengkap',
+                text: 'Silakan pilih Firewall Mode!'
+            });
+            $('#selectFirewallMode').focus();
+            return false;
+        }
+
         const form = this;
         const formData = new FormData(form);
-        
-        // Show loading
+
+        // Tampilkan indikator proses pada tombol
+        const $btnSubmit = $('#btnSubmitEdit');
+        const origBtnText = $btnSubmit.html();
+        $btnSubmit.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menyimpan...');
+
+        // Tampilkan loading popup
         Swal.fire({
             title: 'Menyimpan...',
+            text: 'Sedang memperbarui data ke Mikrotik...',
             allowOutsideClick: false,
             didOpen: () => {
                 Swal.showLoading();
             }
         });
-        
-        // Submit form
+
+        // Submit form ke proses_edit_user_internet.php
         fetch(form.action, {
             method: 'POST',
             body: formData
         })
         .then(response => response.text())
         .then(data => {
-            if (data === 'SUCCESS') {
+            $btnSubmit.prop('disabled', false).html(origBtnText);
+            if (data.trim() === 'SUCCESS') {
                 showAlert('success', 'Data user berhasil diperbarui!');
                 setTimeout(() => {
                     window.location.href = 'user_internet.php';
@@ -592,11 +709,9 @@ $(document).ready(function() {
             }
         })
         .catch(error => {
+            $btnSubmit.prop('disabled', false).html(origBtnText);
             showAlert('error', 'Terjadi kesalahan: ' + error.message);
         });
     });
 });
 </script>
-
-</body>
-</html>

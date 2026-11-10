@@ -520,11 +520,32 @@ include '../../includes/sidebar.php';
     background: #fff;
     height: 100%;
 }
-.nav-tabs .nav-link {
-    font-weight: 600;
-}
+.nav-tabs .nav-link,
 .nav-pills .nav-link {
     font-weight: 600;
+}
+.nav-tabs-mobile-scroll,
+.nav-pills-mobile-scroll {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+}
+.nav-tabs-mobile-scroll::-webkit-scrollbar,
+.nav-pills-mobile-scroll::-webkit-scrollbar {
+    height: 4px;
+}
+.nav-tabs-mobile-scroll::-webkit-scrollbar-thumb,
+.nav-pills-mobile-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+.nav-tabs-mobile-scroll .nav-item,
+.nav-pills-mobile-scroll .nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 .action-inline {
     display: inline-flex;
@@ -540,6 +561,57 @@ include '../../includes/sidebar.php';
 }
 .table td, .table th {
     vertical-align: middle;
+}
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
+}
+.table-responsive table th,
+.table-responsive table td {
+    white-space: nowrap;
+}
+@media (max-width: 576px) {
+    .card-header-mobile-stack {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px;
+    }
+    .card-header-mobile-stack .card-title {
+        width: 100%;
+        margin-bottom: 4px;
+    }
+    .card-header-mobile-stack .laporan-tools,
+    .card-header-mobile-stack .action-inline {
+        width: 100%;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px;
+    }
+    .card-header-mobile-stack .btn {
+        flex: 1 1 auto;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .provider-actions-mobile {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+    .provider-actions-mobile .btn,
+    .provider-actions-mobile form {
+        flex: 1 1 auto;
+    }
+    .provider-actions-mobile form .btn {
+        width: 100%;
+    }
+    .modal-footer {
+        flex-direction: column-reverse;
+    }
+    .modal-footer .btn {
+        width: 100%;
+        margin: 4px 0 !important;
+    }
 }
 </style>
 
@@ -582,11 +654,13 @@ include '../../includes/sidebar.php';
 
             <div class="card">
                 <div class="card-header bg-<?= e($themeColor) ?> text-white">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap laporan-actions">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap laporan-actions card-header-mobile-stack">
                         <h3 class="card-title m-0">Data Provider & Pemakaian Internet</h3>
-                        <button type="button" class="btn btn-light btn-sm" data-toggle="modal" data-target="#modalAddProvider">
-                            <i class="fas fa-plus"></i> Input Tambahkan Provider
-                        </button>
+                        <div class="laporan-tools">
+                            <button type="button" class="btn btn-light btn-sm" data-toggle="modal" data-target="#modalAddProvider">
+                                <i class="fas fa-plus"></i> Input Tambahkan Provider
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -599,7 +673,7 @@ include '../../includes/sidebar.php';
                             </button>
                         </div>
                     <?php else: ?>
-                        <ul class="nav nav-tabs" id="providerTab" role="tablist">
+                        <ul class="nav nav-tabs nav-tabs-mobile-scroll" id="providerTab" role="tablist">
                             <?php foreach ($providers as $provider): ?>
                                 <?php $providerId = (int) $provider['id']; ?>
                                 <li class="nav-item">
@@ -646,46 +720,48 @@ include '../../includes/sidebar.php';
                                     aria-labelledby="provider-tab-<?= $providerId ?>"
                                 >
                                     <div class="provider-summary">
-                                        <div class="row align-items-end">
-                                            <div class="col-md-6 mb-3 mb-md-0">
+                                        <div class="row align-items-center">
+                                            <div class="col-12 col-md-6 mb-2 mb-md-0">
                                                 <h4 class="mb-1"><?= e($provider['provider_name']) ?></h4>
                                                 <small class="text-muted">
                                                     Dibuat oleh <?= e($provider['created_by']) ?>
                                                     pada <?= e($provider['created_date'] instanceof DateTime ? $provider['created_date']->format('d-m-Y H:i') : '') ?>
                                                 </small>
                                             </div>
-                                            <div class="col-md-6 text-md-right">
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-info btn-sm btn-open-location-modal"
-                                                    data-provider-id="<?= $providerId ?>"
-                                                    data-provider-name="<?= e($provider['provider_name']) ?>"
-                                                >
-                                                    <i class="fas fa-map-marker-alt"></i> Tambah Lokasi
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-warning btn-sm btn-open-edit-provider-modal"
-                                                    data-provider-id="<?= $providerId ?>"
-                                                    data-provider-name="<?= e($provider['provider_name']) ?>"
-                                                >
-                                                    <i class="fas fa-edit"></i> Edit Provider
-                                                </button>
-                                                <form method="post" class="d-inline" onsubmit="return confirm('Hapus provider ini? Provider yang sudah punya data pemakaian tidak bisa dihapus.');">
-                                                    <input type="hidden" name="action" value="delete_provider">
-                                                    <input type="hidden" name="provider_id" value="<?= $providerId ?>">
-                                                    <button type="submit" class="btn btn-danger btn-sm">
-                                                        <i class="fas fa-trash"></i> Hapus Provider
+                                            <div class="col-12 col-md-6 text-md-right">
+                                                <div class="provider-actions-mobile justify-content-md-end">
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-info btn-sm btn-open-location-modal"
+                                                        data-provider-id="<?= $providerId ?>"
+                                                        data-provider-name="<?= e($provider['provider_name']) ?>"
+                                                    >
+                                                        <i class="fas fa-map-marker-alt"></i> Tambah Lokasi
                                                     </button>
-                                                </form>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-warning btn-sm btn-open-edit-provider-modal"
+                                                        data-provider-id="<?= $providerId ?>"
+                                                        data-provider-name="<?= e($provider['provider_name']) ?>"
+                                                    >
+                                                        <i class="fas fa-edit"></i> Edit Provider
+                                                    </button>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('Hapus provider ini? Provider yang sudah punya data pemakaian tidak bisa dihapus.');">
+                                                        <input type="hidden" name="action" value="delete_provider">
+                                                        <input type="hidden" name="provider_id" value="<?= $providerId ?>">
+                                                        <button type="submit" class="btn btn-danger btn-sm">
+                                                            <i class="fas fa-trash"></i> Hapus Provider
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div class="filter-card">
                                         <div class="row">
-                                            <div class="col-md-4">
-                                                <label class="small">Filter Tahun</label>
+                                            <div class="col-12 col-md-4 mb-2 mb-md-0">
+                                                <label class="small font-weight-bold">Filter Tahun</label>
                                                 <select class="form-control form-control-sm provider-year-filter" data-provider-id="<?= $providerId ?>">
                                                     <option value="">Semua Tahun</option>
                                                     <?php for ($year = (int) date('Y') + 1; $year >= 2020; $year--): ?>
@@ -693,8 +769,8 @@ include '../../includes/sidebar.php';
                                                     <?php endfor; ?>
                                                 </select>
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="small">Dari Bulan</label>
+                                            <div class="col-6 col-md-4 mb-2 mb-md-0">
+                                                <label class="small font-weight-bold">Dari Bulan</label>
                                                 <select class="form-control form-control-sm provider-month-start-filter" data-provider-id="<?= $providerId ?>">
                                                     <option value="">Semua</option>
                                                     <?php foreach (['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'] as $month): ?>
@@ -702,8 +778,8 @@ include '../../includes/sidebar.php';
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="small">Sampai Bulan</label>
+                                            <div class="col-6 col-md-4 mb-2 mb-md-0">
+                                                <label class="small font-weight-bold">Sampai Bulan</label>
                                                 <select class="form-control form-control-sm provider-month-end-filter" data-provider-id="<?= $providerId ?>">
                                                     <option value="">Semua</option>
                                                     <?php foreach (['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'] as $month): ?>
@@ -722,7 +798,7 @@ include '../../includes/sidebar.php';
                                             <?php if (empty($providerLocations)): ?>
                                                 <p class="text-muted mb-0">Belum ada lokasi untuk provider ini.</p>
                                             <?php else: ?>
-                                                <ul class="nav nav-pills mb-3" id="location-tab-list-<?= $providerId ?>" role="tablist">
+                                                <ul class="nav nav-pills mb-3 nav-pills-mobile-scroll" id="location-tab-list-<?= $providerId ?>" role="tablist">
                                                     <?php foreach ($locationTabs as $locationIndex => $locationTab): ?>
                                                         <li class="nav-item mr-2 mb-2">
                                                             <a
@@ -808,9 +884,9 @@ include '../../includes/sidebar.php';
                                                 >
                                                     <div class="card card-outline card-primary">
                                                         <div class="card-header">
-                                                            <div class="d-flex justify-content-between align-items-center flex-wrap">
-                                                                <h3 class="card-title">Data Pemakaian <?= e($locationTab['name']) ?></h3>
-                                                                <div class="action-inline">
+                                                            <div class="d-flex justify-content-between align-items-center flex-wrap card-header-mobile-stack">
+                                                                <h3 class="card-title m-0">Data Pemakaian <?= e($locationTab['name']) ?></h3>
+                                                                <div class="action-inline mt-2 mt-sm-0">
                                                                     <a
                                                                         href="export_pdf_laporanpemakaianinternet.php?provider_id=<?= $providerId ?>&location_id=<?= (int) $locationTab['id'] ?>&mode=view"
                                                                         class="btn btn-secondary btn-sm"
@@ -840,19 +916,20 @@ include '../../includes/sidebar.php';
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div class="card-body border-bottom">
-                                                            <canvas
-                                                                class="internet-usage-chart"
-                                                                id="usage-chart-<?= $providerId ?>-<?= $locationTab['id'] ?>"
-                                                                height="120"
-                                                                data-labels='<?= e(json_encode($chartMonths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
-                                                                data-total-data='<?= e(json_encode($chartDataUsed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
-                                                                data-total-hours='<?= e(json_encode($chartUsageHours, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
-                                                                data-average='<?= e(json_encode($chartAverage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
-                                                            ></canvas>
+                                                        <div class="card-body border-bottom p-2 p-md-3">
+                                                            <div style="position: relative; height: 260px; width: 100%;">
+                                                                <canvas
+                                                                    class="internet-usage-chart"
+                                                                    id="usage-chart-<?= $providerId ?>-<?= $locationTab['id'] ?>"
+                                                                    data-labels='<?= e(json_encode($chartMonths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
+                                                                    data-total-data='<?= e(json_encode($chartDataUsed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
+                                                                    data-total-hours='<?= e(json_encode($chartUsageHours, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
+                                                                    data-average='<?= e(json_encode($chartAverage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'
+                                                                ></canvas>
+                                                            </div>
                                                         </div>
                                                         <div class="card-body table-responsive">
-                                                            <table class="table table-bordered table-striped table-sm">
+                                                            <table class="table table-bordered table-striped table-sm text-nowrap">
                                                                 <thead class="thead-light text-center">
                                                                     <tr>
                                                                         <th>No</th>
@@ -939,7 +1016,7 @@ include '../../includes/sidebar.php';
                                                 <h3 class="card-title">Data Pemakaian</h3>
                                             </div>
                                             <div class="card-body table-responsive">
-                                                <table class="table table-bordered table-striped table-sm">
+                                                <table class="table table-bordered table-striped table-sm text-nowrap">
                                                     <thead class="thead-light text-center">
                                                         <tr>
                                                             <th>No</th>
@@ -1016,13 +1093,6 @@ include '../../includes/sidebar.php';
         </div>
     </section>
 </div>
-
-<?php include '../../includes/footer.php'; ?>
-
-<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2/css/select2.min.css">
-<link rel="stylesheet" href="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
-<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/chart.js/Chart.min.js"></script>
-<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/select2/js/select2.full.min.js"></script>
 
 <div class="modal fade" id="modalAddProvider" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -1139,7 +1209,7 @@ include '../../includes/sidebar.php';
 <div class="modal fade" id="modalAddUsage" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
-            <form method="post" action="laporanpemakaianinternet.php" id="formAddUsage">
+            <form method="post" action="laporanpemakaianinternet.php" id="formAddUsage" novalidate>
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title"><i class="fas fa-database"></i> Input Data Pemakaian</h5>
                     <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
@@ -1309,10 +1379,25 @@ include '../../includes/sidebar.php';
     </div>
 </div>
 
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/chart.js/Chart.min.js"></script>
+<?php include '../../includes/footer.php'; ?>
+
 <script>
 const providerLocations = <?= json_encode($locationsByProvider, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
 $(function () {
+    function notifyWarning(msg) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Perhatian',
+                text: msg
+            });
+        } else {
+            alert(msg);
+        }
+    }
+
     function calculateAverageUsage() {
         const totalData = parseInt($('#total_data_used_gb').val(), 10) || 0;
         const totalHours = parseInt($('#total_usage_hours').val(), 10) || 0;
@@ -1336,24 +1421,28 @@ $(function () {
         const totalHours = parseInt(totalHoursRaw, 10);
 
         if (!providerId) {
-            alert('Provider belum terpilih.');
+            notifyWarning('Provider belum terpilih.');
             return false;
         }
 
         if (!monthName) {
-            alert('Silakan pilih bulan terlebih dahulu.');
-            $(config.monthSelector).select2('open');
+            notifyWarning('Silakan pilih bulan terlebih dahulu.');
+            if ($(config.monthSelector).hasClass('select2-hidden-accessible')) {
+                $(config.monthSelector).select2('open');
+            } else {
+                $(config.monthSelector).trigger('focus');
+            }
             return false;
         }
 
         if (totalDataRaw === '' || Number.isNaN(totalData) || totalData < 0) {
-            alert('Total Data Digunakan (GB) wajib diisi dengan angka yang valid.');
+            notifyWarning('Total Data Digunakan (GB) wajib diisi dengan angka yang valid.');
             $(config.totalDataSelector).trigger('focus');
             return false;
         }
 
         if (totalHoursRaw === '' || Number.isNaN(totalHours) || totalHours <= 0) {
-            alert('Total Waktu Penggunaan (Jam) wajib diisi lebih dari 0.');
+            notifyWarning('Total Waktu Penggunaan (Jam) wajib diisi lebih dari 0.');
             $(config.totalHoursSelector).trigger('focus');
             return false;
         }
@@ -1511,17 +1600,30 @@ $(function () {
     $('#total_data_used_gb, #total_usage_hours').on('input', calculateAverageUsage);
     $('#edit_total_data_used_gb, #edit_total_usage_hours').on('input', calculateEditAverageUsage);
 
+    $('#formAddUsage').on('submit', function (event) {
+        if (!validateUsageForm({
+            providerSelector: '#usage_provider_id',
+            monthSelector: '#month_name',
+            totalDataSelector: '#total_data_used_gb',
+            totalHoursSelector: '#total_usage_hours'
+        })) {
+            event.preventDefault();
+            return false;
+        }
+        $('#formAddUsage button[type="submit"]').prop('disabled', true).text('Saving...');
+    });
+
     $('#formEditUsage').on('submit', function (event) {
-        $('#formEditUsage button[type="submit"]').prop('disabled', true).text('Updating...');
         if (!validateUsageForm({
             providerSelector: '#edit_usage_provider_id',
             monthSelector: '#edit_month_name',
             totalDataSelector: '#edit_total_data_used_gb',
             totalHoursSelector: '#edit_total_usage_hours'
         })) {
-            $('#formEditUsage button[type="submit"]').prop('disabled', false).text('Update');
             event.preventDefault();
+            return false;
         }
+        $('#formEditUsage button[type="submit"]').prop('disabled', true).text('Updating...');
     });
     $('.provider-year-filter, .provider-month-start-filter, .provider-month-end-filter').on('change', function () {
         applyProviderFilters($(this).data('provider-id'));
@@ -1570,14 +1672,18 @@ $(function () {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: true,
+                maintainAspectRatio: false,
                 legend: {
-                    position: 'bottom'
+                    position: window.innerWidth < 576 ? 'top' : 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        fontSize: 11
+                    }
                 },
                 title: {
                     display: true,
                     text: 'GRAFIK PEMAKAIAN INTERNET',
-                    fontSize: 22,
+                    fontSize: window.innerWidth < 576 ? 15 : 22,
                     fontColor: '#2f4f6f'
                 },
                 scales: {

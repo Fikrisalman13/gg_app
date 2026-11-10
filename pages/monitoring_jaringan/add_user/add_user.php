@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // ======================================================
 // Add User - LENGKAP (ARP + DHCP + Firewall + Queues + Karyawan + Select2)
 // ======================================================
@@ -208,12 +208,16 @@ $deviceTypes = [
                         <?php unset($_SESSION['error']); ?>
                     <?php endif; ?>
 
-                    <form method="POST" action="proses_add_user.php" id="formAddUser">
+                    <form method="POST" action="proses_add_user.php" id="formAddUser" novalidate>
                         <style>
                             /* Reuse add_emp visual style */
-                            .form-section { margin-bottom: 20px; padding: 12px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9; }
-                            .form-section h5 { margin-bottom: 12px; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 8px; }
+                            .form-section { margin-bottom: 20px; padding: 15px; border: 1px solid #dee2e6; border-radius: 6px; background: #fdfdfd; }
+                            .form-section h5 { margin-bottom: 12px; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 8px; font-size: 1.05rem; }
                             .required-label { font-weight: bold; color: #d9534f; }
+                            @media (max-width: 767.98px) {
+                                .form-section { padding: 12px !important; margin-bottom: 15px !important; }
+                                .btn-mobile-block { display: block; width: 100%; margin-bottom: 0.5rem; }
+                            }
                         </style>
 
                         <div class="row">
@@ -373,9 +377,8 @@ $deviceTypes = [
 
 </div>
 
-<!-- Select2 JS -->
-<script src="/gg_app/plugins/js/jquery.min.js"></script>
-<script src="/gg_app/plugins/js/select2.full.min.js"></script>
+<?php include '../../../includes/footer.php'; ?>
+<script src="/gg_app/plugins/AdminLTE-3.2.0/plugins/sweetalert2/sweetalert2.all.min.js"></script>
 
 <script>
 $(document).ready(function () {
@@ -562,24 +565,27 @@ $(document).ready(function () {
 
         // Validasi minimal
         if (!$('#arp_id').val()) {
-            alert('Silakan pilih IP dari ARP List!');
+            Swal.fire({ icon: 'warning', title: 'Data Belum Lengkap', text: 'Silakan pilih IP dari ARP List!' });
             return false;
         }
 
         if (!$('#employee_select').val()) {
-            alert('Silakan pilih nama karyawan!');
+            Swal.fire({ icon: 'warning', title: 'Data Belum Lengkap', text: 'Silakan pilih nama karyawan!' });
             return false;
         }
 
         if (!$('#device_type').val()) {
-            alert('Silakan pilih jenis device!');
+            Swal.fire({ icon: 'warning', title: 'Data Belum Lengkap', text: 'Silakan pilih jenis device!' });
             return false;
         }
 
         if (!$('#bw_up').val() || !$('#bw_down').val()) {
-            alert('Silakan pilih bandwidth limit!');
+            Swal.fire({ icon: 'warning', title: 'Data Belum Lengkap', text: 'Silakan pilih bandwidth limit!' });
             return false;
         }
+
+        // Tampilkan loading saat submit
+        $('#btnSubmit').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Menyimpan...');
 
         // Submit form
         this.submit();
@@ -587,5 +593,3 @@ $(document).ready(function () {
 
 });
 </script>
-
-<?php include '../../../includes/footer.php'; ?>

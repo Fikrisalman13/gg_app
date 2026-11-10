@@ -182,6 +182,43 @@ function formatBytes($bytes) {
 ?>
 
 <!-- ========================================= -->
+<!-- CSS RESPONSIVE MOBILE -->
+<!-- ========================================= -->
+<style>
+@media (max-width: 576px) {
+    .small-box {
+        margin-bottom: 0.75rem;
+    }
+    .small-box .inner {
+        padding: 10px;
+    }
+    .small-box .inner h3 {
+        font-size: 1.15rem !important;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .small-box .inner p {
+        font-size: 0.75rem !important;
+        margin-bottom: 0;
+    }
+    .small-box .icon {
+        font-size: 2.2rem;
+        top: 8px;
+        right: 8px;
+        opacity: 0.25;
+    }
+    .nav-btn-mobile {
+        flex: 1 1 calc(50% - 6px);
+        text-align: center;
+        font-size: 0.8rem;
+        padding: 0.4rem 0.5rem;
+    }
+}
+</style>
+
+<!-- ========================================= -->
 <!-- UI START -->
 <!-- ========================================= -->
 <div class="content-wrapper">
@@ -196,77 +233,73 @@ function formatBytes($bytes) {
 <section class="content">
 <div class="container-fluid">
 
-
-
-
 <!-- ========================================= -->
-<!-- SUMMARY BOX -->
+<!-- SUMMARY BOX (GRID 2 KOLOM DI MOBILE) -->
 <!-- ========================================= -->
 <div class="row">
 
-    <div class="col-md-3 mb-3">
-        <div class="small-box bg-info shadow-sm">
+    <div class="col-6 col-md-3 mb-3">
+        <div class="small-box bg-info shadow-sm h-100 mb-0">
             <div class="inner"><h3><?= formatBytesPretty($totalUpload) ?></h3><p>Total Upload</p></div>
             <div class="icon"><i class="fas fa-upload"></i></div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-3">
-        <div class="small-box bg-success shadow-sm">
+    <div class="col-6 col-md-3 mb-3">
+        <div class="small-box bg-success shadow-sm h-100 mb-0">
             <div class="inner"><h3><?= formatBytesPretty($totalDownload) ?></h3><p>Total Download</p></div>
             <div class="icon"><i class="fas fa-download"></i></div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-3">
-        <div class="small-box bg-warning shadow-sm">
+    <div class="col-6 col-md-3 mb-3">
+        <div class="small-box bg-warning shadow-sm h-100 mb-0">
             <div class="inner"><h3><?= formatBytesPretty($totalTraffic) ?></h3><p>Total Traffic</p></div>
             <div class="icon"><i class="fas fa-exchange-alt"></i></div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-3">
-        <div class="small-box bg-primary shadow-sm">
+    <div class="col-6 col-md-3 mb-3">
+        <div class="small-box bg-primary shadow-sm h-100 mb-0">
             <div class="inner"><h3><?= number_format($totalUsersRealtime) ?></h3><p>User Realtime</p></div>
             <div class="icon"><i class="fas fa-user"></i></div>
         </div>
     </div>
 
-
 </div>
 
 <!-- ========================================= -->
-<!-- FILTER TANGGAL UNTUK SUMMARY BOX (DIPINDAH KE BAWAH) -->
+<!-- FILTER TANGGAL UNTUK SUMMARY BOX -->
 <!-- ========================================= -->
-<form method="get" class="row mb-3">
-    <div class="col-md-3">
-        <label>Dari</label>
+<form method="get" class="row mb-3 mt-3">
+    <div class="col-6 col-md-3 mb-2">
+        <label class="small font-weight-bold mb-1">Dari</label>
         <input type="date" name="start" class="form-control form-control-sm" value="<?= e($_GET['start'] ?? '') ?>">
     </div>
-    <div class="col-md-3">
-        <label>Sampai</label>
+    <div class="col-6 col-md-3 mb-2">
+        <label class="small font-weight-bold mb-1">Sampai</label>
         <input type="date" name="end" class="form-control form-control-sm" value="<?= e($_GET['end'] ?? '') ?>">
     </div>
-    <div class="col-md-2 d-flex align-items-end">
-        <button class="btn btn-<?= $themeColor ?> btn-sm w-100">Filter</button>
+    <div class="col-6 col-md-2 mb-2 d-flex align-items-end">
+        <button class="btn btn-<?= $themeColor ?> btn-sm w-100"><i class="fas fa-filter mr-1"></i> Filter</button>
     </div>
-    <div class="col-md-2 d-flex align-items-end">
-        <a href="dashboard.php" class="btn btn-outline-secondary btn-sm w-100">Reset</a>
+    <div class="col-6 col-md-2 mb-2 d-flex align-items-end">
+        <a href="dashboard.php" class="btn btn-outline-secondary btn-sm w-100"><i class="fas fa-undo mr-1"></i> Reset</a>
     </div>
 </form>
 
 <!-- ========================================= -->
 <!-- NAVIGATION BUTTONS -->
 <!-- ========================================= -->
-<div class="mb-3 d-flex gap-2">
-    <a href="connected_device.php" class="btn btn-outline-<?= $themeColor ?> btn-sm">
-        <i class="fas fa-plug"></i> Connected Device
+<div class="mb-3 d-flex flex-wrap" style="gap: 6px;">
+    <a href="connected_device.php" class="btn btn-outline-<?= $themeColor ?> btn-sm nav-btn-mobile">
+        <i class="fas fa-plug mr-1"></i> Connected Device
     </a>
-    <a href="user_internet.php" class="btn btn-outline-<?= $themeColor ?> btn-sm">
-        <i class="fas fa-wifi"></i> User Internet
+    <a href="user_internet.php" class="btn btn-outline-<?= $themeColor ?> btn-sm nav-btn-mobile">
+        <i class="fas fa-wifi mr-1"></i> User Internet
     </a>
-    <a href="average_usage.php" class="btn btn-outline-<?= $themeColor ?> btn-sm">
-        <i class="fas fa-chart-line"></i> Average Usage
+    <a href="average_usage.php" class="btn btn-outline-<?= $themeColor ?> btn-sm nav-btn-mobile">
+        <i class="fas fa-chart-line mr-1"></i> Average Usage
     </a>
 </div>
 <!---------------------------------------------------------->

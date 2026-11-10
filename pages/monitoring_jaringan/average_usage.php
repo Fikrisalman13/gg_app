@@ -109,6 +109,42 @@ th.col-no, td.col-no {
     max-width: 50px !important;
     text-align: center !important;
 }
+.table td, .table th {
+    white-space: nowrap;
+}
+@media (max-width: 767.98px) {
+    .card-header-mobile-stack {
+        display: flex;
+        flex-direction: column;
+    }
+    .card-header-mobile-stack .card-title {
+        margin-bottom: 0.65rem !important;
+    }
+    .card-header-mobile-stack .card-tools {
+        float: none !important;
+        margin-left: 0 !important;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+    .card-header-mobile-stack .card-tools .btn {
+        flex: 1 1 calc(50% - 6px);
+        margin: 0 !important;
+        text-align: center;
+        font-size: 0.78rem;
+        padding: 0.35rem 0.4rem;
+        white-space: nowrap;
+    }
+    .summary-box {
+        padding: 8px;
+    }
+    .summary-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+}
 </style>
 
 <div class="content-wrapper">
@@ -130,31 +166,31 @@ th.col-no, td.col-no {
     <section class="content">
         <div class="container-fluid">
             <div class="card">
-                <div class="card-header bg-<?= e($themeColor) ?> text-white">
+                <div class="card-header bg-<?= e($themeColor) ?> text-white card-header-mobile-stack">
                     <h3 class="card-title m-0">Data Average Usage</h3>
                     <div class="card-tools">
-                        <button id="btnExportPDF" class="btn btn-danger btn-sm"><i class="fas fa-file-pdf"></i> Export PDF</button>
-                        <button id="btnExportExcel" class="btn btn-success btn-sm ml-2"><i class="fas fa-file-excel"></i> Export Excel</button>
-                        <button id="btnDelete" class="btn btn-light btn-sm ml-2"><i class="fas fa-trash text-danger"></i> Hapus Data</button>
+                        <button id="btnExportPDF" class="btn btn-danger btn-sm"><i class="fas fa-file-pdf mr-1"></i> Export PDF</button>
+                        <button id="btnExportExcel" class="btn btn-success btn-sm ml-sm-2"><i class="fas fa-file-excel mr-1"></i> Export Excel</button>
+                        <button id="btnDelete" class="btn btn-light btn-sm ml-sm-2"><i class="fas fa-trash text-danger mr-1"></i> Hapus Data</button>
                     </div>
                 </div>
                 <div class="card-body">
 
-                    <div class="row mb-4">
-                        <div class="col-md-3 col-sm-6 mb-2">
-                            <div class="summary-box d-flex align-items-center shadow-sm">
+                    <div class="row mb-3">
+                        <div class="col-6 col-md-3 mb-2">
+                            <div class="summary-box d-flex align-items-center shadow-sm h-100">
                                 <div class="bg-primary text-white rounded summary-icon d-flex justify-content-center align-items-center"><i class="fas fa-upload"></i></div>
                                 <div class="pl-2"><div class="text-muted small">Avg Upload</div><div class="font-weight-bold" id="avgUploadBox"><?= formatBytes($sum['up']) ?></div></div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-sm-6 mb-2">
-                            <div class="summary-box d-flex align-items-center shadow-sm">
+                        <div class="col-6 col-md-3 mb-2">
+                            <div class="summary-box d-flex align-items-center shadow-sm h-100">
                                 <div class="bg-success text-white rounded summary-icon d-flex justify-content-center align-items-center"><i class="fas fa-download"></i></div>
                                 <div class="pl-2"><div class="text-muted small">Avg Download</div><div class="font-weight-bold" id="avgDownloadBox"><?= formatBytes($sum['dn']) ?></div></div>
                             </div>
                         </div>
-                        <div class="col-md-4 col-sm-6 mb-2">
-                            <div class="summary-box d-flex align-items-center shadow-sm">
+                        <div class="col-12 col-md-4 mb-2">
+                            <div class="summary-box d-flex align-items-center shadow-sm h-100">
                                 <div class="bg-warning text-white rounded summary-icon d-flex justify-content-center align-items-center"><i class="fas fa-exchange-alt"></i></div>
                                 <div class="pl-2"><div class="text-muted small">Total Avg Trafik</div><div class="font-weight-bold" id="avgTotalBox"><?= formatBytes($sum['tot']) ?></div></div>
                             </div>
@@ -162,17 +198,17 @@ th.col-no, td.col-no {
                     </div>
 
                     <div class="filter-section">
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label class="small">Cari (Nama / Target)</label>
+                        <div class="row">
+                            <div class="col-12 col-md-4 mb-2">
+                                <label class="small font-weight-bold">Cari (Nama / Target)</label>
                                 <input type="text" name="search_average" class="form-control form-control-sm filter-input" placeholder="Cari nama atau target..." value="<?= e($search) ?>">
                             </div>
-                            <div class="col-md-2">
-                                <label class="small">Tanggal Awal</label>
+                            <div class="col-6 col-md-2 mb-2">
+                                <label class="small font-weight-bold">Tanggal Awal</label>
                                 <input type="date" name="start_date" id="start_date" class="form-control form-control-sm filter-input" value="<?= e($start_date) ?>">
                             </div>
-                            <div class="col-md-2">
-                                <label class="small">Tanggal Akhir</label>
+                            <div class="col-6 col-md-2 mb-2">
+                                <label class="small font-weight-bold">Tanggal Akhir</label>
                                 <input type="date" 
                                        name="end_date" 
                                        id="end_date" 
@@ -181,11 +217,9 @@ th.col-no, td.col-no {
                                        data-days="0">
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-12">
-                                <a href="average_usage.php" class="btn btn-secondary btn-sm"><i class="fas fa-eraser"></i> Reset Filter</a>
-                                <span class="auto-refresh-info ml-2"><i class="fas fa-info-circle"></i> Data akan otomatis dimuat ulang saat filter diubah</span>
-                            </div>
+                        <div class="mt-2 d-flex flex-wrap align-items-center" style="gap: 8px;">
+                            <a href="average_usage.php" class="btn btn-secondary btn-sm"><i class="fas fa-eraser mr-1"></i> Reset Filter</a>
+                            <span class="auto-refresh-info"><i class="fas fa-info-circle mr-1"></i> Data akan otomatis dimuat ulang saat filter diubah</span>
                         </div>
                     </div>
 

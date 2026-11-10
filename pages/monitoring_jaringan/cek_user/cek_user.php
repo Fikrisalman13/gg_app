@@ -535,6 +535,7 @@ if ($connected) {
     overflow-x: auto;
     position: relative;
     border-bottom: 1px solid #dee2e6;
+    -webkit-overflow-scrolling: touch;
 }
 #ipCheckTable thead th {
     position: sticky !important;
@@ -545,6 +546,33 @@ if ($connected) {
     border-top: none !important;
     border-bottom: 2px solid #ced4da !important;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    white-space: nowrap;
+}
+#ipCheckTable td {
+    white-space: nowrap;
+}
+@media (max-width: 576px) {
+    .card-counter .card-body {
+        padding: 10px !important;
+    }
+    .card-counter h6 {
+        font-size: 0.68rem !important;
+        margin-bottom: 2px !important;
+    }
+    .card-counter h2 {
+        font-size: 1.25rem !important;
+    }
+    .card-counter small {
+        font-size: 0.65rem !important;
+        display: block;
+        line-height: 1.1;
+    }
+    .card-counter i {
+        font-size: 1.75rem !important;
+    }
+    .filter-box {
+        padding: 12px !important;
+    }
 }
 </style>
 
@@ -567,11 +595,11 @@ if ($connected) {
                         Pengecekan konsistensi 4 Menu Mikrotik: <b>Queues</b>, <b>ARP List</b>, <b>Firewall Address List</b>, dan <b>DHCP Leases</b>.
                     </p>
                 </div>
-                <div class="col-sm-6 text-right">
-                    <button type="button" class="btn btn-outline-<?= htmlspecialchars($themeColor); ?> btn-sm mr-1" onclick="location.reload();">
+                <div class="col-sm-6 text-sm-right mt-2 mt-sm-0 d-flex flex-wrap justify-content-sm-end" style="gap: 6px;">
+                    <button type="button" class="btn btn-outline-<?= htmlspecialchars($themeColor); ?> btn-sm" onclick="location.reload();">
                         <i class="fas fa-sync-alt mr-1"></i> Refresh Data
                     </button>
-                    <button type="button" id="btnExportCsv" class="btn btn-success btn-sm mr-1">
+                    <button type="button" id="btnExportCsv" class="btn btn-success btn-sm">
                         <i class="fas fa-file-excel mr-1"></i> Export Excel/CSV
                     </button>
                     <?php if ($canAdd): ?>
@@ -598,11 +626,11 @@ if ($connected) {
                 </div>
             <?php endif; ?>
 
-            <!-- STATISTIC COUNTER CARDS -->
+            <!-- STATISTIC COUNTER CARDS (2x2 GRID DI MOBILE) -->
             <div class="row">
                 <!-- IP Kosong / Tersedia -->
-                <div class="col-lg-3 col-md-6 col-12">
-                    <div class="card card-counter bg-gradient-success text-white mb-3" onclick="filterByQuick('UNUSED')">
+                <div class="col-6 col-lg-3 col-md-6 mb-2">
+                    <div class="card card-counter bg-gradient-success text-white mb-0 h-100" onclick="filterByQuick('UNUSED')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -610,15 +638,15 @@ if ($connected) {
                                     <h2 class="font-weight-bold mb-0"><?= number_format($summary['unused']); ?></h2>
                                     <small class="text-white-50">0 dari 4 Menu (Siap Pakai)</small>
                                 </div>
-                                <i class="fas fa-check-double fa-3x" style="opacity: 0.35;"></i>
+                                <i class="fas fa-check-double fa-2x fa-md-3x" style="opacity: 0.35;"></i>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- IP Parsial / Tanpa Tag -->
-                <div class="col-lg-3 col-md-6 col-12">
-                    <div class="card card-counter bg-gradient-danger text-white mb-3" onclick="filterByQuick('INCOMPLETE_NO_TAG')">
+                <div class="col-6 col-lg-3 col-md-6 mb-2">
+                    <div class="card card-counter bg-gradient-danger text-white mb-0 h-100" onclick="filterByQuick('INCOMPLETE_NO_TAG')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -626,15 +654,15 @@ if ($connected) {
                                     <h2 class="font-weight-bold mb-0"><?= number_format($summary['incomplete_no_tag']); ?></h2>
                                     <small class="text-white-50">1-3 Menu Tanpa Nama/Tag</small>
                                 </div>
-                                <i class="fas fa-exclamation-triangle fa-3x" style="opacity: 0.35;"></i>
+                                <i class="fas fa-exclamation-triangle fa-2x fa-md-3x" style="opacity: 0.35;"></i>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- IP Parsial (Ada Tag) -->
-                <div class="col-lg-3 col-md-6 col-12">
-                    <div class="card card-counter bg-gradient-info text-white mb-3" onclick="filterByQuick('INCOMPLETE_WITH_TAG')">
+                <div class="col-6 col-lg-3 col-md-6 mb-2">
+                    <div class="card card-counter bg-gradient-info text-white mb-0 h-100" onclick="filterByQuick('INCOMPLETE_WITH_TAG')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -642,15 +670,15 @@ if ($connected) {
                                     <h2 class="font-weight-bold mb-0"><?= number_format($summary['incomplete_with_tag']); ?></h2>
                                     <small class="text-white-50">1-3 Menu Belum Lengkap</small>
                                 </div>
-                                <i class="fas fa-puzzle-piece fa-3x" style="opacity: 0.35;"></i>
+                                <i class="fas fa-puzzle-piece fa-2x fa-md-3x" style="opacity: 0.35;"></i>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- IP Lengkap -->
-                <div class="col-lg-3 col-md-6 col-12">
-                    <div class="card card-counter bg-gradient-primary text-white mb-3" onclick="filterByQuick('COMPLETE')">
+                <div class="col-6 col-lg-3 col-md-6 mb-2">
+                    <div class="card card-counter bg-gradient-primary text-white mb-0 h-100" onclick="filterByQuick('COMPLETE')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -658,7 +686,7 @@ if ($connected) {
                                     <h2 class="font-weight-bold mb-0"><?= number_format($summary['complete']); ?></h2>
                                     <small class="text-white-50">Lengkap 4 Menu & Ber-tag</small>
                                 </div>
-                                <i class="fas fa-users-cog fa-3x" style="opacity: 0.35;"></i>
+                                <i class="fas fa-users-cog fa-2x fa-md-3x" style="opacity: 0.35;"></i>
                             </div>
                         </div>
                     </div>
@@ -666,11 +694,11 @@ if ($connected) {
             </div>
 
             <!-- FILTER CARD -->
-            <div class="card filter-box">
+            <div class="card filter-box mt-2">
                 <div class="row align-items-end">
                     <!-- Filter Subnet -->
-                    <div class="col-md-3 col-sm-6 mb-2">
-                        <label class="font-weight-bold text-secondary small"><i class="fas fa-network-wired mr-1"></i>Pilih Subnet:</label>
+                    <div class="col-12 col-sm-6 col-md-3 mb-2">
+                        <label class="font-weight-bold text-secondary small mb-1"><i class="fas fa-network-wired mr-1"></i>Pilih Subnet:</label>
                         <select id="filterSubnet" class="form-control form-control-sm select2" style="width: 100%;">
                             <option value="ALL">-- Semua Subnet (<?= count($detectedSubnets); ?> Subnet) --</option>
                             <?php foreach ($detectedSubnets as $subKey => $subInfo): ?>
@@ -682,8 +710,8 @@ if ($connected) {
                     </div>
 
                     <!-- Filter Status -->
-                    <div class="col-md-4 col-sm-6 mb-2">
-                        <label class="font-weight-bold text-secondary small"><i class="fas fa-filter mr-1"></i>Filter Kategori / Status:</label>
+                    <div class="col-12 col-sm-6 col-md-4 mb-2">
+                        <label class="font-weight-bold text-secondary small mb-1"><i class="fas fa-filter mr-1"></i>Filter Kategori / Status:</label>
                         <select id="filterCategory" class="form-control form-control-sm select2" style="width: 100%;">
                             <option value="NEED_ATTENTION" selected>⭐ IP Tidak Terpakai / Belum Lengkap (Default)</option>
                             <option value="UNUSED">🟢 IP Kosong / Bebas Saja (0 dari 4 Menu)</option>
@@ -696,13 +724,13 @@ if ($connected) {
                     </div>
 
                     <!-- Pencarian Cepat -->
-                    <div class="col-md-3 col-sm-6 mb-2">
-                        <label class="font-weight-bold text-secondary small"><i class="fas fa-search mr-1"></i>Pencarian Kata Kunci:</label>
+                    <div class="col-12 col-sm-6 col-md-3 mb-2">
+                        <label class="font-weight-bold text-secondary small mb-1"><i class="fas fa-search mr-1"></i>Pencarian Kata Kunci:</label>
                         <input type="text" id="customSearch" class="form-control form-control-sm" placeholder="Ketik IP, Nama, Dept, MAC...">
                     </div>
 
                     <!-- Reset & Actions -->
-                    <div class="col-md-2 col-sm-6 mb-2 text-right">
+                    <div class="col-12 col-sm-6 col-md-2 mb-2 text-right">
                         <button type="button" id="btnResetFilter" class="btn btn-outline-secondary btn-sm btn-block">
                             <i class="fas fa-undo mr-1"></i> Reset Filter
                         </button>

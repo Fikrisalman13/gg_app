@@ -263,12 +263,12 @@ if ($modal) {
         </div>
     </div>
     
-    <div class="text-center mt-3">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">
-            <i class="fas fa-times"></i> Tutup
+    <div class="d-flex justify-content-center flex-wrap mt-3" style="gap: 8px;">
+        <button type="button" class="btn btn-secondary flex-fill flex-sm-grow-0" data-dismiss="modal">
+            <i class="fas fa-times mr-1"></i> Tutup
         </button>
-        <a href="edit_user_internet.php?name=<?= urlencode($queueData['name'] ?? '') ?>" class="btn btn-primary" target="_blank">
-            <i class="fas fa-edit"></i> Edit
+        <a href="edit_user_internet.php?name=<?= urlencode($queueData['name'] ?? '') ?>" class="btn btn-primary flex-fill flex-sm-grow-0" target="_blank">
+            <i class="fas fa-edit mr-1"></i> Edit
         </a>
     </div>
 <?php endif; ?>
@@ -317,6 +317,12 @@ if ($modal) {
         .form-control[readonly] {
             background-color: #e9ecef;
             cursor: not-allowed;
+        }
+        @media (max-width: 576px) {
+            .form-section {
+                padding: 12px !important;
+                margin-bottom: 12px !important;
+            }
         }
     </style>
 </head>
@@ -497,12 +503,12 @@ if ($modal) {
 
                             <!-- TOMBOL AKSI -->
                             <div class="form-section">
-                                <div class="text-center">
-                                    <a href="user_internet.php" class="btn btn-secondary">
-                                        <i class="fas fa-arrow-left"></i> Kembali
+                                <div class="d-flex justify-content-center flex-wrap" style="gap: 8px;">
+                                    <a href="user_internet.php" class="btn btn-secondary flex-fill flex-sm-grow-0">
+                                        <i class="fas fa-arrow-left mr-1"></i> Kembali
                                     </a>
-                                    <a href="edit_user_internet.php?name=<?= urlencode($queueData['name'] ?? '') ?>" class="btn btn-primary">
-                                        <i class="fas fa-edit"></i> Edit
+                                    <a href="edit_user_internet.php?name=<?= urlencode($queueData['name'] ?? '') ?>" class="btn btn-primary flex-fill flex-sm-grow-0">
+                                        <i class="fas fa-edit mr-1"></i> Edit
                                     </a>
                                 </div>
                             </div>

@@ -192,6 +192,34 @@ ksort($deviceCounts);
     color: #6c757d;
     margin-top: 5px;
 }
+.table td, .table th {
+    white-space: nowrap;
+}
+@media (max-width: 767.98px) {
+    .card-header-mobile-stack {
+        display: flex;
+        flex-direction: column;
+    }
+    .card-header-mobile-stack .card-title {
+        margin-bottom: 0.65rem !important;
+    }
+    .card-header-mobile-stack .card-tools {
+        float: none !important;
+        margin-left: 0 !important;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+    .card-header-mobile-stack .card-tools .btn {
+        flex: 1 1 calc(50% - 6px);
+        margin: 0 !important;
+        text-align: center;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.5rem;
+        white-space: nowrap;
+    }
+}
 </style>
 
 <div class="content-wrapper">
@@ -221,23 +249,23 @@ ksort($deviceCounts);
                 <div class="alert alert-danger"><?= htmlspecialchars($errorMessage) ?></div>
             <?php else: ?>
                 <div class="card">
-                    <div class="card-header bg-<?= $themeColor ?> text-white">
+                    <div class="card-header bg-<?= $themeColor ?> text-white card-header-mobile-stack">
                         <h3 class="card-title m-0">Data Connected Device</h3>
                         <div class="card-tools">
-                            <button id="btnExportPDF" class="btn btn-danger btn-sm mr-2">
-                                <i class="fas fa-file-pdf"></i> Export PDF
+                            <button id="btnExportPDF" class="btn btn-danger btn-sm mr-sm-2">
+                                <i class="fas fa-file-pdf mr-1"></i> Export PDF
                             </button>
                             <button onclick="location.href='connected_device.php'" class="btn btn-light btn-sm">
-                                <i class="fas fa-sync-alt"></i> Refresh
+                                <i class="fas fa-sync-alt mr-1"></i> Refresh
                             </button>
                         </div>
                     </div>
                     <div class="card-body">
                         <!-- Filter Section -->
                         <div class="filter-section">
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label class="small">Filter Device</label>
+                            <div class="row">
+                                <div class="col-12 col-md-4 mb-2">
+                                    <label class="small font-weight-bold">Filter Device</label>
                                     <select name="device_filter" class="form-control form-control-sm filter-select">
                                         <option value="">Semua Device</option>
                                         <?php foreach ($deviceCounts as $d => $c): ?>
@@ -245,28 +273,26 @@ ksort($deviceCounts);
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="small">Filter Status</label>
+                                <div class="col-12 col-md-4 mb-2">
+                                    <label class="small font-weight-bold">Filter Status</label>
                                     <select name="status_filter" class="form-control form-control-sm filter-select">
                                         <option value="">Semua Status</option>
                                         <option value="Online">Online</option>
                                         <option value="Offline">Offline</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="small">Cari (Nama/IP)</label>
+                                <div class="col-12 col-md-4 mb-2">
+                                    <label class="small font-weight-bold">Cari (Nama/IP)</label>
                                     <input type="text" name="search_device" class="form-control form-control-sm filter-input" placeholder="Cari nama atau IP...">
                                 </div>
                             </div>
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <a href="connected_device.php" class="btn btn-secondary btn-sm">
-                                        <i class="fas fa-eraser"></i> Reset Filter
-                                    </a>
-                                    <span class="auto-refresh-info ml-2">
-                                        <i class="fas fa-info-circle"></i> Data akan otomatis dimuat ulang saat filter diubah
-                                    </span>
-                                </div>
+                            <div class="mt-2 d-flex flex-wrap align-items-center" style="gap: 8px;">
+                                <a href="connected_device.php" class="btn btn-secondary btn-sm">
+                                    <i class="fas fa-eraser mr-1"></i> Reset Filter
+                                </a>
+                                <span class="auto-refresh-info">
+                                    <i class="fas fa-info-circle mr-1"></i> Data akan otomatis dimuat ulang saat filter diubah
+                                </span>
                             </div>
                         </div>
 
