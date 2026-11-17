@@ -154,7 +154,148 @@ try {
         $tglReceipt = date('Y-m-d', strtotime($grn['grndate']));
     }
 
-    // 3. Ambil data Detail Item PO (prpodt)
+    // 4. Ambil Payment Method dari Terms of Payment (prpotop)
+    $sqlTop = "
+        SELECT 
+            potopid,
+            topseq,
+            fgpmttype,
+            topdesc,
+            pcpayment,
+            amount,
+            netto
+        FROM prpotop
+        WHERE pohdid = :pohdid
+        ORDER BY topseq ASC, potopid ASC
+    ";
+    $stmtTop = $conn3->prepare($sqlTop);
+    $stmtTop->execute([':pohdid' => $pohdid]);
+    $topRows = $stmtTop->fetchAll(PDO::FETCH_ASSOC);
+
+    $fgpmttype = '';
+    $paymentMethod = '';
+    $paymentTerms = [];
+
+    if (!empty($topRows)) {
+        $totalTerms = count($topRows);
+        $methodParts = [];
+        $rawTypes = [];
+
+        foreach ($topRows as $tRow) {
+            $typeCode = strtoupper(trim((string)($tRow['fgpmttype'] ?? '')));
+            $desc = trim((string)($tRow['topdesc'] ?? ''));
+            $pctVal = floatval($tRow['pcpayment'] ?? 0);
+            $pctFormatted = rtrim(rtrim(number_format($pctVal, 2, '.', ''), '0'), '.');
+
+            $label = '';
+            // Mapping fgpmttype:
+            // B -> Payment Before Shipment
+            // P -> Account Payable
+            // D -> DP
+            if ($typeCode === 'B') {
+                $label = 'Payment Before Shipment';
+            } elseif ($typeCode === 'P') {
+                $label = 'Account Payable';
+            } elseif ($typeCode === 'D') {
+                $label = 'DP';
+            } elseif (!empty($desc)) {
+                $label = $desc;
+            } elseif (!empty($typeCode)) {
+                $label = $typeCode;
+            }
+
+            if (!empty($label)) {
+                if ($totalTerms > 1 && $pctVal > 0) {
+                    $methodParts[] = $label . ' (' . $pctFormatted . '%)';
+                } else {
+                    $methodParts[] = $label;
+                }
+                $rawTypes[] = $typeCode;
+            }
+
+            $paymentTerms[] = [
+                'topseq'     => $tRow['topseq'] ?? 1,
+                'fgpmttype'  => $typeCode,
+                'label'      => $label,
+                'percentage' => $pctVal,
+                'amount'     => floatval($tRow['amount'] ?? 0)
+            ];
+        }
+
+        $paymentMethod = implode(', ', $methodParts);
+        $fgpmttype = implode(', ', array_unique(array_filter($rawTypes)));
+    }
+
+    // Fallback: Jika di prpotop tidak tercatat namun sudah ada penerimaan GRN / AP, default ke Account Payable
+    if (empty($paymentMethod) && !empty($noReceipt)) {
+        $paymentMethod = 'Account Payable';
+        $fgpmttype = 'P';
+    }
+
+    // 5. Ambil data RFP (cmtttap & cmrequesthd) melalui multi-path:
+    // Path 1: Relasi langsung via cmtttap.pohdid (Advance Payment / DP)
+    // Path 2: Relasi via GRN -> AP Posting -> cmtttap (Hutang Dagang / AP Invoice)
+    // Path 3: Relasi fallback via teks deskripsi nomor PO
+    // Prioritas: RFP paling terbaru (tgl_rfp DESC, tttapid DESC)
+    $sqlRfp = "
+        WITH rfp_candidates AS (
+            -- 1. Relasi langsung via cmtttap.pohdid (Uang Muka / Payment Advance)
+            SELECT 
+                t.tttapid,
+                COALESCE(r.reqnmbr, t.reqnmbr) AS rfp_no,
+                COALESCE(r.reqdate, t.reqdate) AS tgl_rfp
+            FROM cmtttap t
+            LEFT JOIN cmrequesthd r ON t.reqhdid = r.reqhdid
+            WHERE t.pohdid = :pohdid
+            
+            UNION ALL
+            
+            -- 2. Relasi via GRN -> AP Posting -> cmtttap (Hutang Dagang / AP Invoice)
+            SELECT 
+                t.tttapid,
+                COALESCE(r.reqnmbr, t.reqnmbr) AS rfp_no,
+                COALESCE(r.reqdate, t.reqdate) AS tgl_rfp
+            FROM prgrndt gd
+            JOIN apposting ap ON ap.grnhdid = gd.grnhdid
+            JOIN cmtttap t ON t.apid = ap.apid
+            LEFT JOIN cmrequesthd r ON t.reqhdid = r.reqhdid
+            WHERE gd.pohdid = :pohdid
+            
+            UNION ALL
+            
+            -- 3. Relasi fallback via teks nomor PO di deskripsi transaksi
+            SELECT 
+                t.tttapid,
+                COALESCE(r.reqnmbr, t.reqnmbr) AS rfp_no,
+                COALESCE(r.reqdate, t.reqdate) AS tgl_rfp
+            FROM cmtttap t
+            LEFT JOIN cmrequesthd r ON t.reqhdid = r.reqhdid
+            WHERE t.tttdesc ILIKE :ponmbr OR r.reqdesc ILIKE :ponmbr
+        )
+        SELECT rfp_no, tgl_rfp
+        FROM rfp_candidates
+        WHERE rfp_no IS NOT NULL AND TRIM(rfp_no) <> ''
+        ORDER BY tgl_rfp DESC, tttapid DESC
+        LIMIT 1
+    ";
+    $stmtRfp = $conn3->prepare($sqlRfp);
+    $stmtRfp->execute([
+        ':pohdid' => $pohdid,
+        ':ponmbr' => '%' . trim($poNumber) . '%'
+    ]);
+    $rfpData = $stmtRfp->fetch(PDO::FETCH_ASSOC);
+
+    $rfpNo = '';
+    $tglRfp = '';
+    if ($rfpData) {
+        $rfpNo = trim($rfpData['rfp_no'] ?? '');
+        $rawRfpDate = $rfpData['tgl_rfp'] ?? '';
+        if (!empty($rawRfpDate)) {
+            $tglRfp = date('Y-m-d', strtotime($rawRfpDate));
+        }
+    }
+
+    // 6. Ambil data Detail Item PO (prpodt)
     $sqlDt = "
         SELECT 
             podtid,
@@ -275,6 +416,11 @@ try {
             'rekening_ac'          => $rekeningAc,
             'no_receipt'           => $noReceipt,
             'tgl_receipt'          => $tglReceipt,
+            'payment_method'       => $paymentMethod,
+            'fgpmttype'            => $fgpmttype,
+            'payment_terms'        => $paymentTerms,
+            'rfp_no'               => $rfpNo,
+            'tgl_rfp'              => $tglRfp,
             'keterangan'           => $keteranganPo,
             'items'                => $items,
             'vendor_account_count' => count($vendorAccounts),

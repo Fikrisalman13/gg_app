@@ -21,25 +21,44 @@ if (empty($ticket)) {
     exit;
 }
 
-$sql = "SELECT * FROM dbo.Form_Purchasing_COD WHERE ticket = ?";
-$stmt = sqlsrv_query($conn, $sql, [$ticket]);
+if (strpos($ticket, 'BPU-') === 0) {
+    $sql = "SELECT * FROM dbo.Form_Purchasing_Pengembalian_Uang WHERE ticket = ?";
+    $stmt = sqlsrv_query($conn, $sql, [$ticket]);
 
-if ($stmt && $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-    // Format date fields
-    if ($row['tgl_receipt'] instanceof DateTime) {
-        $row['tgl_receipt'] = $row['tgl_receipt']->format('Y-m-d');
+    if ($stmt && $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        if ($row['tgl_rfp'] instanceof DateTime) {
+            $row['tgl_rfp'] = $row['tgl_rfp']->format('Y-m-d');
+        }
+        if ($row['tanggal'] instanceof DateTime) {
+            $row['tanggal'] = $row['tanggal']->format('Y-m-d');
+        }
+        if ($row['created_at'] instanceof DateTime) {
+            $row['created_at'] = $row['created_at']->format('Y-m-d H:i:s');
+        }
+        echo json_encode(['success' => true, 'form_type' => 'bukti_pengembalian_uang', 'data' => $row]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Data tidak ditemukan']);
     }
-    if ($row['tgl_pengajuan'] instanceof DateTime) {
-        $row['tgl_pengajuan'] = $row['tgl_pengajuan']->format('Y-m-d');
-    }
-    if ($row['due_date'] instanceof DateTime) {
-        $row['due_date'] = $row['due_date']->format('Y-m-d');
-    }
-    if ($row['created_at'] instanceof DateTime) {
-        $row['created_at'] = $row['created_at']->format('Y-m-d H:i:s');
-    }
-
-    echo json_encode(['success' => true, 'data' => $row]);
 } else {
-    echo json_encode(['success' => false, 'error' => 'Data tidak ditemukan']);
+    $sql = "SELECT * FROM dbo.Form_Purchasing_COD WHERE ticket = ?";
+    $stmt = sqlsrv_query($conn, $sql, [$ticket]);
+
+    if ($stmt && $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        if ($row['tgl_receipt'] instanceof DateTime) {
+            $row['tgl_receipt'] = $row['tgl_receipt']->format('Y-m-d');
+        }
+        if ($row['tgl_pengajuan'] instanceof DateTime) {
+            $row['tgl_pengajuan'] = $row['tgl_pengajuan']->format('Y-m-d');
+        }
+        if ($row['due_date'] instanceof DateTime) {
+            $row['due_date'] = $row['due_date']->format('Y-m-d');
+        }
+        if ($row['created_at'] instanceof DateTime) {
+            $row['created_at'] = $row['created_at']->format('Y-m-d H:i:s');
+        }
+
+        echo json_encode(['success' => true, 'form_type' => 'cash_on_delivery', 'data' => $row]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Data tidak ditemukan']);
+    }
 }

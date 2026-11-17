@@ -122,6 +122,7 @@ $filterTanggal = $_GET['tanggal'] ?? '';
                                     <select class="form-control form-control-sm" id="pdfReportType">
                                         <option value="">-- Semua --</option>
                                         <option value="rekap_cash_on_delivery">Rekap Pengajuan Cash On Delivery</option>
+                                        <option value="rekap_bukti_pengembalian_uang">Rekap Bukti Pengembalian Uang</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
@@ -254,6 +255,14 @@ $filterTanggal = $_GET['tanggal'] ?? '';
                                     </h6>
                                 </div>
                                 <p class="mb-1 small text-muted">Form pengajuan pembelian / pembayaran Cash On Delivery (COD)</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action form-item"
+                                data-form-type="bukti_pengembalian_uang">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1 text-success"><i class="fas fa-undo-alt"></i> Form Bukti Pengembalian Uang
+                                    </h6>
+                                </div>
+                                <p class="mb-1 small text-muted">Form bukti pengembalian uang / refund pembayaran dari supplier</p>
                             </a>
                         </div>
                     </div>
@@ -511,7 +520,8 @@ $filterTanggal = $_GET['tanggal'] ?? '';
         // ─── Simpan Form ──────────────────────────────────────────────────
         $('#btnSimpanForm').on('click', function () {
             var formId = '';
-            if ($('#formCashOnDelivery').length) formId = '#formCashOnDelivery';
+            if ($('#formBuktiPengembalianUang').length) formId = '#formBuktiPengembalianUang';
+            else if ($('#formCashOnDelivery').length) formId = '#formCashOnDelivery';
             else if ($('form', '#modalFormBody').length) formId = '#' + $('form', '#modalFormBody').first().attr('id');
 
             if (!formId || !$(formId).length) return;
@@ -594,18 +604,22 @@ $filterTanggal = $_GET['tanggal'] ?? '';
             var ticket = btn.data('ticket');
             if (!ticket) return;
 
-            $('#modalFormTitle').text('Edit Form Pengajuan Cash On Delivery');
+            var formType = btn.data('form-type') || (ticket.indexOf('BPU-') === 0 ? 'bukti_pengembalian_uang' : 'cash_on_delivery');
+            var title = (formType === 'bukti_pengembalian_uang') ? 'Edit Form Bukti Pengembalian Uang' : 'Edit Form Pengajuan Cash On Delivery';
+
+            $('#modalFormTitle').text(title);
             $('#modalFormIsian').modal('show');
-            loadEditForm(ticket);
+            loadEditForm(ticket, formType);
         });
 
-        function loadEditForm(ticket) {
+        function loadEditForm(ticket, formType) {
             $('#modalFormBody').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div><p class="mt-2">Memuat data...</p></div>');
             $.ajax({
                 url: 'load_data.php', type: 'GET', data: { ticket: ticket }, dataType: 'json',
                 success: function (response) {
                     if (response && response.success) {
-                        loadFormContentForEdit(response.data);
+                        var resolvedType = response.form_type || formType || 'cash_on_delivery';
+                        loadFormContentForEdit(response.data, resolvedType);
                     } else {
                         $('#modalFormBody').html('<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Gagal memuat data: ' + (response.error || 'Unknown') + '</div>');
                     }
@@ -616,9 +630,9 @@ $filterTanggal = $_GET['tanggal'] ?? '';
             });
         }
 
-        function loadFormContentForEdit(data) {
+        function loadFormContentForEdit(data, formType) {
             $.ajax({
-                url: 'load_form.php', type: 'GET', data: { form_type: 'cash_on_delivery', ticket: data.ticket, edit: 1 }, dataType: 'json',
+                url: 'load_form.php', type: 'GET', data: { form_type: formType, ticket: data.ticket, edit: 1 }, dataType: 'json',
                 success: function (response) {
                     if (response && response.success) {
                         $('#modalFormBody').html(response.content);
@@ -639,12 +653,15 @@ $filterTanggal = $_GET['tanggal'] ?? '';
         }
 
         function populateFormWithData(data) {
-            var $form = $('#formCashOnDelivery');
+            var $form = $('#formBuktiPengembalianUang').length ? $('#formBuktiPengembalianUang') : $('#formCashOnDelivery');
+            if (!$form.length && $('form', '#modalFormBody').length) {
+                $form = $('form', '#modalFormBody').first();
+            }
             if (!$form.length) return;
             
             $.each(data, function(key, val) {
                 var $input = $form.find('[name="' + key + '"]');
-                if ($input.length) {
+                if ($input.length && val !== null && val !== undefined) {
                     $input.val(val);
                 }
             });
@@ -653,7 +670,9 @@ $filterTanggal = $_GET['tanggal'] ?? '';
             if (data.items_json) {
                 try {
                     var items = typeof data.items_json === 'string' ? JSON.parse(data.items_json) : data.items_json;
-                    if (window.populateCodItems) {
+                    if (window.populateBpuItems && typeof window.populateBpuItems === 'function') {
+                        window.populateBpuItems(items);
+                    } else if (window.populateCodItems && typeof window.populateCodItems === 'function') {
                         window.populateCodItems(items);
                     }
                 } catch(e) {
@@ -714,6 +733,7 @@ $filterTanggal = $_GET['tanggal'] ?? '';
             $('#btnSimpanForm').prop('disabled', false).html('<i class="fas fa-save"></i> Simpan');
             $('#modalFormBody').scrollTop(0);
             $('#modalPilihRekening').remove();
+            $('#modalPilihRekeningBpu').remove();
         });
 
         $('#modalPilihForm').on('hidden.bs.modal', function (e) {
@@ -756,7 +776,8 @@ $filterTanggal = $_GET['tanggal'] ?? '';
             var ticket = btn.data('ticket');
             if (!ticket) return;
 
-            var detailUrl = 'detail_cash_on_delivery.php?ticket=' + encodeURIComponent(ticket);
+            var detailPage = btn.data('url') || (ticket.indexOf('BPU-') === 0 ? 'detail_bukti_pengembalian_uang.php' : 'detail_cash_on_delivery.php');
+            var detailUrl = detailPage + '?ticket=' + encodeURIComponent(ticket);
 
             $('#modalTicketNumber').text(ticket);
             $('#iframeDetailTiket').attr('src', detailUrl);

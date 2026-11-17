@@ -28,7 +28,12 @@ if (empty($ticket)) {
     exit;
 }
 
-$sql = "UPDATE dbo.Form_Purchasing_COD SET status = 'Ditolak', alasan_reject = ?, updated_by = ?, updated_at = GETDATE() WHERE ticket = ?";
+if (strpos($ticket, 'BPU-') === 0) {
+    $sql = "UPDATE dbo.Form_Purchasing_Pengembalian_Uang SET status = 'Ditolak', alasan_reject = ?, updated_by = ?, updated_at = GETDATE() WHERE ticket = ?";
+} else {
+    $sql = "UPDATE dbo.Form_Purchasing_COD SET status = 'Ditolak', alasan_reject = ?, updated_by = ?, updated_at = GETDATE() WHERE ticket = ?";
+}
+
 $stmt = sqlsrv_query($conn, $sql, [$alasan, $_SESSION['UserName'], $ticket]);
 
 if ($stmt === false) {

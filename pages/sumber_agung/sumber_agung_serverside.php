@@ -155,6 +155,63 @@ switch ($action) {
             $where .= " AND is_published = 1 AND is_viewed = 1";
         }
 
+        // =================================================================
+        // SINKRONISASI OTOMATIS NO TITIPAN DARI ERP (whdotitipan)
+        // =================================================================
+        if (isset($conn3) && $conn3) {
+            try {
+                // Ambil daftar No DO yang sedang aktif pada filter ini
+                $sqlDO = "SELECT DISTINCT no_do, no_titipan FROM dbo.sa_titipan WHERE {$where} AND no_do IS NOT NULL AND no_do != ''";
+                $stmtDO = sqlsrv_query($conn, $sqlDO, $params);
+                $existingDOs = [];
+                if ($stmtDO) {
+                    while ($rDO = sqlsrv_fetch_array($stmtDO, SQLSRV_FETCH_ASSOC)) {
+                        $dNo = trim($rDO['no_do'] ?? '');
+                        if (!empty($dNo)) {
+                            $existingDOs[$dNo] = trim($rDO['no_titipan'] ?? '');
+                        }
+                    }
+                }
+
+                if (!empty($existingDOs)) {
+                    $doKeys = array_keys($existingDOs);
+                    $chunks = array_chunk($doKeys, 200);
+                    foreach ($chunks as $chunk) {
+                        $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                        $sqlERP = "
+                            SELECT 
+                                donmbr,
+                                STRING_AGG(DISTINCT titipannmbr, ', ' ORDER BY titipannmbr) AS no_titipan,
+                                MAX(titipandate) AS tgl_titipan
+                            FROM whdotitipan
+                            WHERE donmbr IN ({$placeholders})
+                            GROUP BY donmbr
+                        ";
+                        $stmtERP = $conn3->prepare($sqlERP);
+                        $stmtERP->execute($chunk);
+                        while ($rERP = $stmtERP->fetch(PDO::FETCH_ASSOC)) {
+                            $erpDO = trim($rERP['donmbr'] ?? '');
+                            $erpNoTitipan = trim($rERP['no_titipan'] ?? '');
+                            $erpTglTitipan = !empty($rERP['tgl_titipan']) ? date('Y-m-d', strtotime($rERP['tgl_titipan'])) : null;
+
+                            $currNoTitipan = $existingDOs[$erpDO] ?? '';
+                            if (!empty($erpNoTitipan) && ($currNoTitipan !== $erpNoTitipan || $currNoTitipan === '-' || empty($currNoTitipan))) {
+                                $sqlUp = "UPDATE dbo.sa_titipan 
+                                          SET no_titipan = ?, 
+                                              tgl_titipan = COALESCE(tgl_titipan, ?), 
+                                              updated_at = GETDATE() 
+                                          WHERE no_do = ? AND is_deleted = 0";
+                                sqlsrv_query($conn, $sqlUp, [$erpNoTitipan, $erpTglTitipan, $erpDO]);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $eSync) {
+                // Fail-safe: jika koneksi ERP lambat / terputus, jangan batalkan proses load_data
+                error_log('Gagal sync No Titipan dari ERP: ' . $eSync->getMessage());
+            }
+        }
+
         $sql = "SELECT * FROM dbo.sa_titipan WHERE {$where} ORDER BY COALESCE(tgl_kirim, tgl_titipan) DESC, id DESC";
         $stmt = sqlsrv_query($conn, $sql, $params);
         $data = [];

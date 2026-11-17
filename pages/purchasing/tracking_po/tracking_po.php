@@ -789,6 +789,32 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                             <i class="fas fa-trash-alt mr-1"></i> Hapus Terpilih (<span class="batch-delete-count">0</span>)
                         </button>
                         <?php endif; ?>
+
+                        <!-- Dropdown Export Excel -->
+                        <div class="dropdown">
+                            <button class="btn btn-light btn-sm font-weight-bold dropdown-toggle shadow-sm text-dark" type="button" id="btnDropdownExport" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Export data Tracking PO ke Excel">
+                                <i class="fas fa-file-excel mr-1 text-success"></i> Export Excel
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right shadow border-0" aria-labelledby="btnDropdownExport" style="min-width: 240px;">
+                                <h6 class="dropdown-header text-uppercase text-muted font-weight-bold" style="font-size: 11px;">Pilihan Format (.xlsx)</h6>
+                                <a class="dropdown-item py-2 d-flex align-items-center" href="javascript:void(0)" id="btnExportSummary">
+                                    <i class="fas fa-table mr-2 text-primary" style="width: 18px; font-size: 14px;"></i>
+                                    <div>
+                                        <div class="font-weight-bold text-dark" style="font-size: 13px;">Ringkasan Tracking</div>
+                                        <small class="text-muted d-block">Sesuai tampilan tabel saat ini</small>
+                                    </div>
+                                </a>
+                                <div class="dropdown-divider my-1"></div>
+                                <a class="dropdown-item py-2 d-flex align-items-center" href="javascript:void(0)" id="btnExportDetail">
+                                    <i class="fas fa-list-ul mr-2 text-success" style="width: 18px; font-size: 14px;"></i>
+                                    <div>
+                                        <div class="font-weight-bold text-dark" style="font-size: 13px;">Detail Item Barang</div>
+                                        <small class="text-muted d-block">Disertai rincian produk dari ERP</small>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+
                         <?php if ($userCanInput): ?>
                         <button type="button" class="btn btn-success btn-sm font-weight-bold shadow-sm" id="btnSerahkanPo">
                             <i class="fas fa-plus mr-1"></i> Serahkan PO
@@ -2775,6 +2801,112 @@ $(document).ready(function () {
                 Swal.fire('Error', 'Gagal menghubungi server.', 'error');
             });
         });
+    });
+
+    // ─── EXPORT EXCEL HANDLER ──────────────────────────────────────────────
+    function doExportTrackingExcel(exportType) {
+        var exportUrl = '/gg_app/pages/purchasing/tracking_po/export_tracking_po_excel.php';
+        var dateFrom = $('#filterDateFrom').val() || '';
+        var dateTo = $('#filterDateTo').val() || '';
+        var filterStatus = $('#filterStatus').val() || '';
+        var selectedCount = selectedBatchIds ? selectedBatchIds.size : 0;
+
+        var exportTitle = (exportType === 'detail') 
+            ? 'Export Detail Item Barang PO' 
+            : 'Export Ringkasan Tracking PO';
+
+        var infoText = (selectedCount > 0)
+            ? 'Sedang menyiapkan file Excel untuk <b>' + selectedCount + ' PO terpilih</b>...'
+            : 'Sedang menyiapkan file Excel sesuai kriteria filter...';
+
+        Swal.fire({
+            title: exportTitle,
+            html: infoText + '<br><small class="text-muted">Mohon tunggu, proses ini dapat memakan waktu beberapa saat.</small>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function () {
+                Swal.showLoading();
+            }
+        });
+
+        var formData = new FormData();
+        formData.append('export_type', exportType);
+        formData.append('date_from', dateFrom);
+        formData.append('date_to', dateTo);
+        formData.append('filter_status', filterStatus);
+        if (selectedCount > 0) {
+            formData.append('selected_ids', Array.from(selectedBatchIds).join(','));
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', exportUrl, true);
+        xhr.responseType = 'blob';
+
+        xhr.onload = function () {
+            Swal.close();
+            if (this.status === 200) {
+                var blob = this.response;
+                var contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                var defaultName = (exportType === 'detail' ? 'Tracking_PO_Detail_' : 'Tracking_PO_Ringkasan_') + new Date().getTime() + '.xlsx';
+                var filename = defaultName;
+
+                if (contentDisposition) {
+                    var match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (match && match[1]) {
+                        filename = match[1].replace(/['"]/g, '').trim();
+                    }
+                }
+
+                // Trigger file download
+                var downloadUrl = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () {
+                    window.URL.revokeObjectURL(downloadUrl);
+                    $(a).remove();
+                }, 200);
+
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3500,
+                    timerProgressBar: true
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'File Excel berhasil diunduh!'
+                });
+            } else {
+                var reader = new FileReader();
+                reader.onload = function () {
+                    var errMsg = reader.result || 'Gagal membuat file export Excel.';
+                    Swal.fire('Export Gagal', errMsg, 'error');
+                };
+                reader.readAsText(this.response);
+            }
+        };
+
+        xhr.onerror = function () {
+            Swal.close();
+            Swal.fire('Error', 'Terjadi kesalahan koneksi saat mengunduh file Excel.', 'error');
+        };
+
+        xhr.send(formData);
+    }
+
+    $(document).on('click', '#btnExportSummary', function (e) {
+        e.preventDefault();
+        doExportTrackingExcel('summary');
+    });
+
+    $(document).on('click', '#btnExportDetail', function (e) {
+        e.preventDefault();
+        doExportTrackingExcel('detail');
     });
 
     // ─── RADIO BUTTON HIGHLIGHT ───────────────────────────────────────────

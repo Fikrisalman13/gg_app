@@ -24,6 +24,8 @@ if (!isset($_SESSION['UserName'])) {
 $formFiles = [
     'cash_on_delivery'          => 'form_cod/form_cod.php',
     'pengajuan_cash_on_delivery'=> 'form_cod/form_cod.php',
+    'bukti_pengembalian_uang'   => 'form_bukti_pengembalian_barang/form_bukti_pengembalian_barang.php',
+    'bukti_pengembalian_barang' => 'form_bukti_pengembalian_barang/form_bukti_pengembalian_barang.php',
 ];
 
 if (!isset($formFiles[$formType])) {

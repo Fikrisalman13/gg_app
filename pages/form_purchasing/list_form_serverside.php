@@ -28,13 +28,16 @@ $searchValue = isset($_POST['search_value']) ? trim($_POST['search_value']) : ''
 $statusFilter = isset($_POST['status_filter']) ? trim($_POST['status_filter']) : '';
 $tglDari = isset($_POST['tanggal']) ? trim($_POST['tanggal']) : '';
 $tglSampai = isset($_POST['tanggal_sampai']) ? trim($_POST['tanggal_sampai']) : '';
+$reportType = isset($_POST['report_type']) ? trim($_POST['report_type']) : '';
 
-// Cek apakah tabel Form COD / Form Purchasing sudah ada
-$tableCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD'");
-$tableExists = ($tableCheck && sqlsrv_fetch_array($tableCheck));
+// Cek ketersediaan tabel
+$chkCod = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD'");
+$hasCod = ($chkCod && sqlsrv_fetch_array($chkCod));
 
-if (!$tableExists) {
-    // Jika tabel belum ada, kembalikan data kosong agar DataTables tetap berjalan normal
+$chkBpu = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_Pengembalian_Uang'");
+$hasBpu = ($chkBpu && sqlsrv_fetch_array($chkBpu));
+
+if (!$hasCod && !$hasBpu) {
     echo json_encode([
         'draw' => $draw,
         'recordsTotal' => 0,
@@ -44,47 +47,106 @@ if (!$tableExists) {
     exit;
 }
 
-// Jika tabel sudah ada, query data
+// Bangun query sumber data
+$sources = [];
+
+if ($hasCod && ($reportType === '' || $reportType === 'rekap_cash_on_delivery')) {
+    $sources[] = "
+        SELECT 
+            id,
+            ticket,
+            ref_po_no,
+            'Pengajuan Cash On Delivery' AS kategori,
+            'cash_on_delivery' AS form_type,
+            nama_pemohon,
+            departemen,
+            tgl_pengajuan AS tanggal,
+            status,
+            created_at,
+            'detail_cash_on_delivery.php' AS detail_page,
+            supplier,
+            keterangan,
+            is_deleted
+        FROM dbo.Form_Purchasing_COD
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+    ";
+}
+
+if ($hasBpu && ($reportType === '' || $reportType === 'rekap_bukti_pengembalian_uang')) {
+    $sources[] = "
+        SELECT 
+            id,
+            ticket,
+            ref_po_no,
+            'Bukti Pengembalian Uang' AS kategori,
+            'bukti_pengembalian_uang' AS form_type,
+            nama_pemohon,
+            departemen,
+            tanggal AS tanggal,
+            status,
+            created_at,
+            'detail_bukti_pengembalian_uang.php' AS detail_page,
+            supplier,
+            keterangan,
+            is_deleted
+        FROM dbo.Form_Purchasing_Pengembalian_Uang
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+    ";
+}
+
+if (empty($sources)) {
+    echo json_encode([
+        'draw' => $draw,
+        'recordsTotal' => 0,
+        'recordsFiltered' => 0,
+        'data' => []
+    ]);
+    exit;
+}
+
+$unionQuery = "(" . implode(" UNION ALL ", $sources) . ") AS u";
+
+// Filter kondisi
 $where = ["1=1"];
 $params = [];
 
 if (!empty($searchValue)) {
-    $where[] = "(ticket LIKE ? OR nama_pemohon LIKE ? OR departemen LIKE ? OR keterangan LIKE ? OR ref_po_no LIKE ? OR supplier LIKE ?)";
+    $where[] = "(u.ticket LIKE ? OR u.nama_pemohon LIKE ? OR u.departemen LIKE ? OR u.keterangan LIKE ? OR u.ref_po_no LIKE ? OR u.supplier LIKE ? OR u.kategori LIKE ?)";
     $searchParam = "%$searchValue%";
-    $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam, $searchParam]);
+    $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam, $searchParam, $searchParam]);
 }
 
 if (!empty($statusFilter)) {
-    $where[] = "status = ?";
+    $where[] = "u.status = ?";
     $params[] = $statusFilter;
 }
 
 if (!empty($tglDari)) {
-    $where[] = "tgl_pengajuan >= ?";
+    $where[] = "u.tanggal >= ?";
     $params[] = $tglDari;
 }
 
 if (!empty($tglSampai)) {
-    $where[] = "tgl_pengajuan <= ?";
+    $where[] = "u.tanggal <= ?";
     $params[] = $tglSampai;
 }
 
 $whereSql = implode(' AND ', $where);
 
 // Count total
-$totalStmt = sqlsrv_query($conn, "SELECT COUNT(*) AS total FROM Form_Purchasing_COD");
+$totalStmt = sqlsrv_query($conn, "SELECT COUNT(*) AS total FROM $unionQuery");
 $totalRow = $totalStmt ? sqlsrv_fetch_array($totalStmt, SQLSRV_FETCH_ASSOC) : ['total' => 0];
 $recordsTotal = $totalRow['total'] ?? 0;
 
 // Count filtered
-$filteredStmt = sqlsrv_query($conn, "SELECT COUNT(*) AS total FROM Form_Purchasing_COD WHERE $whereSql", $params);
+$filteredStmt = sqlsrv_query($conn, "SELECT COUNT(*) AS total FROM $unionQuery WHERE $whereSql", $params);
 $filteredRow = $filteredStmt ? sqlsrv_fetch_array($filteredStmt, SQLSRV_FETCH_ASSOC) : ['total' => 0];
 $recordsFiltered = $filteredRow['total'] ?? 0;
 
-// Fetch data
-$sql = "SELECT * FROM Form_Purchasing_COD 
+// Fetch paged data
+$sql = "SELECT * FROM $unionQuery 
         WHERE $whereSql 
-        ORDER BY id DESC 
+        ORDER BY u.created_at DESC, u.id DESC 
         OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 $paramsPaged = array_merge($params, [$start, $length]);
 $stmt = sqlsrv_query($conn, $sql, $paramsPaged);
@@ -99,14 +161,17 @@ if ($stmt) {
         elseif ($status === 'Ditolak') $badgeClass = 'badge-danger';
 
         $tgl = '';
-        if (isset($row['tgl_pengajuan'])) {
-            $tgl = $row['tgl_pengajuan'] instanceof DateTime ? $row['tgl_pengajuan']->format('d/m/Y') : date('d/m/Y', strtotime($row['tgl_pengajuan']));
+        if (isset($row['tanggal'])) {
+            $tgl = $row['tanggal'] instanceof DateTime ? $row['tanggal']->format('d/m/Y') : date('d/m/Y', strtotime($row['tanggal']));
         }
 
+        $detailPage = $row['detail_page'] ?? 'detail_cash_on_delivery.php';
+        $formType = $row['form_type'] ?? 'cash_on_delivery';
+
         $aksi = '<div class="btn-group">';
-        $aksi .= '<button type="button" class="btn btn-info btn-sm action-btn btn-detail" data-ticket="' . $ticket . '" title="Detail"><i class="fas fa-eye"></i></button>';
-        $aksi .= '<a href="detail_cash_on_delivery.php?ticket=' . urlencode($ticket) . '" target="_blank" class="btn btn-danger btn-sm action-btn" title="Cetak Formulir SUM-FM-PB-004"><i class="fas fa-file-pdf"></i></a>';
-        $aksi .= '<button type="button" class="btn btn-warning btn-sm action-btn btn-edit" data-ticket="' . $ticket . '" title="Edit"><i class="fas fa-edit"></i></button>';
+        $aksi .= '<button type="button" class="btn btn-info btn-sm action-btn btn-detail" data-ticket="' . $ticket . '" data-url="' . $detailPage . '" title="Detail"><i class="fas fa-eye"></i></button>';
+        $aksi .= '<a href="' . $detailPage . '?ticket=' . urlencode($ticket) . '" target="_blank" class="btn btn-danger btn-sm action-btn" title="Cetak Dokumen"><i class="fas fa-file-pdf"></i></a>';
+        $aksi .= '<button type="button" class="btn btn-warning btn-sm action-btn btn-edit" data-ticket="' . $ticket . '" data-form-type="' . $formType . '" title="Edit"><i class="fas fa-edit"></i></button>';
         $aksi .= '<button type="button" class="btn btn-danger btn-sm action-btn btn-delete" data-ticket="' . $ticket . '" title="Hapus"><i class="fas fa-trash"></i></button>';
         $aksi .= '</div>';
 
@@ -115,10 +180,15 @@ if ($stmt) {
             ? '<span class="badge badge-light border font-weight-bold text-dark px-2 py-1"><i class="fas fa-file-invoice mr-1 text-primary"></i>' . htmlspecialchars($noPo) . '</span>'
             : '<span class="text-muted">-</span>';
 
+        $kategori = htmlspecialchars($row['kategori'] ?? '');
+        $kategoriBadge = ($formType === 'bukti_pengembalian_uang') 
+            ? '<span class="badge badge-success px-2 py-1"><i class="fas fa-undo-alt mr-1"></i>' . $kategori . '</span>'
+            : '<span class="badge badge-primary px-2 py-1"><i class="fas fa-money-bill-wave mr-1"></i>' . $kategori . '</span>';
+
         $data[] = [
             'ticket' => $ticket,
             'no_po' => $noPoHtml,
-            'kategori' => 'Pengajuan Cash On Delivery',
+            'kategori' => $kategoriBadge,
             'nama_pemohon' => htmlspecialchars($row['nama_pemohon'] ?? ''),
             'departemen' => htmlspecialchars($row['departemen'] ?? ''),
             'tgl_pengajuan' => $tgl,

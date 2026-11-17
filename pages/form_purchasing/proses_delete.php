@@ -26,14 +26,26 @@ if (empty($ticket)) {
     exit;
 }
 
-// Hapus baris detail jika tabel ada
-$detailCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD_Detail'");
-if ($detailCheck && sqlsrv_fetch_array($detailCheck)) {
-    sqlsrv_query($conn, "DELETE FROM dbo.Form_Purchasing_COD_Detail WHERE ticket = ?", [$ticket]);
-}
+if (strpos($ticket, 'BPU-') === 0) {
+    // Hapus detail BPU
+    sqlsrv_query($conn, "DELETE FROM dbo.Form_Purchasing_Pengembalian_Uang_Detail WHERE ticket = ?", [$ticket]);
+    // Soft delete atau hard delete header BPU
+    $sql = "UPDATE dbo.Form_Purchasing_Pengembalian_Uang SET is_deleted = 1, updated_at = GETDATE() WHERE ticket = ?";
+    $stmt = sqlsrv_query($conn, $sql, [$ticket]);
+    if ($stmt === false) {
+        $sql = "DELETE FROM dbo.Form_Purchasing_Pengembalian_Uang WHERE ticket = ?";
+        $stmt = sqlsrv_query($conn, $sql, [$ticket]);
+    }
+} else {
+    // Hapus baris detail COD jika tabel ada
+    $detailCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD_Detail'");
+    if ($detailCheck && sqlsrv_fetch_array($detailCheck)) {
+        sqlsrv_query($conn, "DELETE FROM dbo.Form_Purchasing_COD_Detail WHERE ticket = ?", [$ticket]);
+    }
 
-$sql = "DELETE FROM dbo.Form_Purchasing_COD WHERE ticket = ?";
-$stmt = sqlsrv_query($conn, $sql, [$ticket]);
+    $sql = "DELETE FROM dbo.Form_Purchasing_COD WHERE ticket = ?";
+    $stmt = sqlsrv_query($conn, $sql, [$ticket]);
+}
 
 if ($stmt === false) {
     echo json_encode(['success' => false, 'message' => 'Gagal menghapus data dari database']);

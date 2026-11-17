@@ -115,7 +115,7 @@ if (!isset($conn3) || !$conn3) {
         $overduePicCondition = "";
         $overdueParams = [':cur_date' => $todayStr];
         if ($picFilter !== '') {
-            $overduePicCondition = " AND u.username = :pic_filter ";
+            $overduePicCondition = " AND COALESCE(u.username, e.empname) = :pic_filter ";
             $overdueParams[':pic_filter'] = $picFilter;
         }
 
@@ -123,7 +123,8 @@ if (!isset($conn3) || !$conn3) {
             SELECT COUNT(DISTINCT h.ponmbr) AS cnt
             FROM prpodt d
             JOIN prpohd h ON d.pohdid = h.pohdid
-            LEFT JOIN msuser u ON h.poinitiatorid = u.initiatorid
+            LEFT JOIN msuser u ON TRIM(h.createdby) = TRIM(u.userid)
+            LEFT JOIN smemployee e ON h.poinitiatorid = e.empid
             WHERE COALESCE(DATE(d.podlvrdate2), DATE(d.podlvrdate1)) < :cur_date
               AND TRIM(h.fgstatus) = 'V'
               $overduePicCondition
@@ -145,7 +146,7 @@ if (!isset($conn3) || !$conn3) {
                 h.povendorcode,
                 h.povendorname,
                 h.poinitiatorid,
-                u.username AS pic_pembuat,
+                COALESCE(u.username, e.empname) AS pic_pembuat,
                 h.fgstatus AS po_status,
                 d.podtid,
                 d.poseq,
@@ -171,9 +172,9 @@ if (!isset($conn3) || !$conn3) {
                 ) AS grn_details
             FROM prpodt d
             JOIN prpohd h ON d.pohdid = h.pohdid
-            LEFT JOIN msuser u ON h.poinitiatorid = u.initiatorid
-            LEFT JOIN smproduct p ON TRIM(d.poprodcode) = TRIM(p.prodcode)
-            LEFT JOIN smprodstruct s ON p.prodstructid = s.prodstructid
+            LEFT JOIN msuser u ON TRIM(h.createdby) = TRIM(u.userid)
+            LEFT JOIN smemployee e ON h.poinitiatorid = e.empid
+            LEFT JOIN smprodstruct s ON d.poprodstructid = s.prodstructid
             WHERE $rangeCondition
               AND TRIM(h.fgstatus) IN ('V', 'U', 'X')
             ORDER BY h.ponmbr ASC, d.poseq ASC
@@ -317,7 +318,7 @@ if (!isset($conn3) || !$conn3) {
                     h.povendorcode,
                     h.povendorname,
                     h.poinitiatorid,
-                    u.username AS pic_pembuat,
+                    COALESCE(u.username, e.empname) AS pic_pembuat,
                     h.fgstatus AS po_status,
                     d.podtid,
                     d.poseq,
@@ -343,9 +344,9 @@ if (!isset($conn3) || !$conn3) {
                     ) AS grn_details
                 FROM prpodt d
                 JOIN prpohd h ON d.pohdid = h.pohdid
-                LEFT JOIN msuser u ON h.poinitiatorid = u.initiatorid
-                LEFT JOIN smproduct p ON TRIM(d.poprodcode) = TRIM(p.prodcode)
-                LEFT JOIN smprodstruct s ON p.prodstructid = s.prodstructid
+                LEFT JOIN msuser u ON TRIM(h.createdby) = TRIM(u.userid)
+                LEFT JOIN smemployee e ON h.poinitiatorid = e.empid
+                LEFT JOIN smprodstruct s ON d.poprodstructid = s.prodstructid
                 WHERE COALESCE(DATE(d.podlvrdate2), DATE(d.podlvrdate1)) < :target_date
                   AND TRIM(h.fgstatus) = 'V'
                 ORDER BY COALESCE(d.podlvrdate2, d.podlvrdate1) DESC, h.ponmbr ASC, d.poseq ASC
@@ -1250,7 +1251,10 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                     </table>
                                 </div>
                             </div>
-                            <div class="modal-footer bg-light px-3 py-2 border-top">
+                            <div class="modal-footer bg-light px-3 py-2 border-top d-flex justify-content-between align-items-center">
+                                <button type="button" class="btn btn-primary btn-sm px-3 font-weight-bold shadow-xs" id="btnModalPrintPengambilan">
+                                    <i class="fas fa-print mr-1"></i> Cetak Form Pengambilan
+                                </button>
                                 <button type="button" class="btn btn-secondary btn-sm px-3 font-weight-bold" data-dismiss="modal">
                                     <i class="fas fa-times mr-1"></i> Tutup
                                 </button>
@@ -1459,6 +1463,8 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
         });
 
         // ─── Modal Detail PO (Pengganti Tombol +) ──────────────────────────────────
+        var currentModalPohdid = null;
+
         $(document).on('click', '.btn-view-po', function () {
             var btn = $(this);
             var pohdid = btn.data('pohdid');
@@ -1472,6 +1478,8 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                 });
                 return;
             }
+
+            currentModalPohdid = pohdid;
 
             // Render Header Info pada Modal
             $('#modalPoNumber').text(po.ponmbr);
@@ -1660,6 +1668,20 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
 
             $('#modalItemsBody').html(itemsHtml);
             $('#modalDetailPo').modal('show');
+        });
+
+        // ─── Tombol Cetak Form Pengambilan pada Modal Detail PO ───────────────────
+        $('#btnModalPrintPengambilan').on('click', function () {
+            if (!currentModalPohdid) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Perhatian',
+                    text: 'Silakan pilih PO terlebih dahulu.'
+                });
+                return;
+            }
+            var printUrl = 'print_form_pengembaian_v2.php?pohdid=' + encodeURIComponent(currentModalPohdid);
+            window.open(printUrl, '_blank');
         });
 
         // ─── Modal & Aksi Tambah Issue Follow Up PO ke Issues Purchasing ─────────

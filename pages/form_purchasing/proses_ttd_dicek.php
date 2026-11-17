@@ -33,33 +33,64 @@ if (empty($ticket)) {
     exit;
 }
 
-if (empty($signature_data)) {
-    echo json_encode(['success' => false, 'message' => 'Tanda tangan digital tidak boleh kosong']);
-    exit;
-}
-
-// Pastikan kolom tanda tangan ada di tabel jika tabel sudah terbuat sebelumnya
-$colCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Form_Purchasing_COD' AND COLUMN_NAME = 'ttd_dicek_oleh'");
-if ($colCheck && !sqlsrv_fetch_array($colCheck)) {
-    sqlsrv_query($conn, "ALTER TABLE dbo.Form_Purchasing_COD ADD ttd_dibuat_oleh NVARCHAR(MAX) NULL, ttd_dicek_oleh NVARCHAR(MAX) NULL, tgl_dicek DATETIME NULL");
-}
-
 $updated_by = $_SESSION['UserName'] ?? 'system';
+$isBpu = (strpos($ticket, 'BPU-') === 0);
 
-$sql = "UPDATE dbo.Form_Purchasing_COD 
-        SET ttd_dicek_oleh = ?,
-            dicek_oleh = ?,
-            tgl_dicek = GETDATE(),
-            status = 'Approved',
-            updated_by = ?,
-            updated_at = GETDATE()
-        WHERE ticket = ?";
+if ($isBpu) {
+    if (!empty($signature_data)) {
+        $sql = "UPDATE dbo.Form_Purchasing_Pengembalian_Uang 
+                SET ttd_dicek_oleh = ?,
+                    dicek_oleh = ?,
+                    tgl_dicek = GETDATE(),
+                    status = 'Approved',
+                    updated_by = ?,
+                    updated_at = GETDATE()
+                WHERE ticket = ?";
+        $params = [$signature_data, $nama_dicek, $updated_by, $ticket];
+    } else {
+        $sql = "UPDATE dbo.Form_Purchasing_Pengembalian_Uang 
+                SET dicek_oleh = ?,
+                    tgl_dicek = GETDATE(),
+                    status = 'Approved',
+                    updated_by = ?,
+                    updated_at = GETDATE()
+                WHERE ticket = ?";
+        $params = [$nama_dicek, $updated_by, $ticket];
+    }
+} else {
+    // Pastikan kolom tanda tangan ada di tabel jika tabel sudah terbuat sebelumnya
+    $colCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Form_Purchasing_COD' AND COLUMN_NAME = 'ttd_dicek_oleh'");
+    if ($colCheck && !sqlsrv_fetch_array($colCheck)) {
+        sqlsrv_query($conn, "ALTER TABLE dbo.Form_Purchasing_COD ADD ttd_dibuat_oleh NVARCHAR(MAX) NULL, ttd_dicek_oleh NVARCHAR(MAX) NULL, tgl_dicek DATETIME NULL");
+    }
 
-$stmt = sqlsrv_query($conn, $sql, [$signature_data, $nama_dicek, $updated_by, $ticket]);
+    if (!empty($signature_data)) {
+        $sql = "UPDATE dbo.Form_Purchasing_COD 
+                SET ttd_dicek_oleh = ?,
+                    dicek_oleh = ?,
+                    tgl_dicek = GETDATE(),
+                    status = 'Approved',
+                    updated_by = ?,
+                    updated_at = GETDATE()
+                WHERE ticket = ?";
+        $params = [$signature_data, $nama_dicek, $updated_by, $ticket];
+    } else {
+        $sql = "UPDATE dbo.Form_Purchasing_COD 
+                SET dicek_oleh = ?,
+                    tgl_dicek = GETDATE(),
+                    status = 'Approved',
+                    updated_by = ?,
+                    updated_at = GETDATE()
+                WHERE ticket = ?";
+        $params = [$nama_dicek, $updated_by, $ticket];
+    }
+}
+
+$stmt = sqlsrv_query($conn, $sql, $params);
 
 if ($stmt === false) {
     $errors = sqlsrv_errors();
-    $errMsg = 'Gagal menyimpan tanda tangan ke database';
+    $errMsg = 'Gagal menyimpan persetujuan ke database';
     if (!empty($errors)) {
         $errMsg .= ': ' . $errors[0]['message'];
     }
@@ -71,5 +102,5 @@ echo json_encode([
     'success' => true,
     'ticket' => $ticket,
     'nama_dicek' => $nama_dicek,
-    'message' => 'Dokumen berhasil diverifikasi & ditandatangani oleh ' . $nama_dicek . ' (KABAG)!'
+    'message' => 'Dokumen berhasil diverifikasi & disetujui oleh ' . $nama_dicek . ' (KABAG)!'
 ]);

@@ -626,6 +626,7 @@ table.dataTable tbody tr:hover td.dtfc-fixed-left {
                                 <th>Nama Produk</th>
                                 <th>Label Jual</th>
                                 <th>Cust Color</th>
+                                <th>No Titipan</th>
                                 <th>No DO</th>
                                 <th>Tgl DO</th>
                                 <th>No Packing</th>
@@ -1224,6 +1225,10 @@ $(document).ready(function () {
                     className: 'text-center',
                     render: d => d && d !== '-' ? `<span class="badge badge-light border text-primary font-weight-bold">${d}</span>` : '-'
                 },
+                {
+                    data: 'no_titipan',
+                    render: d => d && d !== '-' ? `<strong>${d}</strong>` : '<span class="text-muted">-</span>'
+                },
                 { data: 'no_do' },
                 { data: 'tgl_do' },
                 {
@@ -1356,11 +1361,18 @@ $(document).ready(function () {
 
     // ─── REFRESH & FILTER ───────────────────────────────────────────────────
     $('#btnRefresh').on('click', function () {
+        const $btn = $(this);
+        const $icon = $btn.find('i');
+        $btn.prop('disabled', true);
+        $icon.addClass('fa-spin');
         selectedIds.clear();
         updateFloatingBar();
-        tableTitipan.ajax.reload(null, false);
+        tableTitipan.ajax.reload(function () {
+            $btn.prop('disabled', false);
+            $icon.removeClass('fa-spin');
+            toastr.success('Data dan No Titipan berhasil disinkronkan dari ERP.');
+        }, false);
         loadSummary();
-        toastr.info('Data diperbarui');
     });
 
     $('#filterForm').on('submit', function (e) {
