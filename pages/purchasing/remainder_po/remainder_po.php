@@ -620,6 +620,9 @@ if (!isset($conn3) || !$conn3) {
                 if ($dikirimKeFilter === 'belum_ditracking') {
                     return empty($g['dikirim_ke']);
                 }
+                if ($dikirimKeFilter === 'Toko Kain') {
+                    return in_array($g['dikirim_ke'] ?? '', ['Toko Kain', 'Sanso Berjaya Texindo/Toko Sumber SERAGAM']);
+                }
                 return ($g['dikirim_ke'] ?? '') === $dikirimKeFilter;
             });
         }
@@ -983,7 +986,7 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                         <select class="form-control form-control-sm" id="filterDikirimKe" name="dikirim_ke">
                                             <option value="">-- Semua Dikirim Ke --</option>
                                             <option value="PT.SUM" <?php echo $dikirimKeFilter === 'PT.SUM' ? 'selected' : ''; ?>>PT.SUM</option>
-                                            <option value="Sanso Berjaya Texindo/Toko Sumber SERAGAM" <?php echo $dikirimKeFilter === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM' ? 'selected' : ''; ?>>Sanso Berjaya Texindo/Toko Sumber SERAGAM</option>
+                                            <option value="Toko Kain" <?php echo ($dikirimKeFilter === 'Toko Kain' || $dikirimKeFilter === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') ? 'selected' : ''; ?>>Toko Kain</option>
                                             <option value="Diambil ke Supplier" <?php echo $dikirimKeFilter === 'Diambil ke Supplier' ? 'selected' : ''; ?>>Diambil ke Supplier</option>
                                             <option value="belum_ditracking" <?php echo $dikirimKeFilter === 'belum_ditracking' ? 'selected' : ''; ?>>Belum Ditracking</option>
                                         </select>
@@ -1014,8 +1017,16 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
                                             <button type="button" id="btnToday" class="btn btn-outline-primary font-weight-bold" title="Set Tanggal Hari Ini">
                                                 Hari Ini
                                             </button>
+                                            <button type="button" id="btnShortcutSiapAmbil" 
+                                                class="btn <?php echo ($statusFilter === 'Belum Datang' && $paymentStatusFilter === 'paid' && $dikirimKeFilter === 'Diambil ke Supplier') ? 'btn-warning text-dark font-weight-bold shadow-sm' : 'btn-outline-warning text-dark font-weight-bold'; ?>" 
+                                                title="Filter Cepat: Status Belum Datang, Sudah Dibayar, Diambil ke Supplier">
+                                                <i class="fas fa-truck-loading mr-1"></i> Siap Diambil ke Supplier
+                                            </button>
                                             <button type="button" id="btnReset" class="btn btn-secondary font-weight-bold" title="Reset Filter">
                                                 <i class="fas fa-sync"></i>
+                                            </button>
+                                            <button type="button" id="btnExportExcel" class="btn btn-success font-weight-bold ml-1" title="Export Excel Pengambilan Barang ke Supplier Sesuai Filter Aktif">
+                                                <i class="fas fa-file-excel mr-1"></i> Export Excel
                                             </button>
                                         </div>
                                     </div>
@@ -1457,9 +1468,23 @@ include($_SERVER['DOCUMENT_ROOT'] . '/gg_app/includes/sidebar.php');
             $('#filterForm').submit();
         });
 
+        // Tombol Shortcut Siap Diambil ke Supplier
+        $('#btnShortcutSiapAmbil').on('click', function () {
+            $('#filterStatus').val('Belum Datang');
+            $('#filterPaymentStatus').val('paid');
+            $('#filterDikirimKe').val('Diambil ke Supplier');
+            $('#filterForm').submit();
+        });
+
         // Tombol Reset Filter
         $('#btnReset').on('click', function () {
             window.location.href = 'remainder_po.php';
+        });
+
+        // Tombol Export Excel Pengambilan Barang ke Supplier
+        $('#btnExportExcel').on('click', function () {
+            var filterParams = $('#filterForm').serialize();
+            window.location.href = 'export_pengambilan_barang.php?' + filterParams;
         });
 
         // ─── Modal Detail PO (Pengganti Tombol +) ──────────────────────────────────

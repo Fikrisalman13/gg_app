@@ -20,6 +20,8 @@ if (!isset($_SESSION['UserName'])) {
     exit;
 }
 
+require_once __DIR__ . '/form_purchasing_issue_helper.php';
+
 $ticket = trim($_POST['ticket'] ?? '');
 if (empty($ticket)) {
     echo json_encode(['success' => false, 'message' => 'Ticket tidak valid']);
@@ -27,7 +29,10 @@ if (empty($ticket)) {
 }
 
 if (strpos($ticket, 'BPU-') === 0) {
-    // Hapus detail BPU
+    // 1. Hapus issue terkait dan relasi link di database
+    formPurchasingDeleteIssue($conn, 'bukti_pengembalian_uang', $ticket);
+
+    // 2. Hapus detail BPU
     sqlsrv_query($conn, "DELETE FROM dbo.Form_Purchasing_Pengembalian_Uang_Detail WHERE ticket = ?", [$ticket]);
     // Soft delete atau hard delete header BPU
     $sql = "UPDATE dbo.Form_Purchasing_Pengembalian_Uang SET is_deleted = 1, updated_at = GETDATE() WHERE ticket = ?";
@@ -37,7 +42,10 @@ if (strpos($ticket, 'BPU-') === 0) {
         $stmt = sqlsrv_query($conn, $sql, [$ticket]);
     }
 } else {
-    // Hapus baris detail COD jika tabel ada
+    // 1. Hapus issue terkait dan relasi link di database
+    formPurchasingDeleteIssue($conn, 'cash_on_delivery', $ticket);
+
+    // 2. Hapus baris detail COD jika tabel ada
     $detailCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD_Detail'");
     if ($detailCheck && sqlsrv_fetch_array($detailCheck)) {
         sqlsrv_query($conn, "DELETE FROM dbo.Form_Purchasing_COD_Detail WHERE ticket = ?", [$ticket]);

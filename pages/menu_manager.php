@@ -165,12 +165,22 @@ if (isset($_POST['action'])) {
             $stmt = sqlsrv_query($conn, $sql, $params);
             
             if ($stmt) {
+                // Berikan hak akses otomatis ke Administrator (GroupId 1)
+                $qNewId = sqlsrv_query($conn, "SELECT @@IDENTITY AS new_id");
+                if ($qNewId && ($rowNew = sqlsrv_fetch_array($qNewId, SQLSRV_FETCH_ASSOC))) {
+                    $newMenuId = (int)$rowNew['new_id'];
+                    sqlsrv_query($conn, "INSERT INTO SMGroupTrustee (GroupId, MenuId, CanView, CanAdd, CanEdit, CanDelete) VALUES (1, ?, 1, 1, 1, 1)", [$newMenuId]);
+                }
                 $_SESSION['success'] = "Menu berhasil ditambahkan";
             } else {
                 $_SESSION['error'] = "Gagal menambahkan menu: " . print_r(sqlsrv_errors(), true);
             }
         } else {
             $menuId = $_POST['MenuId'];
+            // Cegah menu menjadikan dirinya sendiri sebagai parent
+            if (!empty($parentMenuId) && (int)$parentMenuId === (int)$menuId) {
+                $parentMenuId = null;
+            }
             $sql = "UPDATE SMMenu SET MenuName = ?, MenuUrl = ?, MenuIcon = ?, ParentMenuId = ? WHERE MenuId = ?";
             $params = [$menuName, $menuUrl, $menuIcon, $parentMenuId, $menuId];
             $stmt = sqlsrv_query($conn, $sql, $params);
@@ -283,8 +293,14 @@ foreach ($allMenus as $m) {
     }
 }
 foreach ($allMenus as $m) {
-    if ($m['ParentMenuId'] != null && isset($menuTree[$m['ParentMenuId']])) {
-        $menuTree[$m['ParentMenuId']]['children'][] = $m;
+    if ($m['ParentMenuId'] != null) {
+        if (isset($menuTree[$m['ParentMenuId']])) {
+            $menuTree[$m['ParentMenuId']]['children'][] = $m;
+        } else {
+            // Jika parent tidak valid/tidak ditemukan atau self-referencing, jadikan root agar tetap terlihat dan bisa diedit
+            $menuTree[$m['MenuId']] = $m;
+            $menuTree[$m['MenuId']]['children'] = [];
+        }
     }
 }
 
@@ -553,6 +569,7 @@ function resetForm() {
     $('#modalTitle').text('Tambah Menu Utama');
     $('#formAction').val('add');
     $('#formMenuId').val('');
+    $('#formParentMenuId option').show().prop('disabled', false);
     $('#formParentMenuId').val('');
     $('#formMenuName').val('');
     $('#formMenuUrl').val('');
@@ -563,6 +580,13 @@ function editMenu(data) {
     $('#modalTitle').text('Edit Menu');
     $('#formAction').val('edit');
     $('#formMenuId').val(data.MenuId);
+
+    // Sembunyikan opsi menu ini sendiri agar tidak bisa dipilih sebagai parent dirinya sendiri
+    $('#formParentMenuId option').show().prop('disabled', false);
+    if (data.MenuId) {
+        $('#formParentMenuId option[value="' + data.MenuId + '"]').hide().prop('disabled', true);
+    }
+
     $('#formParentMenuId').val(data.ParentMenuId || '');
     $('#formMenuName').val(data.MenuName);
     $('#formMenuUrl').val(data.MenuUrl);

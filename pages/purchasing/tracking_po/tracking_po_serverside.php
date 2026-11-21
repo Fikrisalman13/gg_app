@@ -610,8 +610,8 @@ switch ($action) {
         if (empty($alamatKirim)) {
             if ($dikirimKe === 'PT.SUM') {
                 $alamatKirim = 'Jl. Desa Tarajusari, No.8, Tarajusari, Banjaran, Kab.Bandung';
-            } elseif ($dikirimKe === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') {
-                $alamatKirim = 'Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631';
+            } elseif ($dikirimKe === 'Toko Kain' || $dikirimKe === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') {
+                $alamatKirim = 'Jl. Batununggal Indah Raya No. 134 Bandung';
             } elseif ($dikirimKe === 'Diambil ke Supplier') {
                 $alamatKirim = 'Diambil langsung ke supplier masing-masing';
             }

@@ -24,6 +24,7 @@ $form_type = trim($_POST['form_type'] ?? 'cash_on_delivery');
 $isBpu = ($form_type === 'bukti_pengembalian_uang' || $form_type === 'bukti_pengembalian_barang');
 
 require_once __DIR__ . '/helper_terbilang.php';
+require_once __DIR__ . '/form_purchasing_issue_helper.php';
 
 if ($isBpu) {
     // ══════════════════════════════════════════════════════════════════════════
@@ -149,7 +150,9 @@ if ($isBpu) {
             keterangan, subtotal, terbilang, dibuat_oleh, dicek_oleh,
             nama_pemohon, departemen, status, lampiran_path, ttd_dibuat_oleh,
             items_json, created_by, created_at
-        ) VALUES (
+        ) 
+        OUTPUT INSERTED.id
+        VALUES (
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
@@ -177,6 +180,23 @@ if ($isBpu) {
         exit;
     }
 
+    $bpuId = null;
+    if ($rowId = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        $bpuId = $rowId['id'] ?? null;
+    }
+    sqlsrv_free_stmt($stmt);
+
+    // Fallback ID jika OUTPUT INSERTED.id tidak tertangkap
+    if (!$bpuId) {
+        $stmtChk = sqlsrv_query($conn, "SELECT id FROM dbo.Form_Purchasing_Pengembalian_Uang WHERE ticket = ?", [$ticket]);
+        if ($stmtChk && ($rChk = sqlsrv_fetch_array($stmtChk, SQLSRV_FETCH_ASSOC))) {
+            $bpuId = $rChk['id'];
+        }
+        if ($stmtChk) {
+            sqlsrv_free_stmt($stmtChk);
+        }
+    }
+
     // 6. Simpan baris detail ke Form_Purchasing_Pengembalian_Uang_Detail
     if (!empty($items_json)) {
         $parsedItems = json_decode($items_json, true);
@@ -195,9 +215,27 @@ if ($isBpu) {
         }
     }
 
+    // 7. Integrasi otomatis ke Modul Issues Purchasing (Kategori 'Membuat Form' / Subkategori 'BPU', Status 'Done')
+    $issueId = null;
+    if (!empty($bpuId)) {
+        $formDataForIssue = [
+            'ticket' => $ticket,
+            'ref_po_no' => $ref_po_no,
+            'rfp_no' => $rfp_no,
+            'supplier' => $supplier,
+            'payment_method' => $payment_method,
+            'subtotal' => $subtotal,
+            'currency' => $currency,
+            'keterangan' => $keterangan,
+            'tanggal' => $tanggal
+        ];
+        $issueId = formPurchasingCreateIssue($conn, 'bukti_pengembalian_uang', $bpuId, $formDataForIssue, $created_by);
+    }
+
     echo json_encode([
         'success' => true,
         'ticket' => $ticket,
+        'issue_id' => $issueId,
         'message' => 'Bukti Pengembalian Uang berhasil disimpan!'
     ]);
     exit;
@@ -274,7 +312,9 @@ if ($isBpu) {
                 ref_po_no, tgl_pengajuan, due_date, items_json, subtotal, 
                 terbilang, dibuat_oleh, dicek_oleh, nama_pemohon, departemen, 
                 status, lampiran_path, ttd_dibuat_oleh, created_by, created_at
-            ) VALUES (
+            ) 
+            OUTPUT INSERTED.id
+            VALUES (
                 ?, ?, ?, ?, ?, 
                 ?, ?, ?, ?, ?, 
                 ?, ?, ?, ?, ?, 
@@ -302,6 +342,23 @@ if ($isBpu) {
         exit;
     }
 
+    $codId = null;
+    if ($rowId = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        $codId = $rowId['id'] ?? null;
+    }
+    sqlsrv_free_stmt($stmt);
+
+    // Fallback ID jika OUTPUT INSERTED.id tidak tertangkap
+    if (!$codId) {
+        $stmtChk = sqlsrv_query($conn, "SELECT id FROM dbo.Form_Purchasing_COD WHERE ticket = ?", [$ticket]);
+        if ($stmtChk && ($rChk = sqlsrv_fetch_array($stmtChk, SQLSRV_FETCH_ASSOC))) {
+            $codId = $rChk['id'];
+        }
+        if ($stmtChk) {
+            sqlsrv_free_stmt($stmtChk);
+        }
+    }
+
     // Simpan juga baris rincian ke Form_Purchasing_COD_Detail jika tabel tersedia
     if (!empty($items_json)) {
         $detailCheck = sqlsrv_query($conn, "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Form_Purchasing_COD_Detail'");
@@ -323,9 +380,28 @@ if ($isBpu) {
         }
     }
 
+    // Integrasi otomatis ke Modul Issues Purchasing (Kategori 'Membuat Form' / Subkategori 'Form COD', Status 'Done')
+    $issueId = null;
+    if (!empty($codId)) {
+        $formDataForIssue = [
+            'ticket' => $ticket,
+            'ref_po_no' => $ref_po_no,
+            'no_receipt' => $no_receipt,
+            'supplier' => $supplier,
+            'dibayar_kepada' => $dibayar_kepada,
+            'subtotal' => $subtotal,
+            'currency' => $currency,
+            'keterangan' => $keterangan,
+            'due_date' => $due_date,
+            'tanggal' => $tgl_pengajuan
+        ];
+        $issueId = formPurchasingCreateIssue($conn, 'cash_on_delivery', $codId, $formDataForIssue, $created_by);
+    }
+
     echo json_encode([
         'success' => true,
         'ticket' => $ticket,
+        'issue_id' => $issueId,
         'message' => 'Pengajuan Cash On Delivery berhasil disimpan!'
     ]);
     exit;

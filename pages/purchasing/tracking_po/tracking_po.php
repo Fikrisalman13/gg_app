@@ -1047,16 +1047,16 @@ $themeColor = $_SESSION['Theme'] ?? 'primary';
                         </label>
                     </div>
 
-                    <!-- Opsi 2: Sanso Berjaya Texindo -->
-                    <div class="custom-control custom-radio mb-2 p-3 rounded option-card" id="cardOptSanso" style="cursor: pointer;">
-                        <input type="radio" id="optDikirimKe2" name="radioDikirimKe" class="custom-control-input" value="Sanso Berjaya Texindo/Toko Sumber SERAGAM">
+                    <!-- Opsi 2: Toko Kain -->
+                    <div class="custom-control custom-radio mb-2 p-3 rounded option-card" id="cardOptTokoKain" style="cursor: pointer;">
+                        <input type="radio" id="optDikirimKe2" name="radioDikirimKe" class="custom-control-input" value="Toko Kain">
                         <label class="custom-control-label font-weight-bold text-dark w-100" for="optDikirimKe2" style="cursor: pointer;">
                             <span class="d-flex align-items-center justify-content-between flex-wrap">
-                                <span><i class="fas fa-store text-success mr-2"></i>2. Sanso Berjaya Texindo/Toko Sumber SERAGAM</span>
+                                <span><i class="fas fa-store text-success mr-2"></i>2. Toko Kain</span>
                                 <span class="badge badge-success font-weight-normal small px-2 py-1">Mitra Cabang</span>
                             </span>
                             <small class="d-block text-muted font-weight-normal mt-1" style="font-size: 0.82rem;">
-                                <i class="fas fa-map-marker-alt text-danger mr-1"></i>Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631
+                                <i class="fas fa-map-marker-alt text-danger mr-1"></i>Jl. Batununggal Indah Raya No. 134 Bandung
                             </small>
                         </label>
                     </div>
@@ -2343,7 +2343,7 @@ $(document).ready(function () {
     // ─── LOGIKA PILIHAN DIKIRIM KE ────────────────────────────────────────
     var defaultAddresses = {
         'PT.SUM': 'Jl. Desa Tarajusari, No.8, Tarajusari, Banjaran, Kab.Bandung',
-        'Sanso Berjaya Texindo/Toko Sumber SERAGAM': 'Jl. Waas No.5B, Batununggal, Sebelah JNT, UP Ibu Verty, Telp : 022 87313631',
+        'Toko Kain': 'Jl. Batununggal Indah Raya No. 134 Bandung',
         'Diambil ke Supplier': ''
     };
 
@@ -2359,8 +2359,8 @@ $(document).ready(function () {
             $('#inputAlamatKirim').val(defaultAddresses['PT.SUM']);
             $('#supplierMultiPoPreview').hide();
             $('#alamatKirimHint').text('(Dapat disesuaikan jika perlu catatan khusus)');
-        } else if (selectedOpt === 'Sanso Berjaya Texindo/Toko Sumber SERAGAM') {
-            $('#inputAlamatKirim').val(defaultAddresses['Sanso Berjaya Texindo/Toko Sumber SERAGAM']);
+        } else if (selectedOpt === 'Toko Kain') {
+            $('#inputAlamatKirim').val(defaultAddresses['Toko Kain']);
             $('#supplierMultiPoPreview').hide();
             $('#alamatKirimHint').text('(Dapat disesuaikan jika perlu catatan khusus)');
         } else if (selectedOpt === 'Diambil ke Supplier') {

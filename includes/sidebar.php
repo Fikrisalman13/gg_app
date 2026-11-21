@@ -103,6 +103,11 @@ if ($stmt) {
         $row['ParentMenuId'] = $row['ParentMenuId'] ?? null;
         $row['SortOrder'] = $menuWeights[$row['MenuId']] ?? 999999;
 
+        // Cegah self-referencing (ParentMenuId sama dengan MenuId sendiri)
+        if ($row['ParentMenuId'] !== null && (int)$row['ParentMenuId'] === (int)$row['MenuId']) {
+            $row['ParentMenuId'] = null;
+        }
+
         if ($row['ParentMenuId'] === null) {
             // Menu utama
             $menuTree[$row['MenuId']] = $row;
@@ -110,12 +115,22 @@ if ($stmt) {
         } else {
             // Submenu
             if (!isset($menuTree[$row['ParentMenuId']])) {
-                // Parent menu tidak ada atau tidak diakses user
+                // Parent menu tidak ada di role user atau belum di-grant di SMGroupTrustee,
+                // ambil detail asli dari SMMenu agar tidak pernah muncul '(Unknown)'
+                $pName = '(Unknown)';
+                $pIcon = 'fas fa-question';
+                $qP = sqlsrv_query($conn, "SELECT MenuName, MenuIcon FROM dbo.SMMenu WHERE MenuId = ?", [$row['ParentMenuId']]);
+                if ($qP && ($pRow = sqlsrv_fetch_array($qP, SQLSRV_FETCH_ASSOC))) {
+                    if (!empty($pRow['MenuName'])) $pName = trim($pRow['MenuName']);
+                    if (!empty($pRow['MenuIcon'])) $pIcon = trim($pRow['MenuIcon']);
+                }
+                if ($qP) sqlsrv_free_stmt($qP);
+
                 $menuTree[$row['ParentMenuId']] = [
                     'MenuId' => $row['ParentMenuId'],
-                    'MenuName' => '(Unknown)',
+                    'MenuName' => $pName,
                     'MenuUrl' => '#',
-                    'MenuIcon' => 'fas fa-question',
+                    'MenuIcon' => $pIcon,
                     'SortOrder' => $menuWeights[$row['ParentMenuId']] ?? 999999,
                     'submenus' => []
                 ];
