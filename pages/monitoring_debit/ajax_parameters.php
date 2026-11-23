@@ -16,14 +16,39 @@ if (!isset($_SESSION['UserId'])) {
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi.php';
 
-$startDate = $_GET['start_date'] ?? date('Y-m-01');
-$endDate   = $_GET['end_date']   ?? date('Y-m-d');
+$rawStart  = trim($_GET['start_date'] ?? '');
+$rawEnd    = trim($_GET['end_date'] ?? '');
 $stationId = $_GET['station_id'] ?? '';
 
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) $startDate = date('Y-m-01');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate))   $endDate   = date('Y-m-d');
+// Normalisasi 'T' pemisah tanggal dan waktu dari datetime-local
+$rawStart = str_replace('T', ' ', $rawStart);
+$rawEnd   = str_replace('T', ' ', $rawEnd);
 
-$whereParts = ["captured_at >= ? AND captured_at < DATEADD(DAY, 1, CAST(? AS DATE))"];
+// Default jika kosong: awal hari ini s/d sekarang
+if (empty($rawStart)) $rawStart = date('Y-m-d 00:00:00');
+if (empty($rawEnd))   $rawEnd   = date('Y-m-d H:i:s');
+
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawStart)) {
+    $startDate = $rawStart . ' 00:00:00';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $rawStart)) {
+    $startDate = $rawStart . ':00';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $rawStart)) {
+    $startDate = $rawStart;
+} else {
+    $startDate = date('Y-m-d 00:00:00');
+}
+
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd . ' 23:59:59';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd . ':59';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd;
+} else {
+    $endDate = date('Y-m-d H:i:s');
+}
+
+$whereParts = ["captured_at >= ? AND captured_at <= ?"];
 $params     = [$startDate, $endDate];
 
 if (!empty($stationId)) {

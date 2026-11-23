@@ -16,28 +16,64 @@ if (!isset($_SESSION['UserId'])) {
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/gg_app/koneksi.php';
 
-$startDate     = $_GET['start_date']     ?? date('Y-m-d');
-$endDate       = $_GET['end_date']       ?? date('Y-m-d');
+$rawStart      = trim($_GET['start_date'] ?? '');
+$rawEnd        = trim($_GET['end_date'] ?? '');
 $stationId     = $_GET['station_id']     ?? '';
 $parameterName = $_GET['parameter_name'] ?? '';
 
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) $startDate = date('Y-m-d');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate))   $endDate   = date('Y-m-d');
+// Normalisasi 'T' pemisah tanggal dan waktu dari datetime-local
+$rawStart = str_replace('T', ' ', $rawStart);
+$rawEnd   = str_replace('T', ' ', $rawEnd);
 
-// Hitung range hari untuk menentukan sampling
-$diffDays = (int)ceil((strtotime($endDate) - strtotime($startDate)) / 86400) + 1;
+// Default jika kosong
+if (empty($rawStart)) $rawStart = date('Y-m-d 00:00:00');
+if (empty($rawEnd))   $rawEnd   = date('Y-m-d H:i:s');
 
-// Tentukan mode sampling
-if ($diffDays <= 1) {
+// Format jika hanya YYYY-MM-DD
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawStart)) {
+    $startDate = $rawStart . ' 00:00:00';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $rawStart)) {
+    $startDate = $rawStart . ':00';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $rawStart)) {
+    $startDate = $rawStart;
+} else {
+    $startDate = date('Y-m-d 00:00:00');
+}
+
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd . ' 23:59:59';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd . ':59';
+} elseif (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $rawEnd)) {
+    $endDate = $rawEnd;
+} else {
+    $endDate = date('Y-m-d H:i:s');
+}
+
+// Hitung durasi detik untuk menentukan sampling
+$startTs = strtotime($startDate);
+$endTs   = strtotime($endDate);
+if ($startTs === false || $endTs === false || $startTs > $endTs) {
+    $startTs   = strtotime(date('Y-m-d 00:00:00'));
+    $endTs     = time();
+    $startDate = date('Y-m-d 00:00:00', $startTs);
+    $endDate   = date('Y-m-d H:i:s', $endTs);
+}
+
+$diffSeconds = max(0, $endTs - $startTs);
+$diffDays    = (int)ceil($diffSeconds / 86400);
+
+// Tentukan mode sampling: <= 24 jam raw, <= 7 hari hourly, > 7 hari daily
+if ($diffSeconds <= 86400) {
     $mode = 'raw';
-} elseif ($diffDays <= 7) {
+} elseif ($diffSeconds <= 7 * 86400) {
     $mode = 'hourly';
 } else {
     $mode = 'daily';
 }
 
 // Susun WHERE
-$whereParts = ["r.captured_at >= ? AND r.captured_at < DATEADD(DAY, 1, CAST(? AS DATE))"];
+$whereParts = ["r.captured_at >= ? AND r.captured_at <= ?"];
 $params     = [$startDate, $endDate];
 
 if (!empty($stationId)) {
@@ -120,6 +156,10 @@ if ($stmt === false) {
 $byStation   = [];
 $allLabels   = [];
 $unitGlobal  = '';
+$allValues   = [];
+$latestPoint = null;
+$maxPoint    = null;
+$minPoint    = null;
 
 while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
     $capturedAt = null;
@@ -141,8 +181,34 @@ while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
     if (!$unitGlobal && !empty($row['unit'])) {
         $unitGlobal = $row['unit'];
     }
+
+    if ($val !== null) {
+        $allValues[] = $val;
+        if ($maxPoint === null || $val > $maxPoint['value']) {
+            $maxPoint = ['value' => $val, 'time' => $capturedAt, 'station' => $name];
+        }
+        if ($minPoint === null || $val < $minPoint['value']) {
+            $minPoint = ['value' => $val, 'time' => $capturedAt, 'station' => $name];
+        }
+        if ($latestPoint === null || $capturedAt >= $latestPoint['time']) {
+            $latestPoint = ['value' => $val, 'time' => $capturedAt, 'station' => $name];
+        }
+    }
 }
 sqlsrv_free_stmt($stmt);
+
+$summary = null;
+if (count($allValues) > 0) {
+    $avgValue = round(array_sum($allValues) / count($allValues), 4);
+    $summary = [
+        'latest'         => $latestPoint,
+        'avg'            => $avgValue,
+        'max'            => $maxPoint,
+        'min'            => $minPoint,
+        'count'          => count($allValues),
+        'stations_count' => count($byStation),
+    ];
+}
 
 // Susun labels terurut
 ksort($allLabels);
@@ -187,11 +253,23 @@ foreach ($byStation as $sid => $info) {
     $colorIdx++;
 }
 
+if ($diffSeconds < 3600) {
+    $diffText = max(1, round($diffSeconds / 60)) . ' menit';
+} elseif ($diffSeconds <= 86400) {
+    $diffText = round($diffSeconds / 3600, 1) . ' jam';
+} else {
+    $diffText = round($diffSeconds / 86400, 1) . ' hari';
+}
+
 echo json_encode([
     'status'     => 'ok',
     'mode'       => $mode,
     'diff_days'  => $diffDays,
+    'diff_text'  => $diffText,
+    'start_date' => $startDate,
+    'end_date'   => $endDate,
     'unit'       => $unitGlobal,
     'labels'     => $labels,
     'datasets'   => $datasets,
+    'summary'    => $summary,
 ], JSON_UNESCAPED_UNICODE);
