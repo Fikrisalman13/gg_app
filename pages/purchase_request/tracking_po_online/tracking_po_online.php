@@ -90,6 +90,7 @@ $defaultDateTo   = date('Y-m-d');
 .tracking-stat-card[data-status="Sudah Dibayar"]::before { background: #10b981; }
 .tracking-stat-card[data-status="Sudah Datang"]::before { background: #06b6d4; }
 .tracking-stat-card[data-status="Belum Datang"]::before { background: #f59e0b; }
+.tracking-stat-card[data-status="Batal"]::before { background: #e11d48; }
 
 .stat-icon-box {
     width: 46px;
@@ -106,6 +107,7 @@ $defaultDateTo   = date('Y-m-d');
 .stat-icon-box.bg-emerald { background: #ecfdf5; color: #10b981; }
 .stat-icon-box.bg-cyan { background: #ecfeff; color: #0891b2; }
 .stat-icon-box.bg-amber { background: #fffbeb; color: #d97706; }
+.stat-icon-box.bg-rose { background: #ffe4e6; color: #e11d48; }
 
 .stat-info .stat-count {
     font-size: 26px;
@@ -338,6 +340,18 @@ $defaultDateTo   = date('Y-m-d');
                         <div class="stat-sublabel">No GRN Belum Ada</div>
                     </div>
                 </div>
+
+                <!-- Card 5: PO Batal -->
+                <div class="tracking-stat-card" data-filter-type="bayar" data-status="Batal" id="cardBatal" title="Klik untuk memfilter PO yang statusnya Dibatalkan">
+                    <div class="stat-icon-box bg-rose">
+                        <i class="fas fa-ban"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-count text-danger" id="countBatal">0</div>
+                        <div class="stat-label">PO Batal</div>
+                        <div class="stat-sublabel">Dibatalkan Pengguna</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Main Card Container -->
@@ -382,6 +396,7 @@ $defaultDateTo   = date('Y-m-d');
                                     <option value="">-- Semua Pembayaran --</option>
                                     <option value="Sudah Dibayar">Sudah Dibayar (Sudah Ada No CP)</option>
                                     <option value="Belum Dibayar">Belum Dibayar (Belum Ada No CP)</option>
+                                    <option value="Batal">Batal (Dibatalkan Pengguna)</option>
                                 </select>
                             </div>
                             <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-2">
@@ -465,7 +480,7 @@ $defaultDateTo   = date('Y-m-d');
                                         <th class="text-center" style="min-width: 110px;">Total Amount</th>
                                         <th class="text-center" style="min-width: 125px;">Metode Pembayaran</th>
                                         <th class="text-center" style="min-width: 110px;">Status Bayar</th>
-                                        <th class="text-center" style="min-width: 85px;">Aksi</th>
+                                        <th class="text-center" style="min-width: 80px; width: 80px;">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -655,6 +670,14 @@ $defaultDateTo   = date('Y-m-d');
                                                     <td class="text-muted">Status Bayar</td>
                                                     <td id="mdl_status_bayar">-</td>
                                                 </tr>
+                                                <tr id="mdl_row_alasan_batal" style="display: none;">
+                                                    <td class="text-danger font-weight-bold align-top">Alasan Batal</td>
+                                                    <td id="mdl_alasan_batal" class="text-danger font-weight-bold text-break">-</td>
+                                                </tr>
+                                                <tr id="mdl_row_batal_by" style="display: none;">
+                                                    <td class="text-muted small">Dibatalkan Oleh</td>
+                                                    <td id="mdl_batal_by" class="text-muted small">-</td>
+                                                </tr>
                                             </table>
                                         </div>
                                     </div>
@@ -809,7 +832,10 @@ $(document).ready(function () {
                     data: 'status_bayar',
                     className: 'text-center',
                     render: function (data, type, row) {
-                        if (data === 'Sudah Dibayar' || row.is_paid) {
+                        if (row.is_batal || data === 'Batal') {
+                            const reasonTitle = row.alasan_batal ? ' title="Alasan: ' + escapeHtml(row.alasan_batal) + '" data-toggle="tooltip"' : '';
+                            return '<span class="badge badge-danger px-2 py-1"' + reasonTitle + '><i class="fas fa-ban mr-1"></i>Batal</span>';
+                        } else if (data === 'Sudah Dibayar' || row.is_paid) {
                             return '<span class="badge badge-success px-2 py-1"><i class="fas fa-check-double mr-1"></i>Sudah Dibayar</span>';
                         } else if (data === 'Proses Bayar' || row.is_process) {
                             return '<span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-hourglass-half mr-1"></i>Proses Bayar</span>';
@@ -819,16 +845,28 @@ $(document).ready(function () {
                 },
                 {
                     data: null,
-                    className: 'text-center',
+                    className: 'text-center text-nowrap',
                     orderable: false,
                     searchable: false,
+                    width: '80px',
                     render: function (data, type, row, meta) {
-                        return '<button type="button" class="btn btn-xs btn-primary font-weight-bold px-2 py-1 btn-detail-row shadow-sm" title="Lihat rincian lengkap">' +
-                               '<i class="fas fa-eye mr-1"></i>Detail</button>';
+                        let html = '<div class="d-inline-flex align-items-center" style="gap: 5px;">';
+                        html += '<button type="button" class="btn btn-xs btn-primary btn-detail-row shadow-sm" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;" title="Lihat rincian lengkap" data-toggle="tooltip">' +
+                                '<i class="fas fa-eye"></i></button>';
+                        if (row.is_batal || row.status_bayar === 'Batal') {
+                            html += '<button type="button" class="btn btn-xs btn-outline-success btn-uncancel-row shadow-sm" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;" title="Pulihkan status PO (Batalkan pembatalan)" data-toggle="tooltip">' +
+                                    '<i class="fas fa-undo"></i></button>';
+                        } else {
+                            html += '<button type="button" class="btn btn-xs btn-outline-danger btn-batal-row shadow-sm" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;" title="Batalkan PO ini" data-toggle="tooltip">' +
+                                    '<i class="fas fa-ban"></i></button>';
+                        }
+                        html += '</div>';
+                        return html;
                     }
                 }
             ],
             drawCallback: function () {
+                $('[data-toggle="tooltip"]').tooltip();
                 let allChecked = true;
                 let anyCheckbox = false;
                 $('.po-row-checkbox').each(function () {
@@ -867,6 +905,7 @@ $(document).ready(function () {
                     $('#countUnpaid').text(res.summary.unpaid_po || 0);
                     $('#countArrived').text(res.summary.grn_po || 0);
                     $('#countNotArrived').text(res.summary.not_arrived_po || 0);
+                    $('#countBatal').text(res.summary.batal_po || 0);
                 }
             },
             error: function () {
@@ -1108,6 +1147,8 @@ $(document).ready(function () {
             $('#cardPaid').addClass('active');
         } else if (!datangVal && bayarVal === 'Belum Dibayar') {
             $('#cardUnpaid').addClass('active');
+        } else if (!datangVal && bayarVal === 'Batal') {
+            $('#cardBatal').addClass('active');
         }
         // Jika kombinasi (misal Sudah Dibayar & Belum Datang), tidak ada card tunggal yang aktif
     }
@@ -1258,14 +1299,174 @@ $(document).ready(function () {
         $('#mdl_status_cp').html(statusCpBadge);
 
         let statusBayarBadge = '<span class="badge badge-light border text-muted px-2 py-1"><i class="fas fa-clock mr-1"></i>Belum Dibayar</span>';
-        if (d.status_bayar === 'Sudah Dibayar' || d.is_paid) {
-            statusBayarBadge = '<span class="badge badge-success px-2 py-1"><i class="fas fa-check-double mr-1"></i>Sudah Dibayar</span>';
-        } else if (d.status_bayar === 'Proses Bayar' || d.is_process) {
-            statusBayarBadge = '<span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-hourglass-half mr-1"></i>Proses Bayar</span>';
+        if (d.is_batal || d.status_bayar === 'Batal') {
+            statusBayarBadge = '<span class="badge badge-danger px-2 py-1"><i class="fas fa-ban mr-1"></i>Batal</span>';
+            $('#mdl_alasan_batal').text(d.alasan_batal || '-');
+            const byText = (d.batal_by || '-') + (d.batal_at ? ' (' + d.batal_at + ')' : '');
+            $('#mdl_batal_by').text(byText);
+            $('#mdl_row_alasan_batal, #mdl_row_batal_by').show();
+        } else {
+            if (d.status_bayar === 'Sudah Dibayar' || d.is_paid) {
+                statusBayarBadge = '<span class="badge badge-success px-2 py-1"><i class="fas fa-check-double mr-1"></i>Sudah Dibayar</span>';
+            } else if (d.status_bayar === 'Proses Bayar' || d.is_process) {
+                statusBayarBadge = '<span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-hourglass-half mr-1"></i>Proses Bayar</span>';
+            }
+            $('#mdl_row_alasan_batal, #mdl_row_batal_by').hide();
         }
         $('#mdl_status_bayar').html(statusBayarBadge);
 
         $('#modalDetailPoOnline').modal('show');
+    });
+
+    // Event Handler: Klik Tombol Batal PO
+    $('#trackingPoOnlineTable tbody').on('click', '.btn-batal-row', function () {
+        const tr = $(this).closest('tr');
+        const d = dataTableInstance.row(tr).data();
+        if (!d || !d.no_po) return;
+
+        const noPo = d.no_po;
+
+        let warningNote = '';
+        if (d.is_paid || (d.no_cp && d.no_cp !== '-')) {
+            warningNote += '<div class="alert alert-warning py-1 px-2 text-left small mb-2"><i class="fas fa-exclamation-triangle mr-1"></i> <b>Perhatian:</b> PO ini tercatat sudah memiliki pembayaran (No CP: ' + escapeHtml(d.no_cp) + ').</div>';
+        }
+        if (d.no_grn && d.no_grn !== '-') {
+            warningNote += '<div class="alert alert-info py-1 px-2 text-left small mb-2"><i class="fas fa-truck mr-1"></i> <b>Info:</b> PO ini sudah memiliki penerimaan barang (No GRN: ' + escapeHtml(d.no_grn) + ').</div>';
+        }
+
+        const modalHtml = 
+            '<div class="text-left">' +
+                warningNote +
+                '<p class="mb-2" style="font-size: 13.5px; color: #334155;">' +
+                    'Silakan masukkan <b>keterangan / alasan</b> kenapa PO <b>' + escapeHtml(noPo) + '</b> ini dibatalkan:' +
+                '</p>' +
+                '<div class="form-group mb-0">' +
+                    '<textarea id="swal_alasan_batal" class="form-control" rows="3" placeholder="Tulis alasan pembatalan PO di sini... (wajib diisi)" style="font-size: 13px;"></textarea>' +
+                    '<div id="swal_batal_err" class="text-danger small mt-1 font-weight-bold" style="display: none;"></div>' +
+                '</div>' +
+            '</div>';
+
+        Swal.fire({
+            title: '<i class="fas fa-ban text-danger mr-1"></i> Batalkan PO Online',
+            html: modalHtml,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: '<i class="fas fa-check mr-1"></i> Ya, Batalkan PO',
+            cancelButtonText: '<i class="fas fa-times mr-1"></i> Kembali',
+            reverseButtons: true,
+            focusConfirm: false,
+            preConfirm: function () {
+                const alasan = $('#swal_alasan_batal').val().trim();
+                if (!alasan) {
+                    $('#swal_batal_err').text('Alasan pembatalan wajib diisi!').show();
+                    $('#swal_alasan_batal').focus();
+                    return false;
+                }
+                return alasan;
+            }
+        }).then(function (result) {
+            if (result.isConfirmed && result.value) {
+                $('#tableLoading').fadeIn(150);
+                $.ajax({
+                    url: API_ENDPOINT,
+                    type: 'POST',
+                    data: {
+                        action: 'cancel_po',
+                        no_po: noPo,
+                        alasan_batal: result.value
+                    },
+                    dataType: 'json',
+                    success: function (res) {
+                        $('#tableLoading').fadeOut(150);
+                        if (res && res.status === 'ok') {
+                            Toast.fire({
+                                icon: 'success',
+                                title: res.message || 'PO berhasil dibatalkan.'
+                            });
+                            loadSummary();
+                            loadTableData();
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal Membatalkan PO',
+                                text: res.message || 'Terjadi kesalahan saat membatalkan PO.'
+                            });
+                        }
+                    },
+                    error: function (xhr) {
+                        $('#tableLoading').fadeOut(150);
+                        const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Terjadi gangguan koneksi ke server.';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Terjadi Kesalahan',
+                            text: msg
+                        });
+                    }
+                });
+            }
+        });
+    });
+
+    // Event Handler: Klik Tombol Pulihkan Status PO
+    $('#trackingPoOnlineTable tbody').on('click', '.btn-uncancel-row', function () {
+        const tr = $(this).closest('tr');
+        const d = dataTableInstance.row(tr).data();
+        if (!d || !d.no_po) return;
+
+        const noPo = d.no_po;
+
+        Swal.fire({
+            title: 'Pulihkan Status PO?',
+            html: '<p style="font-size: 14px; color: #334155;">Apakah Anda yakin ingin membatalkan status pembatalan dan memulihkan kembali PO <b>' + escapeHtml(noPo) + '</b>?</p>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: '<i class="fas fa-undo mr-1"></i> Ya, Pulihkan Status',
+            cancelButtonText: '<i class="fas fa-times mr-1"></i> Batal',
+            reverseButtons: true
+        }).then(function (result) {
+            if (result.isConfirmed) {
+                $('#tableLoading').fadeIn(150);
+                $.ajax({
+                    url: API_ENDPOINT,
+                    type: 'POST',
+                    data: {
+                        action: 'uncancel_po',
+                        no_po: noPo
+                    },
+                    dataType: 'json',
+                    success: function (res) {
+                        $('#tableLoading').fadeOut(150);
+                        if (res && res.status === 'ok') {
+                            Toast.fire({
+                                icon: 'success',
+                                title: res.message || 'Status PO berhasil dipulihkan.'
+                            });
+                            loadSummary();
+                            loadTableData();
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal Memulihkan PO',
+                                text: res.message || 'Terjadi kesalahan saat memulihkan status PO.'
+                            });
+                        }
+                    },
+                    error: function (xhr) {
+                        $('#tableLoading').fadeOut(150);
+                        const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Terjadi gangguan koneksi ke server.';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Terjadi Kesalahan',
+                            text: msg
+                        });
+                    }
+                });
+            }
+        });
     });
 
     // Jalankan inisialisasi awal

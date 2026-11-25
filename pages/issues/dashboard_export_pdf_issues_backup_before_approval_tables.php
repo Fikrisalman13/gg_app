@@ -1,0 +1,195 @@
+<?php
+// ===================================================
+// 1. INISIALISASI DAN VALIDASI
+// ===================================================
+session_start();
+
+if (!isset($_SESSION['UserId'])) {
+    http_response_code(403);
+    exit('Unauthorized');
+}
+
+// ===================================================
+// 2. DEPENDENSI & FPDF
+// ===================================================
+require_once __DIR__ . '/../../koneksi.php';
+require_once __DIR__ . '/../../libs/fpdf.php';
+require_once __DIR__ . '/../ticket/theme_helper.php';
+
+/**
+ * Memastikan format tanggal valid (YYYY-MM-DD) dan menyediakan fallback.
+ */
+function sanitizeDate(string $value, string $fallback): string {
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : $fallback;
+}
+
+/**
+ * Menjalankan query counter sederhana dengan error handling terpusat.
+ */
+function fetchCount($conn, string $sql, array $params): int {
+    $stmt = sqlsrv_query($conn, $sql, $params);
+    if (!$stmt) {
+        throw new RuntimeException('Query failed: ' . print_r(sqlsrv_errors(), true));
+    }
+    $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+    return $row ? (int) $row['cnt'] : 0;
+}
+
+/**
+ * Mengubah tanggal ISO menjadi format yang ramah dibaca pada PDF.
+ */
+function formatDisplayDate(string $date): string {
+    $dt = DateTime::createFromFormat('Y-m-d', $date);
+    return $dt ? $dt->format('d M Y') : $date;
+}
+
+/**
+ * Memastikan teks tidak meluap dari batas lebar sel (FPDF).
+ */
+function fitCellText($pdf, string $text, float $maxWidth): string {
+    if ($pdf->GetStringWidth($text) <= $maxWidth) {
+        return $text;
+    }
+    while ($text !== '' && $pdf->GetStringWidth($text . '...') > $maxWidth) {
+        $text = mb_substr($text, 0, -1);
+    }
+    return $text . '...';
+}
+
+// ===================================================
+// 3. PROSES EKSPOR PDF
+// ===================================================
+try {
+    $startInput = sanitizeDate($_GET['start_date'] ?? date('Y-m-01'), date('Y-m-01'));
+    $endInput = sanitizeDate($_GET['end_date'] ?? date('Y-m-d'), date('Y-m-d'));
+
+    $startRange = $startInput . ' 00:00:00';
+    $endRange = $endInput . ' 23:59:59';
+
+    $whereClause = ' WHERE i.created_at BETWEEN ? AND ? ';
+    $params = [$startRange, $endRange];
+
+    // Stats
+    $total = fetchCount($conn, "SELECT COUNT(*) AS cnt FROM dbo.issues i $whereClause", $params);
+    $done = fetchCount($conn, "SELECT COUNT(*) AS cnt FROM dbo.issues i $whereClause AND UPPER(LTRIM(RTRIM(i.status))) IN ('DONE', 'CLOSED')", $params);
+    
+    $statusSql = "SELECT 
+            SUM(CASE WHEN UPPER(LTRIM(RTRIM(i.status))) IN ('OPEN', 'NEW', 'TO DO') OR i.status IS NULL THEN 1 ELSE 0 END) AS open_cnt,
+            SUM(CASE WHEN UPPER(LTRIM(RTRIM(i.status))) IN ('PROSES', 'IN PROGRESS', 'PENDING') THEN 1 ELSE 0 END) AS progress_cnt
+        FROM dbo.issues i
+        $whereClause";
+    $stmtStatus = sqlsrv_query($conn, $statusSql, $params);
+    if (!$stmtStatus) {
+        throw new RuntimeException('Status split query failed: ' . print_r(sqlsrv_errors(), true));
+    }
+    $rowStatus = sqlsrv_fetch_array($stmtStatus, SQLSRV_FETCH_ASSOC) ?: [];
+    $todo = (int)($rowStatus['open_cnt'] ?? 0);
+    $inProgress = (int)($rowStatus['progress_cnt'] ?? 0);
+    sqlsrv_free_stmt($stmtStatus);
+
+    // Category & Sub Category breakdown data
+    $leaderboardSql = "SELECT 
+                           COALESCE(NULLIF(LTRIM(RTRIM(i.kategori)), ''), 'Uncategorized') AS kategori,
+                           COALESCE(NULLIF(LTRIM(RTRIM(i.sub_kategori)), ''), '-') AS sub_kategori,
+                           COUNT(*) AS count
+                       FROM dbo.issues i
+                       $whereClause
+                       GROUP BY 
+                           COALESCE(NULLIF(LTRIM(RTRIM(i.kategori)), ''), 'Uncategorized'),
+                           COALESCE(NULLIF(LTRIM(RTRIM(i.sub_kategori)), ''), '-')
+                       ORDER BY kategori ASC, count DESC, sub_kategori ASC";
+
+    $stmtLb = sqlsrv_query($conn, $leaderboardSql, $params);
+    if (!$stmtLb) {
+        throw new RuntimeException('Category query failed: ' . print_r(sqlsrv_errors(), true));
+    }
+
+    $leaderboard = [];
+    while ($row = sqlsrv_fetch_array($stmtLb, SQLSRV_FETCH_ASSOC)) {
+        $leaderboard[] = [
+            'kategori' => $row['kategori'] ?: 'Uncategorized',
+            'sub_kategori' => $row['sub_kategori'] ?: '-',
+            'count' => (int) $row['count']
+        ];
+    }
+
+    // PDF Rendering
+    $pdf = new FPDF('P', 'mm', 'A4');
+    $pdf->SetTitle('Issues Analytics Dashboard');
+    $pdf->SetAuthor('GG App');
+    $pdf->SetMargins(15, 15, 15);
+    $pdf->AddPage();
+
+    $pdf->SetFont('Arial', 'B', 16);
+    $pdf->Cell(0, 10, 'Issues Analytics Dashboard', 0, 1, 'C');
+
+    $pdf->SetFont('Arial', '', 11);
+    $pdf->Cell(0, 7, 'Periode: ' . formatDisplayDate($startInput) . ' s/d ' . formatDisplayDate($endInput), 0, 1, 'L');
+    $pdf->Ln(3);
+
+    // Summary Stats Table
+    $pdf->SetFont('Arial', 'B', 12);
+    $pdf->Cell(0, 8, 'Ringkasan Issue', 0, 1, 'L');
+
+    $pdf->SetFont('Arial', 'B', 11);
+    $pdf->Cell(45, 8, 'Total Issue', 1, 0, 'C');
+    $pdf->Cell(45, 8, 'Done', 1, 0, 'C');
+    $pdf->Cell(45, 8, 'To Do', 1, 0, 'C');
+    $pdf->Cell(45, 8, 'In Progress', 1, 1, 'C');
+
+    $pdf->SetFont('Arial', '', 12);
+    $pdf->Cell(45, 10, number_format($total), 1, 0, 'C');
+    $pdf->Cell(45, 10, number_format($done), 1, 0, 'C');
+    $pdf->Cell(45, 10, number_format($todo), 1, 0, 'C');
+    $pdf->Cell(45, 10, number_format($inProgress), 1, 1, 'C');
+
+    $pdf->Ln(6);
+
+    // Category Breakdown Table
+    $pdf->SetFont('Arial', 'B', 12);
+    $pdf->Cell(0, 8, 'Kategori Kegiatan', 0, 1, 'L');
+
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->Cell(12, 8, 'No', 1, 0, 'C');
+    $pdf->Cell(55, 8, 'Kategori', 1, 0, 'C');
+    $pdf->Cell(75, 8, 'Sub Kategori', 1, 0, 'C');
+    $pdf->Cell(38, 8, 'Jumlah Issue', 1, 1, 'C');
+
+    $pdf->SetFont('Arial', '', 10);
+    if (empty($leaderboard)) {
+        $pdf->Cell(180, 10, 'Belum ada issue pada periode ini.', 1, 1, 'C');
+    } else {
+        $rank = 1;
+        foreach ($leaderboard as $row) {
+            if ($pdf->GetY() + 8 > $pdf->GetPageHeight() - 20) {
+                $pdf->AddPage();
+                $pdf->SetFont('Arial', 'B', 10);
+                $pdf->Cell(12, 8, 'No', 1, 0, 'C');
+                $pdf->Cell(55, 8, 'Kategori', 1, 0, 'C');
+                $pdf->Cell(75, 8, 'Sub Kategori', 1, 0, 'C');
+                $pdf->Cell(38, 8, 'Jumlah Issue', 1, 1, 'C');
+                $pdf->SetFont('Arial', '', 10);
+            }
+            $pdf->Cell(12, 8, (string)$rank++, 1, 0, 'C');
+            $pdf->Cell(55, 8, fitCellText($pdf, $row['kategori'], 53), 1, 0, 'L');
+            $pdf->Cell(75, 8, fitCellText($pdf, $row['sub_kategori'], 73), 1, 0, 'L');
+            $pdf->Cell(38, 8, number_format($row['count']), 1, 1, 'C');
+        }
+    }
+
+    if ($pdf->GetY() + 15 > $pdf->GetPageHeight() - 15) {
+        $pdf->AddPage();
+    }
+    $pdf->Ln(5);
+    $pdf->SetFont('Arial', 'I', 9);
+    $pdf->Cell(0, 6, 'Generated on ' . date('d M Y H:i') . ' by ' . ($_SESSION['UserName'] ?? 'System'), 0, 1, 'R');
+
+    $filename = 'dashboard_issues_' . date('Ymd_His') . '.pdf';
+    $pdf->Output('I', $filename);
+    exit;
+
+} catch (Throwable $e) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Gagal membuat PDF Dashboard: ' . $e->getMessage();
+}

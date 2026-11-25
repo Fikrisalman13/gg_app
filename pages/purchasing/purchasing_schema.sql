@@ -20,9 +20,9 @@ BEGIN
         [type] VARCHAR(50) NOT NULL,                    -- COD, PO, RFP, OFFSET, Kontrabon, Lainnya
         [type_keterangan] VARCHAR(100) NULL,            -- Keterangan tambahan (cth: 'Untuk dibuat Cek' atau no RFP '26.071.996')
         [is_multi_po] BIT NOT NULL CONSTRAINT [DF_purchasing_header_is_multi_po] DEFAULT (0),
-        [no_po] VARCHAR(255) NULL,                      -- Nomor PO utama / gabungan
-        [vendor] NVARCHAR(255) NULL,                    -- Nama vendor / supplier
-        [no_grn] VARCHAR(500) NULL CONSTRAINT [DF_purchasing_header_no_grn] DEFAULT ('-'),
+        [no_po] VARCHAR(MAX) NULL,                      -- Nomor PO utama / gabungan (multi-PO tidak dibatasi)
+        [vendor] NVARCHAR(MAX) NULL,                    -- Nama vendor / supplier (gabungan vendor multi-PO)
+        [no_grn] VARCHAR(MAX) NULL CONSTRAINT [DF_purchasing_header_no_grn] DEFAULT ('-'),
         [pengirim] NVARCHAR(200) NOT NULL,              -- Format: Nama Pembuat (Departemen)
         [penerima] NVARCHAR(200) NOT NULL,              -- Format: Nama Penerima (Departemen)
         [status_ttd] NVARCHAR(50) NOT NULL CONSTRAINT [DF_purchasing_header_status_ttd] DEFAULT ('Menunggu TTD'),
@@ -46,6 +46,22 @@ BEGIN
     BEGIN
         ALTER TABLE [dbo].[purchasing_header] ADD [signature_data] NVARCHAR(MAX) NULL;
         PRINT 'Kolom [signature_data] berhasil ditambahkan ke dbo.purchasing_header.';
+    END
+
+    -- Pastikan kolom no_po, vendor, dan no_grn bertipe MAX agar mendukung banyak baris multi-PO
+    IF EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_purchasing_header_penerima_status' AND object_id = OBJECT_ID(N'[dbo].[purchasing_header]'))
+    BEGIN
+        DROP INDEX [IX_purchasing_header_penerima_status] ON [dbo].[purchasing_header];
+    END
+    ALTER TABLE [dbo].[purchasing_header] ALTER COLUMN [no_po] VARCHAR(MAX) NULL;
+    ALTER TABLE [dbo].[purchasing_header] ALTER COLUMN [vendor] NVARCHAR(MAX) NULL;
+    ALTER TABLE [dbo].[purchasing_header] ALTER COLUMN [no_grn] VARCHAR(MAX) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_purchasing_header_penerima_status' AND object_id = OBJECT_ID(N'[dbo].[purchasing_header]'))
+    BEGIN
+        CREATE NONCLUSTERED INDEX [IX_purchasing_header_penerima_status]
+        ON [dbo].[purchasing_header] ([penerima], [status_ttd], [is_deleted])
+        INCLUDE ([id], [tanggal], [type], [pengirim], [vendor], [no_po], [created_at]);
+        PRINT 'Index IX_purchasing_header_penerima_status diperbarui untuk kolom MAX.';
     END
 END
 GO

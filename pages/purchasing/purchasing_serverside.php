@@ -1046,7 +1046,9 @@ if ($action === 'add') {
             exit;
         } catch (Exception $e) {
             sqlsrv_rollback($conn);
-            echo json_encode(['status' => 'error', 'message' => $e instanceof RuntimeException ? $e->getMessage() : 'Data serah terima dan Issue tidak dapat disimpan.']);
+            $errMessage = $e->getMessage();
+            error_log('Error saving purchasing: ' . $errMessage);
+            echo json_encode(['status' => 'error', 'message' => $errMessage]);
             exit;
         }
     } else {

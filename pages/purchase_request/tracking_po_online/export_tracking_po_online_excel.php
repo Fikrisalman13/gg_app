@@ -180,13 +180,25 @@ $stmt = $conn3->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Ambil pemetaan Metode Pembayaran dari SQL Server GG
+// Ambil pemetaan Metode Pembayaran & Pembatalan dari SQL Server GG
 $metodeMap = [];
+$batalMap  = [];
 if ($conn) {
     $qMetode = @sqlsrv_query($conn, "SELECT no_po, metode_bayar FROM dbo.tracking_po_online_metode_bayar");
     if ($qMetode !== false) {
         while ($rm = sqlsrv_fetch_array($qMetode, SQLSRV_FETCH_ASSOC)) {
             $metodeMap[trim($rm['no_po'])] = trim($rm['metode_bayar'] ?? '');
+        }
+    }
+
+    $qBatal = @sqlsrv_query($conn, "SELECT no_po, alasan_batal, batal_by, CONVERT(VARCHAR(19), batal_at, 120) AS batal_at FROM dbo.tracking_po_online_batal");
+    if ($qBatal !== false) {
+        while ($rb = sqlsrv_fetch_array($qBatal, SQLSRV_FETCH_ASSOC)) {
+            $batalMap[trim($rb['no_po'])] = [
+                'alasan_batal' => trim($rb['alasan_batal'] ?? ''),
+                'batal_by'     => trim($rb['batal_by'] ?? ''),
+                'batal_at'     => trim($rb['batal_at'] ?? '')
+            ];
         }
     }
 }
@@ -198,7 +210,7 @@ $sheet->setTitle('Tracking PO Online');
 
 // 1. JUDUL & INFORMASI HEADER
 $sheet->setCellValue('A1', 'MONITORING TRACKING PO ONLINE');
-$sheet->mergeCells('A1:AA1');
+$sheet->mergeCells('A1:AB1');
 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF1E293B'));
 
 $periodeInfo = 'Periode: ' . (!empty($dateFrom) ? date('d/m/Y', strtotime($dateFrom)) : 'Semua') . ' s/d ' . (!empty($dateTo) ? date('d/m/Y', strtotime($dateTo)) : 'Semua');
@@ -207,11 +219,11 @@ $statusBayarInfo  = !empty($filterStatusBayar) ? $filterStatusBayar : 'Semua';
 $metodeInfo       = !empty($filterMetodeBayar) ? $filterMetodeBayar : 'Semua';
 $statusInfo = ' | Status Kedatangan: ' . $statusDatangInfo . ' | Status Pembayaran: ' . $statusBayarInfo . ' | Metode: ' . $metodeInfo;
 $sheet->setCellValue('A2', $periodeInfo . $statusInfo);
-$sheet->mergeCells('A2:AA2');
+$sheet->mergeCells('A2:AB2');
 $sheet->getStyle('A2')->getFont()->setSize(11)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF475569'));
 
 $sheet->setCellValue('A3', 'Diekspor pada: ' . date('d/m/Y H:i:s') . ' WIB oleh ' . $currentNamaLengkap);
-$sheet->mergeCells('A3:AA3');
+$sheet->mergeCells('A3:AB3');
 $sheet->getStyle('A3')->getFont()->setSize(10)->setItalic(true)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF64748B'));
 
 // 2. HEADER KOLOM TABEL (Row 5)
@@ -233,6 +245,7 @@ $headers = [
     'Keterangan',
     'Metode Pembayaran',
     'Status Bayar',
+    'Alasan Batal',
     'No. GRN',
     'Tgl GRN',
     'Qty GRN',
@@ -275,7 +288,7 @@ $headerStyle = [
         ],
     ],
 ];
-$sheet->getStyle("A{$headerRow}:AA{$headerRow}")->applyFromArray($headerStyle);
+$sheet->getStyle("A{$headerRow}:AB{$headerRow}")->applyFromArray($headerStyle);
 $sheet->getRowDimension($headerRow)->setRowHeight(28);
 
 // 3. PENGISIAN DATA (Row 6 dst)
@@ -285,6 +298,17 @@ $no = 1;
 foreach ($rows as $r) {
     $noPo = trim($r['No PO'] ?? '');
     $metodeBayar = $metodeMap[$noPo] ?? '';
+    $isBatal = isset($batalMap[$noPo]);
+    $batalInfo = $isBatal ? $batalMap[$noPo] : null;
+
+    // Filter Status Bayar
+    if ($filterStatusBayar === 'Batal') {
+        if (!$isBatal) continue;
+    } elseif ($filterStatusBayar === 'Sudah Dibayar' || $filterStatusBayar === 'paid' || $filterStatusBayar === 'Approved' || $filterStatusBayar === 'approved') {
+        if ($isBatal) continue;
+    } elseif ($filterStatusBayar === 'Belum Dibayar' || $filterStatusBayar === 'unpaid') {
+        if ($isBatal) continue;
+    }
 
     // Filter Metode Pembayaran jika ditentukan
     if ($filterMetodeBayar === 'Kosong' || $filterMetodeBayar === 'belum_diset') {
@@ -306,7 +330,11 @@ foreach ($rows as $r) {
     $qtyGrn = !empty($r['Qty GRN']) ? (float)$r['Qty GRN'] : null;
 
     $statusCp = trim($r['Status CP'] ?? '');
-    $statusBayarLabel = ($statusCp === 'V') ? 'Sudah Dibayar' : 'Belum Dibayar';
+    if ($isBatal) {
+        $statusBayarLabel = 'Batal';
+    } else {
+        $statusBayarLabel = ($statusCp === 'V') ? 'Sudah Dibayar' : 'Belum Dibayar';
+    }
 
     $rowValues = [
         1  => ['val' => $no++, 'type' => DataType::TYPE_NUMERIC],
@@ -326,16 +354,17 @@ foreach ($rows as $r) {
         15 => ['val' => trim($r['Keterangan'] ?? '-'), 'type' => DataType::TYPE_STRING],
         16 => ['val' => (!empty($metodeBayar) ? $metodeBayar : '-'), 'type' => DataType::TYPE_STRING],
         17 => ['val' => $statusBayarLabel, 'type' => DataType::TYPE_STRING],
-        18 => ['val' => trim($r['No. GRN'] ?? '-'), 'type' => DataType::TYPE_STRING],
-        19 => ['val' => $tglGrn, 'type' => DataType::TYPE_STRING],
-        20 => ['val' => ($qtyGrn !== null ? $qtyGrn : '-'), 'type' => ($qtyGrn !== null ? DataType::TYPE_NUMERIC : DataType::TYPE_STRING)],
-        21 => ['val' => trim($r['Nama Gudang'] ?? '-'), 'type' => DataType::TYPE_STRING],
-        22 => ['val' => trim($r['Pembuat'] ?? '-'), 'type' => DataType::TYPE_STRING],
-        23 => ['val' => trim($r['No. RFP'] ?? '-'), 'type' => DataType::TYPE_STRING],
-        24 => ['val' => $tglRfp, 'type' => DataType::TYPE_STRING],
-        25 => ['val' => trim($r['No CP'] ?? '-'), 'type' => DataType::TYPE_STRING],
-        26 => ['val' => $tglCp, 'type' => DataType::TYPE_STRING],
-        27 => ['val' => trim($r['Status CP'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        18 => ['val' => ($isBatal && $batalInfo ? $batalInfo['alasan_batal'] : '-'), 'type' => DataType::TYPE_STRING],
+        19 => ['val' => trim($r['No. GRN'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        20 => ['val' => $tglGrn, 'type' => DataType::TYPE_STRING],
+        21 => ['val' => ($qtyGrn !== null ? $qtyGrn : '-'), 'type' => ($qtyGrn !== null ? DataType::TYPE_NUMERIC : DataType::TYPE_STRING)],
+        22 => ['val' => trim($r['Nama Gudang'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        23 => ['val' => trim($r['Pembuat'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        24 => ['val' => trim($r['No. RFP'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        25 => ['val' => $tglRfp, 'type' => DataType::TYPE_STRING],
+        26 => ['val' => trim($r['No CP'] ?? '-'), 'type' => DataType::TYPE_STRING],
+        27 => ['val' => $tglCp, 'type' => DataType::TYPE_STRING],
+        28 => ['val' => trim($r['Status CP'] ?? '-'), 'type' => DataType::TYPE_STRING],
     ];
 
     foreach ($rowValues as $colIdx => $cell) {
@@ -368,12 +397,12 @@ if ($lastRow >= 6) {
             'vertical' => Alignment::VERTICAL_CENTER,
         ],
     ];
-    $sheet->getStyle("A6:AA{$lastRow}")->applyFromArray($dataBorder);
+    $sheet->getStyle("A6:AB{$lastRow}")->applyFromArray($dataBorder);
 
     // Number formatting
     $sheet->getStyle("L6:N{$lastRow}")->getNumberFormat()->setFormatCode('#,##0');
     $sheet->getStyle("J6:J{$lastRow}")->getNumberFormat()->setFormatCode('#,##0.##');
-    $sheet->getStyle("T6:T{$lastRow}")->getNumberFormat()->setFormatCode('#,##0.##');
+    $sheet->getStyle("U6:U{$lastRow}")->getNumberFormat()->setFormatCode('#,##0.##');
 
     // Alignments
     $sheet->getStyle("A6:A{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -382,13 +411,13 @@ if ($lastRow >= 6) {
     $sheet->getStyle("F6:G{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle("H6:H{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle("K6:K{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle("P6:S{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle("V6:AA{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("P6:T{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("W6:AB{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
     // Zebra striping
     for ($rIdx = 6; $rIdx <= $lastRow; $rIdx++) {
         if ($rIdx % 2 === 0) {
-            $sheet->getStyle("A{$rIdx}:AA{$rIdx}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F8FAFC');
+            $sheet->getStyle("A{$rIdx}:AB{$rIdx}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F8FAFC');
         }
     }
 }

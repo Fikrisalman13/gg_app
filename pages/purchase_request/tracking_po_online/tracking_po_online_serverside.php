@@ -125,29 +125,78 @@ try {
             ) pay ON TRUE
         $whereClause";
 
-        $summarySql = "SELECT
-            COUNT(DISTINCT t.ponmbr) AS total_po,
-            COUNT(DISTINCT CASE WHEN t.cp_status = 'V' THEN t.ponmbr END) AS paid_po,
-            COUNT(DISTINCT CASE WHEN (t.cp_status IS NULL OR t.cp_status != 'V') THEN t.ponmbr END) AS unpaid_po,
-            COUNT(DISTINCT CASE WHEN t.grnnmbr IS NOT NULL AND TRIM(t.grnnmbr) != '' THEN t.ponmbr END) AS grn_po,
-            COUNT(DISTINCT CASE WHEN (t.grnnmbr IS NULL OR TRIM(t.grnnmbr) = '') THEN t.ponmbr END) AS not_arrived_po,
-            COUNT(*) AS total_rows
+        // Ambil daftar PO yang dibatalkan dari SQL Server GG
+        $batalPos = [];
+        if ($conn) {
+            $ensureTableBatal = "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'tracking_po_online_batal')
+            BEGIN
+                CREATE TABLE dbo.tracking_po_online_batal (
+                    no_po VARCHAR(100) NOT NULL PRIMARY KEY,
+                    alasan_batal NVARCHAR(500) NOT NULL,
+                    batal_by VARCHAR(100) NULL,
+                    batal_at DATETIME DEFAULT GETDATE(),
+                    updated_at DATETIME DEFAULT GETDATE()
+                );
+            END";
+            @sqlsrv_query($conn, $ensureTableBatal);
+
+            $qBatal = @sqlsrv_query($conn, "SELECT no_po FROM dbo.tracking_po_online_batal");
+            if ($qBatal !== false) {
+                while ($rb = sqlsrv_fetch_array($qBatal, SQLSRV_FETCH_ASSOC)) {
+                    $batalPos[trim($rb['no_po'])] = true;
+                }
+            }
+        }
+
+        $summarySql = "SELECT DISTINCT
+            t.ponmbr,
+            t.cp_status,
+            (CASE WHEN t.grnnmbr IS NOT NULL AND TRIM(t.grnnmbr) != '' THEN 1 ELSE 0 END) AS is_grn
         FROM ($baseSql) t";
 
         $stmt = $conn3->prepare($summarySql);
         $stmt->execute($params);
-        $summary = $stmt->fetch(PDO::FETCH_ASSOC);
+        $poRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalPo = count($poRows);
+        $paidPo = 0;
+        $unpaidPo = 0;
+        $grnPo = 0;
+        $notArrivedPo = 0;
+        $batalPo = 0;
+
+        foreach ($poRows as $p) {
+            $poNmbr = trim($p['ponmbr'] ?? '');
+            $isBatal = isset($batalPos[$poNmbr]);
+            $isPaid = ($p['cp_status'] === 'V');
+            $isGrn = ((int)$p['is_grn'] === 1);
+
+            if ($isBatal) {
+                $batalPo++;
+            } elseif ($isPaid) {
+                $paidPo++;
+            } else {
+                $unpaidPo++;
+            }
+
+            if ($isGrn) {
+                $grnPo++;
+            } else {
+                $notArrivedPo++;
+            }
+        }
 
         echo json_encode([
             'status' => 'ok',
             'summary' => [
-                'total_po'       => (int)($summary['total_po'] ?? 0),
-                'paid_po'        => (int)($summary['paid_po'] ?? 0),
-                'unpaid_po'      => (int)($summary['unpaid_po'] ?? 0),
-                'approved_po'    => (int)($summary['paid_po'] ?? 0),
-                'grn_po'         => (int)($summary['grn_po'] ?? 0),
-                'not_arrived_po' => (int)($summary['not_arrived_po'] ?? 0),
-                'total_rows'     => (int)($summary['total_rows'] ?? 0),
+                'total_po'       => $totalPo,
+                'paid_po'        => $paidPo,
+                'unpaid_po'      => $unpaidPo,
+                'approved_po'    => $paidPo,
+                'grn_po'         => $grnPo,
+                'not_arrived_po' => $notArrivedPo,
+                'batal_po'       => $batalPo,
+                'total_rows'     => $totalPo,
             ]
         ]);
         exit;
@@ -213,6 +262,94 @@ try {
             'status' => 'ok',
             'message' => "Metode pembayaran untuk $validCount PO berhasil $labelAction.",
             'updated_count' => $validCount
+        ]);
+        exit;
+    }
+
+    if ($action === 'cancel_po') {
+        $noPo        = trim($_POST['no_po'] ?? '');
+        $alasanBatal = trim($_POST['alasan_batal'] ?? '');
+        $currentUser = trim($_SESSION['UserName'] ?? '');
+
+        if (empty($noPo)) {
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Nomor PO tidak valid.'
+            ]);
+            exit;
+        }
+
+        if (empty($alasanBatal)) {
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Alasan pembatalan wajib diisi.'
+            ]);
+            exit;
+        }
+
+        $ensureTable = "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'tracking_po_online_batal')
+        BEGIN
+            CREATE TABLE dbo.tracking_po_online_batal (
+                no_po VARCHAR(100) NOT NULL PRIMARY KEY,
+                alasan_batal NVARCHAR(500) NOT NULL,
+                batal_by VARCHAR(100) NULL,
+                batal_at DATETIME DEFAULT GETDATE(),
+                updated_at DATETIME DEFAULT GETDATE()
+            );
+        END";
+        if ($conn) {
+            @sqlsrv_query($conn, $ensureTable);
+        }
+
+        $upsertSql = "MERGE dbo.tracking_po_online_batal AS target
+        USING (SELECT ? AS no_po, ? AS alasan_batal, ? AS batal_by) AS source
+        ON (target.no_po = source.no_po)
+        WHEN MATCHED THEN
+            UPDATE SET target.alasan_batal = source.alasan_batal, target.batal_by = source.batal_by, target.updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (no_po, alasan_batal, batal_by, batal_at, updated_at) VALUES (source.no_po, source.alasan_batal, source.batal_by, GETDATE(), GETDATE());";
+
+        $stmt = sqlsrv_query($conn, $upsertSql, [$noPo, $alasanBatal, $currentUser]);
+        if ($stmt === false) {
+            $errs = sqlsrv_errors();
+            $msg = isset($errs[0]['message']) ? $errs[0]['message'] : 'Gagal menyimpan pembatalan ke database.';
+            echo json_encode([
+                'status'  => 'error',
+                'message' => $msg
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'status'  => 'ok',
+            'message' => "PO $noPo berhasil dibatalkan."
+        ]);
+        exit;
+    }
+
+    if ($action === 'uncancel_po') {
+        $noPo = trim($_POST['no_po'] ?? '');
+        if (empty($noPo)) {
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Nomor PO tidak valid.'
+            ]);
+            exit;
+        }
+
+        $delSql = "DELETE FROM dbo.tracking_po_online_batal WHERE no_po = ?";
+        $stmtDel = sqlsrv_query($conn, $delSql, [$noPo]);
+        if ($stmtDel === false) {
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Gagal memulihkan status PO.'
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'status'  => 'ok',
+            'message' => "Status PO $noPo berhasil dipulihkan."
         ]);
         exit;
     }
@@ -367,11 +504,36 @@ try {
 
         // Ambil pemetaan Metode Pembayaran dari database SQL Server GG
         $metodeMap = [];
+        $batalMap  = [];
         if ($conn) {
             $qMetode = @sqlsrv_query($conn, "SELECT no_po, metode_bayar FROM dbo.tracking_po_online_metode_bayar");
             if ($qMetode !== false) {
                 while ($rm = sqlsrv_fetch_array($qMetode, SQLSRV_FETCH_ASSOC)) {
                     $metodeMap[trim($rm['no_po'])] = trim($rm['metode_bayar'] ?? '');
+                }
+            }
+
+            // Ambil pemetaan PO Batal
+            $ensureTableBatal = "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'tracking_po_online_batal')
+            BEGIN
+                CREATE TABLE dbo.tracking_po_online_batal (
+                    no_po VARCHAR(100) NOT NULL PRIMARY KEY,
+                    alasan_batal NVARCHAR(500) NOT NULL,
+                    batal_by VARCHAR(100) NULL,
+                    batal_at DATETIME DEFAULT GETDATE(),
+                    updated_at DATETIME DEFAULT GETDATE()
+                );
+            END";
+            @sqlsrv_query($conn, $ensureTableBatal);
+
+            $qBatal = @sqlsrv_query($conn, "SELECT no_po, alasan_batal, batal_by, CONVERT(VARCHAR(19), batal_at, 120) AS batal_at FROM dbo.tracking_po_online_batal");
+            if ($qBatal !== false) {
+                while ($rb = sqlsrv_fetch_array($qBatal, SQLSRV_FETCH_ASSOC)) {
+                    $batalMap[trim($rb['no_po'])] = [
+                        'alasan_batal' => trim($rb['alasan_batal'] ?? ''),
+                        'batal_by'     => trim($rb['batal_by'] ?? ''),
+                        'batal_at'     => trim($rb['batal_at'] ?? '')
+                    ];
                 }
             }
         }
@@ -381,6 +543,17 @@ try {
         foreach ($rows as $r) {
             $noPo = trim($r['No PO'] ?? '');
             $metodeBayar = $metodeMap[$noPo] ?? ''; // Default kosong (-)
+            $isBatal = isset($batalMap[$noPo]);
+            $batalInfo = $isBatal ? $batalMap[$noPo] : null;
+
+            // Filter Status Bayar jika Batal / Sudah Dibayar / Belum Dibayar
+            if ($filterStatusBayar === 'Batal') {
+                if (!$isBatal) continue;
+            } elseif ($filterStatusBayar === 'Sudah Dibayar' || $filterStatusBayar === 'paid' || $filterStatusBayar === 'Approved' || $filterStatusBayar === 'approved') {
+                if ($isBatal) continue;
+            } elseif ($filterStatusBayar === 'Belum Dibayar' || $filterStatusBayar === 'unpaid') {
+                if ($isBatal) continue;
+            }
 
             // Filter Metode Pembayaran jika dipilih pengguna
             if ($filterMetodeBayar === 'Kosong' || $filterMetodeBayar === 'belum_diset') {
@@ -394,7 +567,11 @@ try {
             $noCp     = trim($r['No CP'] ?? '');
             $noGrn    = trim($r['No. GRN'] ?? '');
 
-            $statusBayarLabel = ($statusCp === 'V') ? 'Sudah Dibayar' : 'Belum Dibayar';
+            if ($isBatal) {
+                $statusBayarLabel = 'Batal';
+            } else {
+                $statusBayarLabel = ($statusCp === 'V') ? 'Sudah Dibayar' : 'Belum Dibayar';
+            }
 
             $data[] = [
                 'no'               => $no++,
@@ -435,10 +612,14 @@ try {
                 'tgl_cp_raw'       => $r['Tgl CP'] ? substr($r['Tgl CP'], 0, 10) : '',
                 'status_cp'        => $statusCp,
                 'status_bayar'     => $statusBayarLabel,
+                'is_batal'         => $isBatal,
+                'alasan_batal'     => $batalInfo ? $batalInfo['alasan_batal'] : '',
+                'batal_by'         => $batalInfo ? $batalInfo['batal_by'] : '',
+                'batal_at'         => $batalInfo && !empty($batalInfo['batal_at']) ? date('d/m/Y H:i', strtotime($batalInfo['batal_at'])) : '',
                 // Status boolean flags
-                'is_approved'      => ($statusCp === 'V'),
-                'is_paid'          => ($statusCp === 'V'),
-                'is_unpaid'        => ($statusCp !== 'V'),
+                'is_approved'      => ($statusCp === 'V' && !$isBatal),
+                'is_paid'          => ($statusCp === 'V' && !$isBatal),
+                'is_unpaid'        => ($statusCp !== 'V' && !$isBatal),
                 'is_arrived'       => ($noGrn !== ''),
                 'is_not_arrived'   => ($noGrn === ''),
             ];
